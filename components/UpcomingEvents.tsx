@@ -97,14 +97,9 @@ export const UpcomingEvents: React.FC<UpcomingEventsProps> = ({
   const [activeIndex, setActiveIndex] = useState<number>(0);
 
   return (
-    <section className="relative w-full bg-white py-16 lg:py-24 font-poppins overflow-hidden">
+    <section className="relative w-full bg-[#F9F9F9] py-16 lg:py-24 font-poppins overflow-hidden">
       {/* Background Decorative Ambient Circles */}
-      <div className="absolute top-10 left-4 w-48 h-48 bg-purple-200/40 rounded-full filter blur-3xl pointer-events-none" />
-      <div className="absolute top-14 right-[30%] w-3 h-3 bg-pink-400 rounded-full pointer-events-none" />
-      <div className="absolute top-28 right-[5%] w-3.5 h-3.5 bg-[#E4F953] rounded-full pointer-events-none" />
-      <div className="absolute bottom-12 right-[28%] w-3.5 h-3.5 bg-sky-400 rounded-full pointer-events-none" />
-      <div className="absolute bottom-6 left-[25%] w-3 h-3 bg-emerald-400 rounded-full pointer-events-none" />
-
+   
       <div className="container px-4 mx-auto relative z-10">
         {/* Section Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-10 lg:mb-14">

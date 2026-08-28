@@ -13,7 +13,7 @@ export interface EditorsNoteProps {
 export const EditorsNote: React.FC<EditorsNoteProps> = ({
   title = "Editor's Note",
   note = "This month we celebrate the voices shaping Malayalam literature today. Read slowly, share widely, and – if you have a story of your own – write it. Every submission passes through our editorial board before it reaches you.",
-  bgImageSrc = "/editors_note_bg.png",
+  bgImageSrc = "/images/home/editorialNot.webp",
   bgImageAlt = "Editor's workspace desk with laptop, open notebook and books",
 }) => {
   return (
@@ -34,7 +34,7 @@ export const EditorsNote: React.FC<EditorsNoteProps> = ({
       {/* Container aligned for Content Card */}
       <div className="container px-4 mx-auto relative z-10">
         <div className="bg-white/95 backdrop-blur-sm rounded-3xl p-7 sm:p-9 md:p-11 max-w-lg lg:max-w-xl shadow-xl border border-white/50 my-4">
-          <h3 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-dark-bg tracking-tight">
+          <h3 className="text-2xl sm:text-3xl lg:text-4xl font-semibold text-dark-bg tracking-tight">
             {title}
           </h3>
 

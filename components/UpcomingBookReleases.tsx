@@ -100,7 +100,7 @@ export const UpcomingBookReleases: React.FC<UpcomingBookReleasesProps> = ({
                 </p>
 
                 {/* Light Purple Divider */}
-                <div className="border-b border-purple-100/80 my-4" />
+                <div className="border-b-2 border-[#EBE0FF] mt-12 mb-5" />
 
                 {/* Description */}
                 <p className="text-sm sm:text-base text-dark-bg/75 leading-relaxed font-normal mb-6">

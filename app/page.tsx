@@ -1,4 +1,3 @@
-import Navbar from "@/components/Navbar";
 import HeroSection from "@/components/HeroSection";
 import LatestStories from "@/components/LatestStories";
 import UpcomingEvents from "@/components/UpcomingEvents";
@@ -7,40 +6,29 @@ import FeaturedVideo from "@/components/FeaturedVideo";
 import ExploreByInterest from "@/components/ExploreByInterest";
 import ReaderReviews from "@/components/ReaderReviews";
 import EditorsNote from "@/components/EditorsNote";
-import Footer from "@/components/Footer";
 
 export default function Home() {
   return (
     <main className="min-h-screen flex flex-col font-poppins">
-      {/* Navigation Header */}
-      <Navbar />
-
       {/* Main Hero Section */}
       <HeroSection />
 
       {/* Latest Stories Section */}
       <LatestStories />
-
-      {/* Upcoming Events Section */}
-      <UpcomingEvents />
-
-      {/* Upcoming Book Releases Section */}
-      <UpcomingBookReleases />
-
-      {/* Featured Video Section */}
-      <FeaturedVideo />
-
+      {/* Editor's Note Section */}
+      <EditorsNote />
       {/* Explore By Interest Section */}
       <ExploreByInterest />
 
+      {/* Upcoming Events Section */}
+      <UpcomingEvents />
+      {/* Featured Video Section */}
+      <FeaturedVideo />
+      {/* Upcoming Book Releases Section */}
+      <UpcomingBookReleases />
+
       {/* Reader Reviews Section */}
       <ReaderReviews />
-
-      {/* Editor's Note Section */}
-      <EditorsNote />
-
-      {/* Footer Section */}
-      <Footer />
     </main>
   );
 }
