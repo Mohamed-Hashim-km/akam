@@ -1,0 +1,48 @@
+@import "tailwindcss";
+@theme {
+  --breakpoint-*: initial;
+  --breakpoint-sm: 640px;
+  --breakpoint-md: 768px;
+  --breakpoint-lg: 1024px;
+  --breakpoint-lg1: 1200px;
+  --breakpoint-lg2: 1300px;
+  --breakpoint-xl: 1580px;
+  --breakpoint-2xl: 2000px;
+}
+@theme {
+  --color-dark-bg: #040706;
+  --color-light-text: #EBE0FF;
+  --color-primary-green: #21B573;
+  --color-accent-yellow: #E4F953;
+  --color-brand-yellow: #E4F953;
+  --color-dark-text: #040706;
+  --color-card-white: #ffffff;
+
+  --font-poppins: var(--font-poppins), sans-serif;
+  --font-open-sans: var(--font-open-sans), sans-serif;
+}
+
+body {
+  background-color: var(--color-white);
+  color: var(--color-dark-text);
+  font-family: var(--font-poppins);
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px) scale(1); }
+  50% { transform: translateY(-10px) scale(1.05); }
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+.animate-float-delayed {
+  animation: float 8s ease-in-out 2s infinite;
+}
+button {
+  cursor: pointer;
+}
+
+
+
