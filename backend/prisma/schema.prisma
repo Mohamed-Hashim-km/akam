@@ -10,25 +10,165 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum Role {
+  READER
+  AUTHOR
+  EDITOR
+  ADMIN
+}
+
+enum StoryStatus {
+  DRAFT
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum NotificationType {
+  STORY_SUBMITTED
+  STORY_APPROVED
+  STORY_REJECTED
+}
+
 model User {
+  id          String   @id @default(uuid())
+  email       String   @unique
+  name        String?
+  bio         String?
+  avatarUrl   String?
+  role        Role     @default(READER)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  stories       Story[]
+  notifications Notification[]
+}
+
+model OtpCode {
   id        String   @id @default(uuid())
-  email     String   @unique
-  name      String?
-  role      String   @default("user")
+  email     String
+  code      String
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([email])
+}
+
+model Story {
+  id            String      @id @default(uuid())
+  title         String
+  slug          String      @unique
+  content       String      @db.Text
+  coverImageUrl String?
+  status        StoryStatus @default(DRAFT)
+  rejectionNote String?
+  authorId      String
+  author        User        @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  notifications Notification[]
+
+  @@index([status])
+  @@index([authorId])
+}
+
+model Notification {
+  id             String           @id @default(uuid())
+  userId         String
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type           NotificationType
+  message        String
+  read           Boolean          @default(false)
+  relatedStoryId String?
+  relatedStory   Story?           @relation(fields: [relatedStoryId], references: [id], onDelete: SetNull)
+  createdAt      DateTime         @default(now())
+
+  @@index([userId])
+  @@index([read])
+}
+
+model StoryBookmark {
+  id        String   @id @default(uuid())
+  userId    String
+  storyId   String
+  createdAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  story Story @relation(fields: [storyId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, storyId])
+  @@map("story_bookmark")
+}
+
+model StoryLike {
+  id        String   @id @default(uuid())
+  userId    String
+  storyId   String
+  createdAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  story Story @relation(fields: [storyId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, storyId])
+  @@map("story_like")
+}
+
+model StoryComment {
+  id        String   @id @default(uuid())
+  userId    String
+  storyId   String
+  content   String   @db.Text
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  articles  Article[]
+  user    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  story   Story         @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  reports StoryReport[]
+
+  @@map("story_comment")
 }
 
-model Article {
-  id          String   @id @default(uuid())
-  title       String
-  slug        String   @unique
-  content     String
-  published   Boolean  @default(false)
-  authorId    String
-  author      User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+model StoryReport {
+  id         String   @id @default(uuid())
+  storyId    String?
+  commentId  String?
+  reporterId String
+  reason     String
+  details    String?
+  status     String   @default("PENDING")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  story    Story?        @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  comment  StoryComment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  reporter User          @relation(fields: [reporterId], references: [id], onDelete: Cascade)
+
+  @@map("story_report")
 }
+
+model ReadingProgress {
+  id                 String   @id @default(uuid())
+  userId             String
+  storyId            String
+  progressPercent    Int      @default(0)
+  lastScrollPosition Int      @default(0)
+  isCompleted        Boolean  @default(false)
+  lastReadAt         DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  story Story @relation(fields: [storyId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, storyId])
+  @@map("reading_progress")
+}
+
+model SiteSetting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+
+  @@map("site_setting")
+}
+
