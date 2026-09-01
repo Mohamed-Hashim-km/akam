@@ -13,6 +13,11 @@ import { EngagementModule } from './engagement/engagement.module.js';
 import { ModerationModule } from './moderation/moderation.module.js';
 import { LibraryModule } from './library/library.module.js';
 import { SettingsModule } from './settings/settings.module.js';
+// Community Platform modules
+import { CommunitiesModule } from './communities/communities.module.js';
+import { PostsModule } from './posts/posts.module.js';
+import { CommunityCommentsModule } from './community-comments/community-comments.module.js';
+import { VotesModule } from './votes/votes.module.js';
 
 @Module({
   imports: [
@@ -31,6 +36,11 @@ import { SettingsModule } from './settings/settings.module.js';
     ModerationModule,
     LibraryModule,
     SettingsModule,
+    // Community Platform
+    CommunitiesModule,
+    PostsModule,
+    CommunityCommentsModule,
+    VotesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

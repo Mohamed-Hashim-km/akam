@@ -172,3 +172,181 @@ model SiteSetting {
   @@map("site_setting")
 }
 
+// ─── COMMUNITY PLATFORM ──────────────────────────────────────────────────────
+
+enum PostStatus {
+  ACTIVE
+  LOCKED
+  REMOVED
+  PINNED
+}
+
+enum VoteValue {
+  UP
+  DOWN
+}
+
+enum CommunityMemberRole {
+  MEMBER
+  MODERATOR
+}
+
+enum PostFlair {
+  DISCUSSION
+  QUESTION
+  ANNOUNCEMENT
+  RESOURCE
+  FEEDBACK
+}
+
+model Community {
+  id          String   @id @default(uuid())
+  slug        String   @unique
+  name        String
+  description String?  @db.Text
+  bannerUrl   String?
+  iconUrl     String?
+  color       String?
+  isActive    Boolean  @default(true)
+  memberCount Int      @default(0)
+  postCount   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  memberships CommunityMembership[]
+  posts       CommunityPost[]
+
+  @@index([slug])
+  @@index([isActive])
+  @@map("community")
+}
+
+model CommunityMembership {
+  id          String              @id @default(uuid())
+  userId      String
+  communityId String
+  role        CommunityMemberRole @default(MEMBER)
+  joinedAt    DateTime            @default(now())
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  community Community @relation(fields: [communityId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, communityId])
+  @@index([communityId])
+  @@index([userId])
+  @@map("community_membership")
+}
+
+model CommunityPost {
+  id           String     @id @default(uuid())
+  communityId  String
+  authorId     String
+  title        String
+  body         String?    @db.Text
+  imageUrl     String?
+  linkUrl      String?
+  flair        PostFlair  @default(DISCUSSION)
+  status       PostStatus @default(ACTIVE)
+  upvotes      Int        @default(0)
+  downvotes    Int        @default(0)
+  commentCount Int        @default(0)
+  isPinned     Boolean    @default(false)
+  isLocked     Boolean    @default(false)
+  lockedAt     DateTime?
+  lockedById   String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  community Community  @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  author    User       @relation("CommunityPostAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  lockedBy  User?      @relation("CommunityPostLocker", fields: [lockedById], references: [id], onDelete: SetNull)
+
+  comments CommunityComment[]
+  votes    PostVote[]
+  reports  CommunityReport[]
+
+  @@index([communityId, status])
+  @@index([authorId])
+  @@index([createdAt])
+  @@map("community_post")
+}
+
+model CommunityComment {
+  id          String   @id @default(uuid())
+  postId      String
+  authorId    String
+  parentId    String?
+  body        String   @db.Text
+  depth       Int      @default(0)
+  upvotes     Int      @default(0)
+  downvotes   Int      @default(0)
+  isRemoved   Boolean  @default(false)
+  removedById String?
+  removedAt   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  post      CommunityPost      @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author    User               @relation("CommunityCommentAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  parent    CommunityComment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies   CommunityComment[] @relation("CommentReplies")
+  removedBy User?              @relation("CommentRemover", fields: [removedById], references: [id], onDelete: SetNull)
+
+  votes   CommentVote[]
+  reports CommunityReport[]
+
+  @@index([postId, parentId])
+  @@index([authorId])
+  @@map("community_comment")
+}
+
+model PostVote {
+  id        String    @id @default(uuid())
+  userId    String
+  postId    String
+  value     VoteValue
+  createdAt DateTime  @default(now())
+
+  user User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId])
+  @@map("post_vote")
+}
+
+model CommentVote {
+  id        String    @id @default(uuid())
+  userId    String
+  commentId String
+  value     VoteValue
+  createdAt DateTime  @default(now())
+
+  user    User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  comment CommunityComment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, commentId])
+  @@map("comment_vote")
+}
+
+model CommunityReport {
+  id           String    @id @default(uuid())
+  postId       String?
+  commentId    String?
+  reporterId   String
+  reason       String
+  details      String?   @db.Text
+  status       String    @default("PENDING")
+  reviewedById String?
+  reviewedAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  post       CommunityPost?    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  comment    CommunityComment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  reporter   User              @relation("CommunityReportSubmitter", fields: [reporterId], references: [id], onDelete: Cascade)
+  reviewedBy User?             @relation("CommunityReportReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([postId])
+  @@map("community_report")
+}
