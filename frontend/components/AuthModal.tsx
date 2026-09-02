@@ -76,8 +76,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Verification failed");
 
-      // Save user info in localStorage for display purposes only (token lives in HttpOnly cookie)
+      // Save user info in localStorage
       localStorage.setItem("akam_user", JSON.stringify(data.user));
+      if (data.token) {
+        localStorage.setItem("akam_token", data.token);
+      }
+      window.dispatchEvent(new Event("akam_user_updated"));
 
       setStep("success");
       if (onSuccess) onSuccess(data.user, data.token);

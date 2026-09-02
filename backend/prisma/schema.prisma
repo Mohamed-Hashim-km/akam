@@ -350,3 +350,66 @@ model CommunityReport {
   @@index([postId])
   @@map("community_report")
 }
+
+// ─── EVENTS PLATFORM ─────────────────────────────────────────────────────────
+
+enum EventType {
+  READING_SESSION
+  DISCUSSION
+  WORKSHOP
+  PAST_ARCHIVE
+}
+
+model Event {
+  id           String    @id @default(uuid())
+  type         EventType @default(READING_SESSION)
+  title        String
+  description  String    @db.Text
+  location     String
+  time         String?
+  day          String?
+  monthYear    String?
+  eventDate    DateTime?
+  imageSrc     String?
+  registerHref String?
+  isPublished  Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+// ─── BOOK RELEASES PLATFORM ───────────────────────────────────────────────────
+
+model BookRelease {
+  id           String   @id @default(uuid())
+  title        String
+  author       String
+  editionTag   String?  @default("Print Edition")
+  description  String   @db.Text
+  coverImage   String?
+  preorderLink String?
+  isPublished  Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([isPublished])
+  @@map("book_release")
+}
+
+// ─── MEDIA SHOWCASE PLATFORM ──────────────────────────────────────────────────
+
+model MediaVideo {
+  id          String   @id @default(uuid())
+  title       String
+  description String   @db.Text
+  category    String   // 'interviews' | 'conversations' | 'cultural' | 'recordings'
+  youtubeUrl  String
+  youtubeId   String
+  isPublished Boolean  @default(true)
+  isFeatured  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([category, isPublished])
+  @@index([isFeatured, isPublished])
+  @@map("media_video")
+}
+

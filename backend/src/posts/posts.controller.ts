@@ -6,6 +6,7 @@ import {
   Param,
   Body,
   Query,
+  Header,
   UseGuards,
   Request,
 } from '@nestjs/common';
@@ -33,6 +34,7 @@ export class PostsController {
   constructor(private readonly postsService: PostsService) {}
 
   @Get('communities/:slug/posts')
+  @Header('Cache-Control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=120')
   @UseGuards(OptionalJwtAuthGuard)
   @ApiOperation({ summary: 'Get paginated posts for a community (sort: hot|new|top)' })
   @ApiQuery({ name: 'sort', enum: ['hot', 'new', 'top'], required: false })
@@ -55,6 +57,7 @@ export class PostsController {
   }
 
   @Get('communities/:slug/posts/:postId')
+  @Header('Cache-Control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=120')
   @UseGuards(OptionalJwtAuthGuard)
   @ApiOperation({ summary: 'Get a single post by ID' })
   findOne(

@@ -6,6 +6,8 @@ import {
   Delete,
   Param,
   Body,
+  Query,
+  Header,
   UseGuards,
   Request,
 } from '@nestjs/common';
@@ -24,12 +26,14 @@ export class CommunitiesController {
   constructor(private readonly communitiesService: CommunitiesService) {}
 
   @Get()
-  @ApiOperation({ summary: 'List all active communities' })
-  findAll() {
-    return this.communitiesService.findAll();
+  @Header('Cache-Control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=120')
+  @ApiOperation({ summary: 'List all communities (query ?all=true to include inactive)' })
+  findAll(@Query('all') all?: string) {
+    return this.communitiesService.findAll(all === 'true');
   }
 
   @Get(':slug')
+  @Header('Cache-Control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=120')
   @UseGuards(OptionalJwtAuthGuard)
   @ApiOperation({ summary: 'Get community detail by slug' })
   findOne(@Param('slug') slug: string, @Request() req: any) {
@@ -38,9 +42,9 @@ export class CommunitiesController {
 
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN')
+  @Roles('EDITOR', 'ADMIN')
   @ApiBearerAuth()
-  @ApiOperation({ summary: '[ADMIN] Create a new community' })
+  @ApiOperation({ summary: '[EDITOR/ADMIN] Create a new community' })
   create(@Body() dto: CreateCommunityDto) {
     return this.communitiesService.create(dto);
   }
@@ -52,6 +56,15 @@ export class CommunitiesController {
   @ApiOperation({ summary: '[EDITOR/ADMIN] Update a community' })
   update(@Param('slug') slug: string, @Body() dto: UpdateCommunityDto) {
     return this.communitiesService.update(slug, dto);
+  }
+
+  @Delete(':slug')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('EDITOR', 'ADMIN')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '[EDITOR/ADMIN] Delete a community' })
+  deleteCommunity(@Param('slug') slug: string) {
+    return this.communitiesService.delete(slug);
   }
 
   @Post(':slug/join')

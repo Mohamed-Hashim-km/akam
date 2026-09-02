@@ -1,12 +1,14 @@
 "use client";
 
-import React, { useRef, useState } from "react";
+import React, { useRef, useState, useEffect } from "react";
 import Link from "next/link";
 import { ArrowRight, MapPin, Clock, ChevronLeft, ChevronRight } from "lucide-react";
 import { Swiper, SwiperSlide } from "swiper/react";
 import { Navigation } from "swiper/modules";
 import type { Swiper as SwiperClass } from "swiper";
 import Button from "./ui/Button";
+import { API_BASE_URL } from "@/lib/config";
+import EventRegisterModal from "@/components/EventRegisterModal";
 
 // Swiper CSS imports
 import "swiper/css";
@@ -22,6 +24,7 @@ export interface EventItem {
   monthYear: string;
   registerHref?: string;
   featured?: boolean;
+  type?: string;
 }
 
 export interface UpcomingEventsProps {
@@ -30,71 +33,91 @@ export interface UpcomingEventsProps {
   events?: EventItem[];
 }
 
-const defaultEvents: EventItem[] = [
-  {
-    id: "1",
-    title: "Monsoon Poetry Symposium 2026",
-    description:
-      "A live round-table conversation with leading critics and authors exploring narrative shifts, contemporary themes, and language in Malayalam literature.",
-    location: "Kochi Cultural Center & Online Stream",
-    time: "10:49 am",
-    day: "22",
-    monthYear: "Aug 2026",
-    featured: true,
-  },
-  {
-    id: "2",
-    title: "Monsoon Poetry Symposium 2026",
-    description:
-      "A live round-table conversation with leading critics and authors exploring narrative shifts, contemporary themes, and language in Malayalam literature.",
-    location: "Kochi Cultural Center & Online Stream",
-    time: "10:49 am",
-    day: "28",
-    monthYear: "Aug 2026",
-    featured: false,
-  },
-  {
-    id: "3",
-    title: "Monsoon Poetry Symposium 2026",
-    description:
-      "A live round-table conversation with leading critics and authors exploring narrative shifts, contemporary themes, and language in Malayalam literature.",
-    location: "Kochi Cultural Center & Online Stream",
-    time: "10:49 am",
-    day: "29",
-    monthYear: "Aug 2026",
-    featured: false,
-  },
-  {
-    id: "4",
-    title: "Digital Malayalam Publishing Summit",
-    description:
-      "Exploring modern journalism, digital publishing trends, and creator monetization strategies for Malayalam media.",
-    location: "Trivandrum International Center",
-    time: "02:30 pm",
-    day: "05",
-    monthYear: "Sep 2026",
-    featured: false,
-  },
-  {
-    id: "5",
-    title: "Short Story Writers Masterclass",
-    description:
-      "Hands-on masterclass with renowned authors focusing on character development, pacing, and dialogue framing.",
-    location: "Calicut Town Hall & Zoom Stream",
-    time: "11:00 am",
-    day: "14",
-    monthYear: "Sep 2026",
-    featured: false,
-  },
-];
+const isUpcomingDate = (day?: string | null, monthYear?: string | null) => {
+  if (!day || !monthYear) return true;
+  try {
+    const dateStr = `${day} ${monthYear}`;
+    const dateObj = new Date(dateStr);
+    if (!isNaN(dateObj.getTime())) {
+      dateObj.setHours(23, 59, 59, 999);
+      return dateObj >= new Date();
+    }
+  } catch (e) {
+    // fallback
+  }
+  return true;
+};
 
 export const UpcomingEvents: React.FC<UpcomingEventsProps> = ({
   title = "Upcoming Events",
-  viewAllHref = "#events",
-  events = defaultEvents,
+  viewAllHref = "/events",
+  events: initialEvents,
 }) => {
   const [swiperInstance, setSwiperInstance] = useState<SwiperClass | null>(null);
   const [activeIndex, setActiveIndex] = useState<number>(0);
+  const [fetchedEvents, setFetchedEvents] = useState<EventItem[]>([]);
+  const [loading, setLoading] = useState<boolean>(!initialEvents);
+  const [selectedEventForReg, setSelectedEventForReg] = useState<EventItem | null>(null);
+
+  useEffect(() => {
+    if (!initialEvents || initialEvents.length === 0) {
+      const fetchEvents = async () => {
+        try {
+          const res = await fetch(`${API_BASE_URL}/events`);
+          if (res.ok) {
+            const data = await res.json();
+            if (Array.isArray(data)) {
+              // Filter out PAST_ARCHIVE and events whose date has passed
+              const upcomingOnly = data.filter((e: any) => {
+                if (e.type === "PAST_ARCHIVE") return false;
+                return isUpcomingDate(e.day, e.monthYear);
+              });
+
+              const mapped: EventItem[] = upcomingOnly.map((e: any) => ({
+                id: e.id,
+                title: e.title,
+                description: e.description,
+                location: e.location,
+                time: e.time || "",
+                day: e.day || "",
+                monthYear: e.monthYear || "",
+                registerHref: e.registerHref || undefined,
+                featured: e.type === "READING_SESSION",
+                type: e.type,
+              }));
+              setFetchedEvents(mapped);
+            }
+          }
+        } catch (err) {
+          console.error("Failed to load upcoming events:", err);
+        } finally {
+          setLoading(false);
+        }
+      };
+      fetchEvents();
+    }
+  }, [initialEvents]);
+
+  const displayEvents = initialEvents && initialEvents.length > 0
+    ? initialEvents
+    : fetchedEvents;
+
+  if (loading) {
+    return (
+      <section className="relative w-full bg-[#F9F9F9] py-16 lg:py-24 font-poppins overflow-hidden">
+        <div className="container px-4 mx-auto relative z-10 animate-pulse">
+          <div className="h-10 bg-gray-200/80 rounded-md w-60 mb-10" />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="rounded-3xl p-7 min-h-[440px] bg-gray-200/60 flex flex-col justify-between" />
+            ))}
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  if (displayEvents.length === 0) return null;
 
   return (
     <section className="relative w-full bg-[#F9F9F9] py-16 lg:py-24 font-poppins overflow-hidden">
@@ -113,14 +136,14 @@ export const UpcomingEvents: React.FC<UpcomingEventsProps> = ({
               size="md"
               icon={<ArrowRight className="w-4 h-4 ml-1 transition-transform group-hover:translate-x-1" />}
               iconPosition="right"
-              className="group px-6 py-2.5 text-sm font-medium shadow-xs"
+              className="group px-6 py-2.5 text-sm font-medium shadow-xs cursor-pointer"
             >
               View All Events
             </Button>
           </Link>
         </div>
 
-        {/* Swiper Event Cards Carousel (Starts at exact same left alignment as title) */}
+        {/* Swiper Event Cards Carousel */}
         <div className="w-full overflow-visible">
           <Swiper
             modules={[Navigation]}
@@ -133,14 +156,15 @@ export const UpcomingEvents: React.FC<UpcomingEventsProps> = ({
               768: { slidesPerView: 2.2, spaceBetween: 28 },
               1024: { slidesPerView: 3, spaceBetween: 32 },
             }}
-            className="w-full !pb-4 !overflow-visible"
+            className="w-full !pb-4 !overflow-visible [&_.swiper-wrapper]:!items-stretch [&_.swiper-slide]:!h-auto [&_.swiper-slide]:!flex [&_.swiper-slide]:!flex-col"
           >
-            {events.map((evt) => (
-              <SwiperSlide key={evt.id} className="h-auto">
-                <div className="rounded-3xl p-7 lg:p-8 flex flex-col justify-between h-full min-h-[440px] transition-all duration-300 group shadow-xs hover:shadow-xl cursor-pointer bg-[#F5F0FC] text-dark-bg hover:bg-[#8122DB] hover:text-white">
+            {displayEvents.map((evt) => (
+              <SwiperSlide key={evt.id} className="flex flex-col">
+                <div className="rounded-3xl p-7 lg:p-8 flex-1 flex flex-col justify-between transition-all duration-300 group shadow-xs hover:shadow-xl cursor-pointer bg-[#F5F0FC] text-dark-bg hover:bg-[#8122DB] hover:text-white">
                   {/* Top Content: Title + Description */}
+                  <div className="flex flex-col justify-between h-full">
                   <div>
-                    <h3 className="text-2xl sm:text-3xl font-semibold  tracking-tight leading-tight mb-4 transition-colors">
+                    <h3 className="text-2xl sm:text-3xl font-semibold tracking-tight leading-tight mb-4 transition-colors">
                       {evt.title}
                     </h3>
 
@@ -160,7 +184,7 @@ export const UpcomingEvents: React.FC<UpcomingEventsProps> = ({
                       <span>{evt.time}</span>
                     </div>
                   </div>
-
+</div>
                   {/* Bottom Footer: Date & Register Button */}
                   <div className="pt-6 flex items-center justify-between border-t border-black/10 group-hover:border-white/20 transition-colors">
                     <div className="flex items-baseline gap-2">
@@ -172,17 +196,17 @@ export const UpcomingEvents: React.FC<UpcomingEventsProps> = ({
                       </span>
                     </div>
 
-                    <Link href={evt.registerHref || `#register-${evt.id}`}>
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        icon={<ArrowRight className="w-4 h-4 transition-transform group-hover/btn:translate-x-1" />}
-                        iconPosition="right"
-                        className="group/btn text-sm font-medium shadow-xs bg-white text-dark-bg  hover:shadow-md transition-all duration-300"
-                      >
-                        Register Now
-                      </Button>
-                    </Link>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => setSelectedEventForReg(evt)}
+                      icon={<ArrowRight className="w-4 h-4 transition-transform group-hover/btn:translate-x-1" />}
+                      iconPosition="right"
+                      className="group/btn text-sm font-medium shadow-xs bg-white text-dark-bg hover:shadow-md transition-all duration-300 cursor-pointer"
+                    >
+                      Register Now
+                    </Button>
                   </div>
                 </div>
               </SwiperSlide>
@@ -190,8 +214,9 @@ export const UpcomingEvents: React.FC<UpcomingEventsProps> = ({
           </Swiper>
         </div>
 
-        {/* Bottom Swiper Navigation Arrows */}
-        <div className="flex items-center gap-3 pt-6">
+        {/* Bottom Swiper Navigation Arrows (Only show if > 1 event) */}
+        {displayEvents.length > 1 && (
+          <div className="flex items-center justify-end gap-3 pt-6">
           <button
             onClick={() => swiperInstance?.slidePrev()}
             className="w-11 h-11 rounded-full border border-black/20 bg-white flex items-center justify-center text-dark-bg hover:bg-black/5 transition-all focus:outline-none"
@@ -207,8 +232,17 @@ export const UpcomingEvents: React.FC<UpcomingEventsProps> = ({
             <ChevronRight className="w-5 h-5" />
           </button>
         </div>
+        )}
       </div>
 
+      {/* Registration Modal */}
+      {selectedEventForReg && (
+        <EventRegisterModal
+          isOpen={!!selectedEventForReg}
+          onClose={() => setSelectedEventForReg(null)}
+          event={selectedEventForReg}
+        />
+      )}
     </section>
   );
 };

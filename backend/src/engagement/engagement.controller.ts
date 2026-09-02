@@ -5,11 +5,12 @@ import {
   Delete,
   Body,
   Param,
+  Query,
   UseGuards,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 import { OptionalJwtAuthGuard } from '../auth/guards/optional-jwt-auth.guard.js';
 import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
@@ -51,6 +52,14 @@ export class EngagementController {
     @CurrentUser() user: AuthUser,
   ) {
     return this.engagementService.toggleBookmark(user.id, storyId);
+  }
+
+  @Get('comments/recent')
+  @ApiOperation({ summary: 'Get latest published comments across stories for Reader Reviews' })
+  @ApiQuery({ name: 'limit', required: false })
+  async getRecentComments(@Query('limit') limit?: string) {
+    const limitNum = limit ? parseInt(limit, 10) : 10;
+    return this.engagementService.getRecentComments(limitNum);
   }
 
   @Get(':id/comments')

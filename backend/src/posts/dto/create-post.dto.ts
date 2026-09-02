@@ -30,12 +30,12 @@ export class CreatePostDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsUrl()
+  @IsString()
   imageUrl?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsUrl()
+  @IsString()
   linkUrl?: string;
 
   @ApiPropertyOptional({ enum: PostFlair, default: PostFlair.DISCUSSION })

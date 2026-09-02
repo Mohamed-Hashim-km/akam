@@ -78,7 +78,8 @@ export class PostsService {
           p.title, p.body, p."imageUrl", p."linkUrl",
           p.flair, p.status,
           p.upvotes, p.downvotes, (p.upvotes - p.downvotes) AS score,
-          p."commentCount", p."isPinned", p."isLocked",
+          COALESCE((SELECT COUNT(*)::int FROM community_comment cc WHERE cc."postId" = p.id AND cc."isRemoved" = false), 0) AS "commentCount",
+          p."isPinned", p."isLocked",
           p."createdAt", p."updatedAt"
         FROM community_post p
         JOIN "user" u ON u.id = p."authorId"
@@ -132,7 +133,8 @@ export class PostsService {
         p.title, p.body, p."imageUrl", p."linkUrl",
         p.flair, p.status,
         p.upvotes, p.downvotes, (p.upvotes - p.downvotes) AS score,
-        p."commentCount", p."isPinned", p."isLocked",
+        COALESCE((SELECT COUNT(*)::int FROM community_comment cc WHERE cc."postId" = p.id AND cc."isRemoved" = false), 0) AS "commentCount",
+        p."isPinned", p."isLocked",
         p."lockedAt", p."lockedById",
         p."createdAt", p."updatedAt"
       FROM community_post p

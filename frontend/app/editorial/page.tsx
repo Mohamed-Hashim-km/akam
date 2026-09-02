@@ -28,10 +28,12 @@ import {
   RefreshCw,
   LogOut,
   Calendar,
+  Archive,
   Tag,
   Plus,
   ChevronLeft,
   Flag,
+  Video,
 } from "lucide-react";
 import Button from "@/components/ui/Button";
 import AuthModal from "@/components/AuthModal";
@@ -79,7 +81,7 @@ interface ReportItem {
   updatedAt: string;
 }
 
-type TabType = "queue" | "reports" | "catalog" | "authors" | "categories" | "notifications" | "settings";
+type TabType = "queue" | "reports" | "catalog" | "authors" | "categories" | "notifications" | "settings" | "communities" | "events" | "books" | "media";
 
 function PaginationFooter({
   meta,
@@ -196,6 +198,262 @@ function EditorialDashboardContent() {
   const [reportStatusFilter, setReportStatusFilter] = useState("ALL");
   const [reportTypeFilter, setReportTypeFilter] = useState("ALL");
 
+  // Community Moderation State
+  const [commReportsList, setCommReportsList] = useState<any[]>([]);
+  const [commReportsMeta, setCommReportsMeta] = useState({ total: 0, page: 1, limit: 10, totalPages: 1 });
+  const [communitiesList, setCommunitiesList] = useState<any[]>([]);
+  const [commSubTab, setCommSubTab] = useState<"reports" | "communities">("communities");
+
+  // Create Community State
+  const [showAddCommModal, setShowAddCommModal] = useState(false);
+  const [newCommName, setNewCommName] = useState("");
+  const [newCommSlug, setNewCommSlug] = useState("");
+  const [newCommDesc, setNewCommDesc] = useState("");
+  const [newCommColor, setNewCommColor] = useState("#21B573");
+  const [creatingComm, setCreatingComm] = useState(false);
+
+  // Events & Workshops State
+  const [eventsList, setEventsList] = useState<any[]>([]);
+  const [eventsMeta, setEventsMeta] = useState({ total: 0, page: 1, limit: 10, totalPages: 1 });
+  const [eventFilterType, setEventFilterType] = useState<string>("ALL");
+  const [showAddEventModal, setShowAddEventModal] = useState(false);
+  const [showRegistrationsModal, setShowRegistrationsModal] = useState(false);
+  const [selectedEventForReg, setSelectedEventForReg] = useState<any | null>(null);
+  const [registrationsList, setRegistrationsList] = useState<any[]>([]);
+  const [loadingRegistrations, setLoadingRegistrations] = useState(false);
+  const [editingEventId, setEditingEventId] = useState<string | null>(null);
+  const [eventFormType, setEventFormType] = useState<"READING_SESSION" | "DISCUSSION" | "WORKSHOP" | "PAST_ARCHIVE">("READING_SESSION");
+  const [eventFormTitle, setEventFormTitle] = useState("");
+  const [eventFormDesc, setEventFormDesc] = useState("");
+  const [eventFormLoc, setEventFormLoc] = useState("");
+  const [eventFormTime, setEventFormTime] = useState("");
+  const [eventFormDay, setEventFormDay] = useState("");
+  const [eventFormMonthYear, setEventFormMonthYear] = useState("");
+  const [eventFormImage, setEventFormImage] = useState("");
+  const [uploadingEventImage, setUploadingEventImage] = useState(false);
+  const [eventFormRegisterHref, setEventFormRegisterHref] = useState("");
+  const [eventFormPublished, setEventFormPublished] = useState(true);
+  const [submittingEvent, setSubmittingEvent] = useState(false);
+
+  const [showArchiveModal, setShowArchiveModal] = useState(false);
+  const [selectedEventForArchive, setSelectedEventForArchive] = useState<any | null>(null);
+  const [archiveImage, setArchiveImage] = useState("");
+  const [uploadingArchiveImage, setUploadingArchiveImage] = useState(false);
+  const [archivingEvent, setArchivingEvent] = useState(false);
+
+  // Upcoming Book Releases State
+  const [booksList, setBooksList] = useState<any[]>([]);
+  const [booksMeta, setBooksMeta] = useState({ total: 0, page: 1, limit: 10, totalPages: 1 });
+  const [showAddBookModal, setShowAddBookModal] = useState(false);
+  const [editingBookId, setEditingBookId] = useState<string | null>(null);
+  const [bookFormTitle, setBookFormTitle] = useState("");
+  const [bookFormAuthor, setBookFormAuthor] = useState("");
+  const [bookFormEditionTag, setBookFormEditionTag] = useState("Print Edition");
+  const [bookFormDesc, setBookFormDesc] = useState("");
+  const [bookFormCoverImage, setBookFormCoverImage] = useState("");
+  const [bookFormPreorderLink, setBookFormPreorderLink] = useState("");
+  const [bookFormPublished, setBookFormPublished] = useState(true);
+  const [submittingBook, setSubmittingBook] = useState(false);
+
+  const resetBookForm = () => {
+    setEditingBookId(null);
+    setBookFormTitle("");
+    setBookFormAuthor("");
+    setBookFormEditionTag("Print Edition");
+    setBookFormDesc("");
+    setBookFormCoverImage("");
+    setBookFormPreorderLink("");
+    setBookFormPublished(true);
+  };
+
+  const handleSaveBook = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!bookFormTitle.trim() || !bookFormAuthor.trim() || !bookFormDesc.trim()) return;
+    setSubmittingBook(true);
+    try {
+      const payload: any = {
+        title: bookFormTitle.trim(),
+        author: bookFormAuthor.trim(),
+        editionTag: bookFormEditionTag.trim() || "Print Edition",
+        description: bookFormDesc.trim(),
+        isPublished: bookFormPublished,
+      };
+      if (bookFormCoverImage.trim()) payload.coverImage = bookFormCoverImage.trim();
+      if (bookFormPreorderLink.trim()) payload.preorderLink = bookFormPreorderLink.trim();
+
+      const url = editingBookId
+        ? `${API_BASE_URL}/editorial/books/${editingBookId}`
+        : `${API_BASE_URL}/editorial/books`;
+      const method = editingBookId ? "PATCH" : "POST";
+      const res = await apiFetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        setFeedbackMessage(editingBookId ? "Book release updated successfully!" : "Book release created successfully!");
+        setShowAddBookModal(false);
+        resetBookForm();
+        fetchDashboardData("books", currentPage, searchQuery);
+        setTimeout(() => setFeedbackMessage(null), 3000);
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        alert(`Failed to save book release: ${errData.message || res.statusText}`);
+      }
+    } catch (err: any) {
+      console.error("Failed to save book release", err);
+      alert(`Error saving book release: ${err.message || err}`);
+    } finally {
+      setSubmittingBook(false);
+    }
+  };
+
+  const handleTogglePublishBook = async (id: string) => {
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/editorial/books/${id}/toggle-publish`, {
+        method: "PATCH",
+      });
+      if (res.ok) {
+        setFeedbackMessage("Book release publication status updated.");
+        fetchDashboardData("books", currentPage, searchQuery);
+        setTimeout(() => setFeedbackMessage(null), 3000);
+      }
+    } catch (err) {
+      console.error("Failed to toggle publish book", err);
+    }
+  };
+
+  const handleDeleteBook = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this book release?")) return;
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/editorial/books/${id}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        setFeedbackMessage("Book release deleted successfully.");
+        fetchDashboardData("books", currentPage, searchQuery);
+        setTimeout(() => setFeedbackMessage(null), 3000);
+      }
+    } catch (err) {
+      console.error("Failed to delete book", err);
+    }
+  };
+
+  // Media Showcase State
+  const [mediaList, setMediaList] = useState<any[]>([]);
+  const [mediaMeta, setMediaMeta] = useState({ total: 0, page: 1, limit: 10, totalPages: 1 });
+  const [showAddMediaModal, setShowAddMediaModal] = useState(false);
+  const [editingMediaId, setEditingMediaId] = useState<string | null>(null);
+  const [mediaFormTitle, setMediaFormTitle] = useState("");
+  const [mediaFormCategory, setMediaFormCategory] = useState("interviews");
+  const [mediaFormYoutubeUrl, setMediaFormYoutubeUrl] = useState("");
+  const [mediaFormDesc, setMediaFormDesc] = useState("");
+  const [mediaFormPublished, setMediaFormPublished] = useState(true);
+  const [mediaFormFeatured, setMediaFormFeatured] = useState(false);
+  const [submittingMedia, setSubmittingMedia] = useState(false);
+
+  const resetMediaForm = () => {
+    setEditingMediaId(null);
+    setMediaFormTitle("");
+    setMediaFormCategory("interviews");
+    setMediaFormYoutubeUrl("");
+    setMediaFormDesc("");
+    setMediaFormPublished(true);
+    setMediaFormFeatured(false);
+  };
+
+  const handleSaveMedia = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!mediaFormTitle.trim() || !mediaFormYoutubeUrl.trim() || !mediaFormDesc.trim()) return;
+    setSubmittingMedia(true);
+    try {
+      const payload = {
+        title: mediaFormTitle.trim(),
+        category: mediaFormCategory,
+        youtubeUrl: mediaFormYoutubeUrl.trim(),
+        description: mediaFormDesc.trim(),
+        isPublished: mediaFormPublished,
+        isFeatured: mediaFormFeatured,
+      };
+
+      const url = editingMediaId
+        ? `${API_BASE_URL}/editorial/media/${editingMediaId}`
+        : `${API_BASE_URL}/editorial/media`;
+      const method = editingMediaId ? "PATCH" : "POST";
+      const res = await apiFetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (res.ok) {
+        setFeedbackMessage(editingMediaId ? "Media video updated successfully!" : "Media video created successfully!");
+        setShowAddMediaModal(false);
+        resetMediaForm();
+        fetchDashboardData("media", currentPage, searchQuery);
+        setTimeout(() => setFeedbackMessage(null), 3000);
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        alert(`Failed to save media video: ${errData.message || res.statusText}`);
+      }
+    } catch (err: any) {
+      console.error("Failed to save media video", err);
+      alert(`Error saving media video: ${err.message || err}`);
+    } finally {
+      setSubmittingMedia(false);
+    }
+  };
+
+  const handleTogglePublishMedia = async (id: string) => {
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/editorial/media/${id}/toggle-publish`, {
+        method: "PATCH",
+      });
+      if (res.ok) {
+        setFeedbackMessage("Media video publication status updated.");
+        fetchDashboardData("media", currentPage, searchQuery);
+        setTimeout(() => setFeedbackMessage(null), 3000);
+      }
+    } catch (err) {
+      console.error("Failed to toggle publish media video", err);
+    }
+  };
+
+  const handleToggleFeaturedMedia = async (id: string) => {
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/editorial/media/${id}/toggle-featured`, {
+        method: "PATCH",
+      });
+      if (res.ok) {
+        setFeedbackMessage("Media video homepage featured status updated.");
+        fetchDashboardData("media", currentPage, searchQuery);
+        setTimeout(() => setFeedbackMessage(null), 3000);
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        alert(errData.message || "Failed to toggle featured status.");
+      }
+    } catch (err: any) {
+      console.error("Failed to toggle featured media video", err);
+      alert(err.message || "Error toggling featured status.");
+    }
+  };
+
+  const handleDeleteMedia = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this media video?")) return;
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/editorial/media/${id}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        setFeedbackMessage("Media video deleted successfully.");
+        fetchDashboardData("media", currentPage, searchQuery);
+        setTimeout(() => setFeedbackMessage(null), 3000);
+      }
+    } catch (err) {
+      console.error("Failed to delete media video", err);
+    }
+  };
+
   const [newCatName, setNewCatName] = useState("");
   const [newCatMalName, setNewCatMalName] = useState("");
   const [newCatDesc, setNewCatDesc] = useState("");
@@ -309,11 +567,396 @@ function EditorialDashboardContent() {
           setEditorsNoteTitle(json.title || "Editor's Note");
           setEditorsNoteContent(json.note || "");
         }
+      } else if (tab === "communities") {
+        const [crRes, cRes] = await Promise.all([
+          apiFetch(`${API_BASE_URL}/editorial/community/reports?page=${page}&limit=10`),
+          apiFetch(`${API_BASE_URL}/communities`),
+        ]);
+        if (crRes.ok) {
+          const json = await crRes.json();
+          setCommReportsList(json.data || []);
+          if (json.meta) setCommReportsMeta(json.meta);
+        }
+        if (cRes.ok) {
+          const json = await cRes.json();
+          setCommunitiesList(Array.isArray(json) ? json : []);
+        }
+      } else if (tab === "events") {
+        const eType = eventFilterType && eventFilterType !== "ALL" ? `&type=${eventFilterType}` : '';
+        const eSearch = query ? `&search=${encodeURIComponent(query)}` : '';
+        const evRes = await apiFetch(`${API_BASE_URL}/editorial/events?page=${page}&limit=10${eType}${eSearch}`);
+        if (evRes.ok) {
+          const json = await evRes.json();
+          if (json.data) {
+            setEventsList(json.data);
+            if (json.meta) setEventsMeta(json.meta);
+          } else {
+            setEventsList(Array.isArray(json) ? json : []);
+          }
+        }
+      } else if (tab === "books") {
+        const bSearch = query ? `&search=${encodeURIComponent(query)}` : '';
+        const bkRes = await apiFetch(`${API_BASE_URL}/editorial/books?page=${page}&limit=10${bSearch}`);
+        if (bkRes.ok) {
+          const json = await bkRes.json();
+          if (json.data) {
+            setBooksList(json.data);
+            if (json.meta) setBooksMeta(json.meta);
+          } else {
+            setBooksList(Array.isArray(json) ? json : []);
+          }
+        }
+      } else if (tab === "media") {
+        const mSearch = query ? `&search=${encodeURIComponent(query)}` : '';
+        const mRes = await apiFetch(`${API_BASE_URL}/editorial/media?page=${page}&limit=9${mSearch}`);
+        if (mRes.ok) {
+          const json = await mRes.json();
+          if (json.data) {
+            setMediaList(json.data);
+            if (json.meta) setMediaMeta(json.meta);
+          } else {
+            setMediaList(Array.isArray(json) ? json : []);
+          }
+        }
       }
     } catch (err) {
       console.error("Failed to load section data", err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleViewRegistrations = async (eventItem: any) => {
+    setSelectedEventForReg(eventItem);
+    setShowRegistrationsModal(true);
+    setLoadingRegistrations(true);
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/editorial/events/${eventItem.id}/registrations`);
+      if (res.ok) {
+        const json = await res.json();
+        setRegistrationsList(json.registrations || []);
+      }
+    } catch (err) {
+      console.error("Error fetching registrations", err);
+    } finally {
+      setLoadingRegistrations(false);
+    }
+  };
+
+  // Event Handlers
+  const handleSaveEvent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!eventFormTitle.trim() || !eventFormDesc.trim()) return;
+
+    setSubmittingEvent(true);
+    try {
+      const payload = {
+        type: eventFormType,
+        title: eventFormTitle.trim(),
+        description: eventFormDesc.trim(),
+        location: eventFormLoc.trim(),
+        time: eventFormTime.trim() || undefined,
+        day: eventFormDay.trim() || undefined,
+        monthYear: eventFormMonthYear.trim() || undefined,
+        imageSrc: eventFormImage.trim() || undefined,
+        registerHref: eventFormRegisterHref.trim() || undefined,
+        isPublished: eventFormPublished,
+      };
+
+      const url = editingEventId
+        ? `${API_BASE_URL}/editorial/events/${editingEventId}`
+        : `${API_BASE_URL}/editorial/events`;
+      const method = editingEventId ? "PATCH" : "POST";
+
+      const res = await apiFetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (res.ok) {
+        setFeedbackMessage(editingEventId ? "Event updated successfully!" : "Event created successfully!");
+        setShowAddEventModal(false);
+        resetEventForm();
+        fetchDashboardData("events");
+        setTimeout(() => setFeedbackMessage(null), 3000);
+      } else {
+        alert("Failed to save event");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error saving event");
+    } finally {
+      setSubmittingEvent(false);
+    }
+  };
+
+  const handleTogglePublishEvent = async (eventId: string) => {
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/editorial/events/${eventId}/toggle-publish`, {
+        method: "PATCH",
+      });
+      if (res.ok) {
+        setFeedbackMessage("Event publishing status updated.");
+        fetchDashboardData("events");
+        setTimeout(() => setFeedbackMessage(null), 3000);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleDeleteEvent = async (eventId: string, title: string) => {
+    if (!confirm(`Are you sure you want to delete event "${title}"?`)) return;
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/editorial/events/${eventId}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        setFeedbackMessage(`Event "${title}" deleted.`);
+        fetchDashboardData("events");
+        setTimeout(() => setFeedbackMessage(null), 3000);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleOpenArchiveModal = (eventItem: any) => {
+    setSelectedEventForArchive(eventItem);
+    setArchiveImage(eventItem.imageSrc || "");
+    setShowArchiveModal(true);
+  };
+
+  const handleArchiveImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingArchiveImage(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await apiFetch(`${API_BASE_URL}/uploads/image`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (res.ok) {
+        const json = await res.json();
+        setArchiveImage(json.url);
+      } else {
+        alert("Failed to upload image. Please try again.");
+      }
+    } catch (err) {
+      console.error("Error uploading archive image", err);
+      alert("Error uploading image.");
+    } finally {
+      setUploadingArchiveImage(false);
+    }
+  };
+
+  const handleConfirmArchive = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedEventForArchive) return;
+
+    setArchivingEvent(true);
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/editorial/events/${selectedEventForArchive.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "PAST_ARCHIVE",
+          imageSrc: archiveImage.trim() || undefined,
+        }),
+      });
+
+      if (res.ok) {
+        setFeedbackMessage(`Event "${selectedEventForArchive.title}" moved to Past Event Archive.`);
+        setShowArchiveModal(false);
+        setSelectedEventForArchive(null);
+        setArchiveImage("");
+        fetchDashboardData("events", currentPage, searchQuery);
+        setTimeout(() => setFeedbackMessage(null), 3000);
+      } else {
+        alert("Failed to archive event");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error moving event to archive");
+    } finally {
+      setArchivingEvent(false);
+    }
+  };
+
+  const handleEventImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingEventImage(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await apiFetch(`${API_BASE_URL}/uploads/image`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (res.ok) {
+        const json = await res.json();
+        setEventFormImage(json.url);
+      } else {
+        alert("Failed to upload image. Please try again.");
+      }
+    } catch (err) {
+      console.error("Error uploading image", err);
+      alert("Error uploading image.");
+    } finally {
+      setUploadingEventImage(false);
+    }
+  };
+
+  const resetEventForm = () => {
+    setEditingEventId(null);
+    setEventFormType("READING_SESSION");
+    setEventFormTitle("");
+    setEventFormDesc("");
+    setEventFormLoc("");
+    setEventFormTime("");
+    setEventFormDay("");
+    setEventFormMonthYear("");
+    setEventFormImage("");
+    setEventFormRegisterHref("");
+    setEventFormPublished(true);
+  };
+
+  const handleUpdateCommReportStatus = async (reportId: string, status: "ACTIONED" | "DISMISSED") => {
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/editorial/community/reports/${reportId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      if (res.ok) {
+        setFeedbackMessage(`Community report marked as ${status.toLowerCase()}.`);
+        fetchDashboardData("communities", currentPage, searchQuery);
+        setTimeout(() => setFeedbackMessage(null), 3000);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleLockPost = async (postId: string) => {
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/editorial/community/posts/${postId}/lock`, { method: "PATCH" });
+      if (res.ok) {
+        const json = await res.json();
+        setFeedbackMessage(json.isLocked ? "Post thread locked." : "Post thread unlocked.");
+        fetchDashboardData("communities", currentPage, searchQuery);
+        setTimeout(() => setFeedbackMessage(null), 3000);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handlePinPost = async (postId: string) => {
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/editorial/community/posts/${postId}/pin`, { method: "PATCH" });
+      if (res.ok) {
+        const json = await res.json();
+        setFeedbackMessage(json.isPinned ? "Post pinned to community feed top." : "Post unpinned.");
+        fetchDashboardData("communities", currentPage, searchQuery);
+        setTimeout(() => setFeedbackMessage(null), 3000);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleRemoveCommPost = async (postId: string) => {
+    if (!confirm("Are you sure you want to remove this community post?")) return;
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/editorial/community/posts/${postId}/remove`, { method: "PATCH" });
+      if (res.ok) {
+        setFeedbackMessage("Community post removed.");
+        fetchDashboardData("communities", currentPage, searchQuery);
+        setTimeout(() => setFeedbackMessage(null), 3000);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleRemoveCommComment = async (commentId: string) => {
+    if (!confirm("Are you sure you want to soft-remove this comment? Its body will be redacted while preserving reply threads.")) return;
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/editorial/community/comments/${commentId}/remove`, { method: "PATCH" });
+      if (res.ok) {
+        setFeedbackMessage("Community comment soft-removed.");
+        fetchDashboardData("communities", currentPage, searchQuery);
+        setTimeout(() => setFeedbackMessage(null), 3000);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleCreateCommunity = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCommName.trim()) return;
+
+    const slug = newCommSlug.trim() || newCommName.toLowerCase().trim().split(/\s+/).join("-");
+
+    setCreatingComm(true);
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/communities`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newCommName.trim(),
+          slug,
+          description: newCommDesc.trim() || undefined,
+          color: newCommColor,
+        }),
+      });
+
+      if (res.ok) {
+        setFeedbackMessage(`Community '${newCommName}' created successfully!`);
+        setShowAddCommModal(false);
+        setNewCommName("");
+        setNewCommSlug("");
+        setNewCommDesc("");
+        fetchDashboardData("communities", currentPage, searchQuery);
+        setTimeout(() => setFeedbackMessage(null), 3000);
+      } else {
+        const err = await res.json();
+        alert(err.message || "Failed to create community");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error creating community");
+    } finally {
+      setCreatingComm(false);
+    }
+  };
+
+  const handleDeleteCommunity = async (slug: string, name: string) => {
+    if (!confirm(`Are you sure you want to permanently delete community ${name}? All posts in this community will also be removed.`)) return;
+
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/communities/${slug}`, { method: "DELETE" });
+      if (res.ok) {
+        setFeedbackMessage(`Community '${name}' deleted.`);
+        fetchDashboardData("communities", currentPage, searchQuery);
+        setTimeout(() => setFeedbackMessage(null), 3000);
+      } else {
+        alert("Failed to delete community");
+      }
+    } catch (err) {
+      console.error(err);
     }
   };
 
@@ -352,7 +995,7 @@ function EditorialDashboardContent() {
     if (user && ['EDITOR', 'ADMIN'].includes(user.role)) {
       fetchDashboardData(activeTab, currentPage, searchQuery);
     }
-  }, [activeTab, currentPage, reportStatusFilter, reportTypeFilter]);
+  }, [activeTab, currentPage, reportStatusFilter, reportTypeFilter, eventFilterType]);
 
   // Server-side debounced search handler
   useEffect(() => {
@@ -559,11 +1202,11 @@ function EditorialDashboardContent() {
     }
 
     let processedContent = contentStr.replace(
-      /!\[(.*?)\]\((.*?)\)/g,
+      new RegExp("!\\[(.*?)\\]\\((.*?)\\)", "g"),
       '<img src="$2" alt="$1" />'
     );
 
-    const imgRegex = /<img\s+[^>]*src=["']([^"']+)["'][^>]*>/gi;
+    const imgRegex = new RegExp('<img\\s+[^>]*src=["\']([^"\']+)["\'][^>]*>', "gi");
     const parts: Array<{ type: "text"; value: string } | { type: "image"; src: string; alt: string }> = [];
     let lastIndex = 0;
     let match;
@@ -599,7 +1242,7 @@ function EditorialDashboardContent() {
       <div className="space-y-4">
         {parts.map((part, idx) => {
           if (part.type === "text") {
-            const isHtml = /<[a-z][\s\S]*>/i.test(part.value);
+            const isHtml = new RegExp("<[a-z][\\s\\S]*>", "i").test(part.value);
             if (isHtml) {
               return (
                 <div
@@ -689,9 +1332,9 @@ function EditorialDashboardContent() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F9FAFB] font-poppins flex flex-col md:flex-row">
-      {/* Mobile Top Navbar */}
-      <div className="md:hidden bg-white border-b border-gray-200 text-gray-900 p-4 flex items-center justify-between sticky top-0 z-40 shadow-xs">
+    <div className="min-h-screen bg-[#F9FAFB] font-poppins flex flex-col lg:flex-row text-left">
+      {/* Mobile Top Navbar (Single Clean Sticky Bar) */}
+      <div className="lg:hidden bg-white border-b border-gray-200 text-gray-900 p-4 flex items-center justify-between sticky top-0 z-40 shadow-xs">
         <div className="flex items-center gap-2">
           <span className="bg-[#E4F953] text-[#040706] font-bold text-[10px] uppercase px-2.5 py-1 rounded-xl">
             EDITORIAL
@@ -709,15 +1352,15 @@ function EditorialDashboardContent() {
       {/* Mobile Backdrop Overlay */}
       {mobileSidebarOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-30 md:hidden backdrop-blur-xs transition-opacity"
+          className="fixed inset-0 bg-black/50 z-30 lg:hidden backdrop-blur-xs transition-opacity"
           onClick={() => setMobileSidebarOpen(false)}
         />
       )}
 
       {/* Sidebar Navigation */}
       <aside
-        className={`fixed md:sticky top-0 z-40 w-64 md:w-72 h-screen bg-white border-r border-gray-200 text-gray-900 flex flex-col justify-between p-6 transition-all duration-300 shadow-xs ${
-          mobileSidebarOpen ? "left-0" : "-left-full md:left-0"
+        className={`fixed lg:sticky top-0 z-40 w-64 lg:w-72 h-screen bg-white border-r border-gray-200 text-gray-900 flex flex-col justify-between p-6 transition-all duration-300 shadow-xs ${
+          mobileSidebarOpen ? "left-0" : "-left-full lg:left-0"
         }`}
       >
         <div>
@@ -738,44 +1381,26 @@ function EditorialDashboardContent() {
           <nav className="space-y-2">
             <button
               onClick={() => handleTabChange("queue")}
-              className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
                 activeTab === "queue"
                   ? "bg-[#040706] text-white shadow-xs"
                   : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
               }`}
             >
-              <div className="flex items-center gap-3">
-                <Layers className="w-4 h-4" />
-                <span>Pending Review Queue</span>
-              </div>
-              {queueMeta.total > 0 && (
-                <span
-                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                    activeTab === "queue" ? "bg-[#E4F953] text-[#040706]" : "bg-amber-500 text-white"
-                  }`}
-                >
-                  {queueMeta.total}
-                </span>
-              )}
+              <Layers className="w-4 h-4 text-amber-400 shrink-0" />
+              <span>Pending Review Queue</span>
             </button>
 
             <button
               onClick={() => handleTabChange("reports")}
-              className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
                 activeTab === "reports"
                   ? "bg-[#040706] text-white shadow-xs"
                   : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
               }`}
             >
-              <div className="flex items-center gap-3">
-                <Flag className="w-4 h-4 text-rose-500" />
-                <span>Reported Content</span>
-              </div>
-              {reportsList.filter((r) => r.status === "PENDING").length > 0 && (
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-500 text-white">
-                  {reportsList.filter((r) => r.status === "PENDING").length}
-                </span>
-              )}
+              <Flag className="w-4 h-4 text-rose-500 shrink-0" />
+              <span>Reported Content</span>
             </button>
 
             <button
@@ -786,7 +1411,7 @@ function EditorialDashboardContent() {
                   : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
               }`}
             >
-              <BookOpen className="w-4 h-4" />
+              <BookOpen className="w-4 h-4 text-emerald-500 shrink-0" />
               <span>Published Catalog</span>
             </button>
 
@@ -798,8 +1423,8 @@ function EditorialDashboardContent() {
                   : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
               }`}
             >
-              <Users className="w-4 h-4" />
-              <span>Author Roster ({authorsMeta.total || allUsers.length})</span>
+              <Users className="w-4 h-4 text-blue-500 shrink-0" />
+              <span>Author Roster</span>
             </button>
 
             <button
@@ -810,7 +1435,7 @@ function EditorialDashboardContent() {
                   : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
               }`}
             >
-              <Tag className="w-4 h-4" />
+              <Tag className="w-4 h-4 text-purple-500 shrink-0" />
               <span>Story Categories</span>
             </button>
 
@@ -822,7 +1447,7 @@ function EditorialDashboardContent() {
                   : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
               }`}
             >
-              <Bell className="w-4 h-4" />
+              <Bell className="w-4 h-4 text-indigo-500 shrink-0" />
               <span>Editorial Alerts</span>
             </button>
 
@@ -834,8 +1459,56 @@ function EditorialDashboardContent() {
                   : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
               }`}
             >
-              <Settings className="w-4 h-4" />
+              <Settings className="w-4 h-4 text-slate-400 shrink-0" />
               <span>Home Page Editor's Note</span>
+            </button>
+
+            <button
+              onClick={() => handleTabChange("communities")}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
+                activeTab === "communities"
+                  ? "bg-[#040706] text-white shadow-xs"
+                  : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+              }`}
+            >
+              <Users className="w-4 h-4 text-sky-500 shrink-0" />
+              <span>Community Moderation</span>
+            </button>
+
+            <button
+              onClick={() => handleTabChange("events")}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
+                activeTab === "events"
+                  ? "bg-[#040706] text-white shadow-xs"
+                  : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+              }`}
+            >
+              <Calendar className="w-4 h-4 text-violet-500 shrink-0" />
+              <span>Events & Workshops</span>
+            </button>
+
+            <button
+              onClick={() => handleTabChange("books")}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
+                activeTab === "books"
+                  ? "bg-[#040706] text-white shadow-xs"
+                  : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+              }`}
+            >
+              <BookOpen className="w-4 h-4 text-[#8122DB] shrink-0" />
+              <span>Upcoming Book Releases</span>
+            </button>
+
+            <button
+              onClick={() => handleTabChange("media")}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
+                activeTab === "media"
+                  ? "bg-[#040706] text-white shadow-xs"
+                  : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+              }`}
+            >
+              <Video className="w-4 h-4 text-emerald-500 shrink-0" />
+              <span>Media Showcase</span>
             </button>
           </nav>
         </div>
@@ -863,25 +1536,45 @@ function EditorialDashboardContent() {
       </aside>
 
       {/* Main Content Area */}
-      <main className="flex-1 p-4 sm:p-6 md:p-10 overflow-y-auto">
-        {/* Top Header Bar */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8 pb-6 border-b border-gray-200">
+      <main className="flex-1 p-4 sm:p-6 lg:p-10 max-w-7xl mx-auto w-full text-left">
+
+        {/* Global Feedback Banner */}
+        {feedbackMessage && (
+          <div className="mb-6 bg-emerald-500 text-white px-5 py-3.5 rounded-2xl text-xs font-semibold flex items-center justify-between shadow-md animate-in fade-in">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4" />
+              <span>{feedbackMessage}</span>
+            </div>
+            <button onClick={() => setFeedbackMessage(null)} className="cursor-pointer">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
+        {/* Dynamic Section Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-950 tracking-tight">
               {activeTab === "queue" && "Pending Review Queue"}
+              {activeTab === "reports" && "Reported Content Moderation"}
               {activeTab === "catalog" && "Published Story Catalog"}
               {activeTab === "authors" && "User & Author Roster"}
               {activeTab === "categories" && "Story Categories & Taxonomy"}
               {activeTab === "notifications" && "Editorial Alerts & Logs"}
               {activeTab === "settings" && "Home Page Editor's Note"}
+              {activeTab === "communities" && "Community Moderation & Management"}
+              {activeTab === "events" && "Events & Workshops Management"}
             </h1>
-            <p className="text-xs sm:text-sm text-[#646464] mt-1">
-              {activeTab === "queue" && "Review submitted stories, evaluate formatting, and publish or reject content."}
+            <p className="text-xs text-gray-500 font-medium">
+              {activeTab === "queue" && "Review pending author submissions and approve or reject content."}
+              {activeTab === "reports" && "Investigate reader flag reports submitted against stories and comments."}
               {activeTab === "catalog" && "Browse all active stories currently published on AKAM Digital."}
               {activeTab === "authors" && "Manage all registered platform users, writers, and role permissions."}
               {activeTab === "categories" && "Manage category labels, Malayalam translations, and genre classifications."}
               {activeTab === "notifications" && "Event logs for story submissions, approvals, and rejections."}
               {activeTab === "settings" && "Update the featured Editor's Note title and message displayed on the main homepage."}
+              {activeTab === "communities" && "Moderate community posts and comments, lock threads, pin posts, and inspect community rosters."}
+              {activeTab === "events" && "Manage upcoming reading sessions, discussions, workshops, and past archives."}
             </p>
           </div>
 
@@ -898,13 +1591,6 @@ function EditorialDashboardContent() {
             Refresh Data
           </Button>
         </div>
-
-        {feedbackMessage && (
-          <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl flex items-center gap-3 text-sm font-medium animate-in fade-in">
-            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-            <span>{feedbackMessage}</span>
-          </div>
-        )}
 
         {/* TAB 1: PENDING QUEUE */}
         {activeTab === "queue" && (
@@ -1611,6 +2297,626 @@ function EditorialDashboardContent() {
             </div>
           </div>
         )}
+
+        {/* TAB 8: COMMUNITY MODERATION */}
+        {activeTab === "communities" && (
+          <div className="space-y-6 font-poppins">
+            {/* Subtab Toggle Header */}
+            <div className="flex items-center gap-2 border-b border-gray-200 pb-3">
+              <button
+                onClick={() => setCommSubTab("reports")}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  commSubTab === "reports"
+                    ? "bg-black text-white shadow-xs"
+                    : "bg-white border border-gray-200 text-gray-700 hover:bg-gray-100"
+                }`}
+              >
+                Flagged Community Queue ({commReportsMeta.total})
+              </button>
+              <button
+                onClick={() => setCommSubTab("communities")}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  commSubTab === "communities"
+                    ? "bg-black text-white shadow-xs"
+                    : "bg-white border border-gray-200 text-gray-700 hover:bg-gray-100"
+                }`}
+              >
+                Active Communities Roster ({communitiesList.length})
+              </button>
+            </div>
+
+            {/* Subtab 1: Community Flagged Queue */}
+            {commSubTab === "reports" && (
+              <div className="space-y-4">
+                {loading ? (
+                  <div className="py-20 flex justify-center items-center">
+                    <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-black"></div>
+                  </div>
+                ) : commReportsList.length === 0 ? (
+                  <div className="text-center py-16 bg-white rounded-[28px] border border-gray-200 p-8 shadow-xs">
+                    <ShieldCheck className="w-12 h-12 mx-auto text-emerald-500 mb-3" />
+                    <h3 className="text-lg font-bold text-gray-900 mb-1">Community Queue Clean!</h3>
+                    <p className="text-xs text-gray-500">There are no flagged community posts or comments requiring moderation.</p>
+                  </div>
+                ) : (
+                  <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-xs">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs text-gray-700">
+                        <thead className="bg-gray-50 text-[10px] font-bold uppercase tracking-wider text-gray-500 border-b border-gray-200">
+                          <tr>
+                            <th className="px-4 py-3">Reported Item</th>
+                            <th className="px-4 py-3">Reporter</th>
+                            <th className="px-4 py-3">Reason / Details</th>
+                            <th className="px-4 py-3">Status</th>
+                            <th className="px-4 py-3 text-right">Moderation Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {commReportsList.map((item) => (
+                            <tr key={item.id} className="hover:bg-gray-50/60 transition-colors">
+                              <td className="px-4 py-3 max-w-xs">
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 inline-block mb-1">
+                                  {item.postId ? "POST" : "COMMENT"}
+                                </span>
+                                <p className="font-semibold text-gray-900 line-clamp-2">
+                                  {item.postTitle || item.commentBody || "Community Content"}
+                                </p>
+                              </td>
+                              <td className="px-4 py-3">
+                                <p className="font-semibold text-gray-900">{item.reporterName || "User"}</p>
+                                <p className="text-[10px] text-gray-500">{item.reporterEmail}</p>
+                              </td>
+                              <td className="px-4 py-3 max-w-xs">
+                                <p className="font-semibold text-rose-600">{item.reason}</p>
+                                {item.details && <p className="text-[10px] text-gray-500 line-clamp-1">{item.details}</p>}
+                              </td>
+                              <td className="px-4 py-3">
+                                <span
+                                  className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                    item.status === "PENDING"
+                                      ? "bg-amber-100 text-amber-800"
+                                      : item.status === "ACTIONED"
+                                      ? "bg-emerald-100 text-emerald-800"
+                                      : "bg-gray-100 text-gray-600"
+                                  }`}
+                                >
+                                  {item.status}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 text-right">
+                                <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                                  {item.postId && (
+                                    <>
+                                      <button
+                                        onClick={() => handleLockPost(item.postId)}
+                                        className="px-2.5 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-[10px] font-bold"
+                                        title="Lock Thread"
+                                      >
+                                        Lock
+                                      </button>
+                                      <button
+                                        onClick={() => handlePinPost(item.postId)}
+                                        className="px-2.5 py-1 bg-amber-100 hover:bg-amber-200 text-amber-800 rounded-lg text-[10px] font-bold"
+                                        title="Pin Post"
+                                      >
+                                        Pin
+                                      </button>
+                                      <button
+                                        onClick={() => handleRemoveCommPost(item.postId)}
+                                        className="px-2.5 py-1 bg-rose-100 hover:bg-rose-200 text-rose-700 rounded-lg text-[10px] font-bold"
+                                        title="Remove Post"
+                                      >
+                                        Remove Post
+                                      </button>
+                                    </>
+                                  )}
+                                  {item.commentId && (
+                                    <button
+                                      onClick={() => handleRemoveCommComment(item.commentId)}
+                                      className="px-2.5 py-1 bg-rose-100 hover:bg-rose-200 text-rose-700 rounded-lg text-[10px] font-bold"
+                                      title="Soft Remove Comment"
+                                    >
+                                      Remove Comment
+                                    </button>
+                                  )}
+                                  {item.status === "PENDING" && (
+                                    <button
+                                      onClick={() => handleUpdateCommReportStatus(item.id, "ACTIONED")}
+                                      className="px-2.5 py-1 bg-emerald-600 text-white rounded-lg text-[10px] font-bold hover:bg-emerald-700"
+                                    >
+                                      Resolve
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <PaginationFooter meta={commReportsMeta} onPageChange={(p) => handlePageChange(p)} />
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Subtab 2: Communities Roster */}
+            {commSubTab === "communities" && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between bg-white border border-gray-200 rounded-2xl p-4 shadow-xs">
+                  <div>
+                    <h4 className="font-bold text-gray-900 text-sm">All Platform Communities ({communitiesList.length})</h4>
+                    <p className="text-xs text-gray-500">Add new categories/communities or manage existing spaces.</p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="primary"
+                    size="sm"
+                    icon={<Plus className="w-4 h-4" />}
+                    iconPosition="left"
+                    onClick={() => setShowAddCommModal(true)}
+                    className="text-xs font-semibold cursor-pointer shadow-xs"
+                  >
+                    Add Community
+                  </Button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                  {communitiesList.map((comm) => (
+                    <div
+                      key={comm.id}
+                      className="bg-white border border-gray-200 rounded-2xl p-5 shadow-xs flex flex-col justify-between"
+                    >
+                      <div>
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex items-center gap-3">
+                            <div
+                              className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-lg shadow-xs"
+                              style={{ backgroundColor: comm.color || "#29ABE1" }}
+                            >
+                              {comm.name[0]}
+                            </div>
+                            <div>
+                              <h4 className="font-bold text-gray-900 text-sm">{comm.name}</h4>
+                              <p className="text-[10px] text-gray-400 font-mono">{"r/" + comm.slug}</p>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => handleDeleteCommunity(comm.slug, comm.name)}
+                            title="Delete Community"
+                            className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+
+                        {comm.description && (
+                          <p className="text-xs text-gray-500 line-clamp-2 leading-relaxed mb-4">
+                            {comm.description}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="pt-3 border-t border-gray-100 flex items-center justify-between">
+                        <div className="text-[11px] text-gray-500 font-medium">
+                          <span className="font-semibold text-gray-900">{comm.memberCount}</span> members ·{" "}
+                          <span className="font-semibold text-gray-900">{comm.postCount}</span> posts
+                        </div>
+
+                        <Link
+                          href={`/communities/${comm.slug}`}
+                          target="_blank"
+                          className="text-xs font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                        >
+                          View Feed <ExternalLink className="w-3 h-3" />
+                        </Link>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB 9: EVENTS & WORKSHOPS */}
+        {(activeTab as string) === "events" && (
+          <div className="space-y-6 font-poppins">
+            {/* Header Action & Filter Bar */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white border border-gray-200 rounded-2xl p-4 shadow-xs">
+              <div className="flex items-center gap-1.5 bg-gray-100 p-1.5 rounded-xl flex-wrap">
+                {[
+                  { id: "ALL", label: "All Events" },
+                  { id: "READING_SESSION", label: "Reading Sessions" },
+                  { id: "DISCUSSION", label: "Discussions" },
+                  { id: "WORKSHOP", label: "Workshops" },
+                  { id: "PAST_ARCHIVE", label: "Past Archives" },
+                ].map((f) => (
+                  <button
+                    key={f.id}
+                    onClick={() => setEventFilterType(f.id)}
+                    className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      eventFilterType === f.id
+                        ? "bg-black text-white shadow-xs"
+                        : "text-gray-600 hover:text-gray-900 hover:bg-gray-200"
+                    }`}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+
+              <Button
+                type="button"
+                variant="primary"
+                size="sm"
+                icon={<Plus className="w-4 h-4" />}
+                iconPosition="left"
+                onClick={() => {
+                  resetEventForm();
+                  setShowAddEventModal(true);
+                }}
+                className="text-xs font-semibold cursor-pointer shadow-xs whitespace-nowrap"
+              >
+                Add Event / Workshop
+              </Button>
+            </div>
+
+            {/* Event Cards Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {eventsList.map((ev) => (
+                <div
+                  key={ev.id}
+                  className="bg-white border border-gray-200 rounded-3xl p-6 shadow-xs flex flex-col justify-between hover:shadow-md transition-all"
+                >
+                  <div>
+                    {/* Type & Status Header */}
+                    <div className="flex items-center justify-between mb-4">
+                      <span className="text-[11px] font-bold px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 uppercase tracking-wider">
+                        {ev.type.replace("_", " ")}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleTogglePublishEvent(ev.id)}
+                          title="Toggle Published Status"
+                          className={`text-[10px] font-bold px-2.5 py-1 rounded-full border cursor-pointer transition ${
+                            ev.isPublished
+                              ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
+                              : "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100"
+                          }`}
+                        >
+                          {ev.isPublished ? "Published" : "Draft (Hidden)"}
+                        </button>
+                        <button
+                          onClick={() => {
+                            setEditingEventId(ev.id);
+                            setEventFormType(ev.type);
+                            setEventFormTitle(ev.title);
+                            setEventFormDesc(ev.description);
+                            setEventFormLoc(ev.location);
+                            setEventFormTime(ev.time || "");
+                            setEventFormDay(ev.day || "");
+                            setEventFormMonthYear(ev.monthYear || "");
+                            setEventFormImage(ev.imageSrc || "");
+                            setEventFormRegisterHref(ev.registerHref || "");
+                            setEventFormPublished(ev.isPublished);
+                            setShowAddEventModal(true);
+                          }}
+                          title="Edit Event"
+                          className="p-1.5 text-gray-400 hover:text-black hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
+                        >
+                          <Settings className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteEvent(ev.id, ev.title)}
+                          title="Delete Event"
+                          className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Image preview if present */}
+                    {ev.imageSrc && (
+                      <div className="mb-4 rounded-2xl overflow-hidden h-36 bg-gray-100 border border-gray-100 relative">
+                        <img src={ev.imageSrc} alt={ev.title} className="w-full h-full object-cover" />
+                      </div>
+                    )}
+
+                    {/* Title */}
+                    <h3 className="text-lg font-bold text-gray-950 mb-2 leading-snug">{ev.title}</h3>
+
+                    {/* Description */}
+                    <p className="text-xs text-gray-600 leading-relaxed mb-4 line-clamp-3">
+                      {ev.description}
+                    </p>
+
+                    {/* Meta Details */}
+                    <div className="space-y-1.5 text-xs text-gray-500 font-medium mb-4">
+                      <div>📍 {ev.location}</div>
+                      {ev.time && <div>⏰ {ev.time}</div>}
+                      {ev.day && ev.monthYear && (
+                        <div>🗓️ {ev.day} {ev.monthYear}</div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="pt-3 border-t border-gray-100 flex items-center justify-between flex-wrap gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] font-bold text-gray-700 bg-gray-100 px-2.5 py-1 rounded-full">
+                        👥 {ev.registrationCount || 0} Registered
+                      </span>
+                      <button
+                        onClick={() => handleViewRegistrations(ev)}
+                        className="text-xs font-bold text-black hover:text-emerald-700 underline cursor-pointer"
+                      >
+                        View Attendees →
+                      </button>
+                    </div>
+
+                    {ev.type !== "PAST_ARCHIVE" && (
+                      <button
+                        onClick={() => handleOpenArchiveModal(ev)}
+                        className="px-3 py-1 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1"
+                      >
+                        <Archive className="w-3.5 h-3.5 text-amber-700" />
+                        <span>Move to Past Archive</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Server-Side Pagination Footer */}
+            <PaginationFooter
+              meta={eventsMeta}
+              onPageChange={(p) => fetchDashboardData("events", p, searchQuery)}
+            />
+          </div>
+        )}
+
+        {/* Upcoming Book Releases Tab Panel */}
+        {activeTab === "books" && (
+          <div className="space-y-6 font-poppins">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-white p-6 sm:p-8 rounded-[28px] border border-gray-200/80 shadow-xs">
+              <div>
+                <span className="bg-purple-100 text-purple-800 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider">
+                  Publishing Showcase
+                </span>
+                <h2 className="text-2xl font-bold text-gray-950 mt-1.5 tracking-tight">Upcoming Book Releases</h2>
+                <p className="text-xs text-gray-500 mt-1">Manage physical book showcase cards & pre-order links displayed on the homepage.</p>
+              </div>
+
+              <Button
+                variant="primary"
+                size="sm"
+                icon={<Plus className="w-4 h-4" />}
+                onClick={() => {
+                  resetBookForm();
+                  setShowAddBookModal(true);
+                }}
+                className="px-5 py-2.5 bg-black hover:bg-gray-800 text-white rounded-xl shadow-xs cursor-pointer shrink-0"
+              >
+                Add Book Release
+              </Button>
+            </div>
+
+            {/* Books List Grid */}
+            {booksList.length === 0 ? (
+              <div className="bg-white rounded-[28px] p-12 text-center border border-gray-200/80 shadow-xs">
+                <BookOpen className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+                <h3 className="text-base font-bold text-gray-900">No Book Releases Added Yet</h3>
+                <p className="text-xs text-gray-500 max-w-sm mx-auto mt-1 mb-5">Click below to add a book release showcase to display on the homepage.</p>
+                <Button variant="primary" size="sm" onClick={() => { resetBookForm(); setShowAddBookModal(true); }}>
+                  Add First Book Release
+                </Button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {booksList.map((book) => (
+                  <div key={book.id} className="bg-white rounded-[24px] p-6 border border-gray-200/80 shadow-xs flex flex-col justify-between space-y-4 hover:shadow-md transition-shadow">
+                    <div>
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <span className="bg-[#F5EDFF] text-[#8122DB] text-[10px] font-bold px-2.5 py-1 rounded-full">
+                          {book.editionTag || "Print Edition"}
+                        </span>
+                        <button
+                          onClick={() => handleTogglePublishBook(book.id)}
+                          className={`text-[10px] font-bold px-2.5 py-1 rounded-full transition cursor-pointer ${
+                            book.isPublished ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-200" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                          }`}
+                        >
+                          {book.isPublished ? "Published" : "Draft (Hidden)"}
+                        </button>
+                      </div>
+
+                      <h3 className="text-lg font-bold text-gray-950 tracking-tight leading-snug">{book.title}</h3>
+                      <p className="text-xs font-semibold text-gray-500 mb-3">{book.author}</p>
+                      <div className="border-b-2 border-[#EBE0FF] my-3" />
+                      <p className="text-xs text-gray-600 line-clamp-3 leading-relaxed font-normal">{book.description}</p>
+                    </div>
+
+                    <div className="pt-3 border-t border-gray-100 flex items-center justify-between gap-2">
+                      {book.preorderLink ? (
+                        <a
+                          href={book.preorderLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs font-semibold text-purple-600 hover:underline flex items-center gap-1"
+                        >
+                          Pre-order Link <ExternalLink className="w-3 h-3" />
+                        </a>
+                      ) : (
+                        <span className="text-[10px] text-gray-400 font-mono">No preorder URL</span>
+                      )}
+
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => {
+                            setEditingBookId(book.id);
+                            setBookFormTitle(book.title);
+                            setBookFormAuthor(book.author);
+                            setBookFormEditionTag(book.editionTag || "Print Edition");
+                            setBookFormDesc(book.description);
+                            setBookFormCoverImage(book.coverImage || "");
+                            setBookFormPreorderLink(book.preorderLink || "");
+                            setBookFormPublished(book.isPublished);
+                            setShowAddBookModal(true);
+                          }}
+                          className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-bold rounded-xl transition cursor-pointer"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDeleteBook(book.id)}
+                          className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-xl transition cursor-pointer"
+                          title="Delete Book Release"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Server-Side Pagination Footer */}
+            <PaginationFooter
+              meta={booksMeta}
+              onPageChange={(p) => fetchDashboardData("books", p, searchQuery)}
+            />
+          </div>
+        )}
+
+        {/* Media Showcase Tab Panel */}
+        {activeTab === "media" && (
+          <div className="space-y-6 font-poppins">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-white p-6 sm:p-8 rounded-[28px] border border-gray-200/80 shadow-xs">
+              <div>
+                <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider">
+                  Video & Media Showcase
+                </span>
+                <h2 className="text-2xl font-bold text-gray-950 mt-1.5 tracking-tight">Media Showcase Videos</h2>
+                <p className="text-xs text-gray-500 mt-1">Manage videos displayed on the /media showcase page (Thumbnails auto-generated from YouTube).</p>
+              </div>
+
+              <Button
+                variant="primary"
+                size="sm"
+                icon={<Plus className="w-4 h-4" />}
+                onClick={() => {
+                  resetMediaForm();
+                  setShowAddMediaModal(true);
+                }}
+                className="px-5 py-2.5 bg-black hover:bg-gray-800 text-white rounded-xl shadow-xs cursor-pointer shrink-0"
+              >
+                Add Media Video
+              </Button>
+            </div>
+
+            {/* Media List Grid */}
+            {mediaList.length === 0 ? (
+              <div className="bg-white rounded-[28px] p-12 text-center border border-gray-200/80 shadow-xs">
+                <Video className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+                <h3 className="text-base font-bold text-gray-900">No Media Videos Added Yet</h3>
+                <p className="text-xs text-gray-500 max-w-sm mx-auto mt-1 mb-5">Click below to add a YouTube video to the media showcase.</p>
+                <Button variant="primary" size="sm" onClick={() => { resetMediaForm(); setShowAddMediaModal(true); }}>
+                  Add First Media Video
+                </Button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {mediaList.map((item) => (
+                  <div key={item.id} className="bg-white rounded-[24px] p-5 border border-gray-200/80 shadow-xs flex flex-col justify-between space-y-4 hover:shadow-md transition-shadow">
+                    <div>
+                      {/* Thumbnail Preview */}
+                      <div className="relative w-full aspect-video rounded-xl overflow-hidden bg-gray-900 mb-3">
+                        <img
+                          src={`https://img.youtube.com/vi/${item.youtubeId}/hqdefault.jpg`}
+                          alt={item.title}
+                          className="w-full h-full object-cover"
+                        />
+                        <div className="absolute top-2 left-2 bg-black/70 text-white text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider backdrop-blur-xs">
+                          {item.category}
+                        </div>
+                      </div>
+
+                      <div className="flex items-start justify-between gap-2 mb-1">
+                        <h3 className="text-base font-bold text-gray-950 tracking-tight leading-snug">{item.title}</h3>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            onClick={() => handleToggleFeaturedMedia(item.id)}
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full transition cursor-pointer ${
+                              item.isFeatured ? "bg-amber-100 text-amber-900 border border-amber-300" : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                            }`}
+                            title={item.isFeatured ? "Currently featured on Homepage" : "Click to feature on Homepage"}
+                          >
+                            {item.isFeatured ? "★ Featured" : "☆ Feature"}
+                          </button>
+                          <button
+                            onClick={() => handleTogglePublishMedia(item.id)}
+                            className={`text-[10px] font-bold px-2.5 py-1 rounded-full transition cursor-pointer ${
+                              item.isPublished ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-200" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                            }`}
+                          >
+                            {item.isPublished ? "Published" : "Draft"}
+                          </button>
+                        </div>
+                      </div>
+
+                      <p className="text-xs text-gray-600 line-clamp-3 leading-relaxed font-normal">{item.description}</p>
+                    </div>
+
+                    <div className="pt-3 border-t border-gray-100 flex items-center justify-between gap-2">
+                      <a
+                        href={item.youtubeUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs font-semibold text-emerald-600 hover:underline flex items-center gap-1 truncate"
+                      >
+                        YouTube Link <ExternalLink className="w-3 h-3 shrink-0" />
+                      </a>
+
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          onClick={() => {
+                            setEditingMediaId(item.id);
+                            setMediaFormTitle(item.title);
+                            setMediaFormCategory(item.category);
+                            setMediaFormYoutubeUrl(item.youtubeUrl);
+                            setMediaFormDesc(item.description);
+                            setMediaFormPublished(item.isPublished);
+                            setMediaFormFeatured(item.isFeatured || false);
+                            setShowAddMediaModal(true);
+                          }}
+                          className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-bold rounded-xl transition cursor-pointer"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDeleteMedia(item.id)}
+                          className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-xl transition cursor-pointer"
+                          title="Delete Media Video"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Server-Side Pagination Footer */}
+            <PaginationFooter
+              meta={mediaMeta}
+              onPageChange={(p) => fetchDashboardData("media", p, searchQuery)}
+            />
+          </div>
+        )}
       </main>
 
       {/* Reader Modal */}
@@ -1721,6 +3027,797 @@ function EditorialDashboardContent() {
                 {actionLoading ? "Rejecting..." : "Confirm Rejection"}
               </Button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Community Modal */}
+      {showAddCommModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs animate-in fade-in">
+          <div className="relative w-full max-w-md bg-white rounded-[28px] p-6 shadow-2xl font-poppins">
+            <div className="flex items-center justify-between pb-3 border-b border-gray-100 mb-4">
+              <h3 className="text-xl font-bold text-gray-950">Add New Community</h3>
+              <button
+                onClick={() => setShowAddCommModal(false)}
+                className="p-1.5 text-gray-400 hover:text-gray-700 rounded-full hover:bg-gray-100 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateCommunity} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider">
+                  Community Name <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newCommName}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setNewCommName(val);
+                    if (!newCommSlug) {
+                      setNewCommSlug(val.toLowerCase().trim().replace(/\s+/g, "-"));
+                    }
+                  }}
+                  placeholder="e.g. Science & Philosophy"
+                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium text-gray-900 outline-none focus:border-black shadow-xs"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider">
+                  {"URL Slug (r/...)"}
+                </label>
+                <input
+                  type="text"
+                  value={newCommSlug}
+                  onChange={(e) => setNewCommSlug(e.target.value)}
+                  placeholder="e.g. science-philosophy"
+                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-mono text-gray-900 outline-none focus:border-black shadow-xs"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider">
+                  Description
+                </label>
+                <textarea
+                  rows={3}
+                  value={newCommDesc}
+                  onChange={(e) => setNewCommDesc(e.target.value)}
+                  placeholder="What is this community about?"
+                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium text-gray-900 outline-none focus:border-black shadow-xs"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider">
+                  Brand Color
+                </label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="color"
+                    value={newCommColor}
+                    onChange={(e) => setNewCommColor(e.target.value)}
+                    className="w-10 h-10 rounded-lg cursor-pointer border-none"
+                  />
+                  <input
+                    type="text"
+                    value={newCommColor}
+                    onChange={(e) => setNewCommColor(e.target.value)}
+                    className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-mono text-gray-900 outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-gray-100">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setShowAddCommModal(false)}
+                  className="border border-gray-300"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  size="sm"
+                  disabled={creatingComm || !newCommName.trim()}
+                  className="px-6 py-2"
+                >
+                  {creatingComm ? "Creating..." : "Create Community"}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add / Edit Event Modal */}
+      {showAddEventModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs animate-in fade-in font-poppins">
+          <div className="relative w-full max-w-lg bg-white rounded-[28px] p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-gray-100 mb-4">
+              <h3 className="text-xl font-bold text-gray-950">
+                {editingEventId ? "Edit Event / Workshop" : "Add Event / Workshop"}
+              </h3>
+              <button
+                onClick={() => {
+                  setShowAddEventModal(false);
+                  resetEventForm();
+                }}
+                className="p-1.5 text-gray-400 hover:text-gray-700 rounded-full hover:bg-gray-100 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEvent} className="space-y-4">
+              {/* Event Type */}
+              <div>
+                <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider">
+                  Event Category / Type <span className="text-rose-500">*</span>
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { id: "READING_SESSION", label: "Reading Session" },
+                    { id: "DISCUSSION", label: "Discussion" },
+                    { id: "WORKSHOP", label: "Workshop" },
+                  ].map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => setEventFormType(t.id as any)}
+                      className={`px-3 py-2 rounded-xl text-xs font-semibold border cursor-pointer transition ${
+                        eventFormType === t.id
+                          ? "bg-black text-white border-black font-bold shadow-xs"
+                          : "bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100"
+                      }`}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Title */}
+              <div>
+                <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider">
+                  Title <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={eventFormTitle}
+                  onChange={(e) => setEventFormTitle(e.target.value)}
+                  placeholder="e.g. Voices of Classic Malayalam Short Stories"
+                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-900 outline-none focus:border-black shadow-xs"
+                />
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider">
+                  Description <span className="text-rose-500">*</span>
+                </label>
+                <textarea
+                  rows={3}
+                  required
+                  value={eventFormDesc}
+                  onChange={(e) => setEventFormDesc(e.target.value)}
+                  placeholder="Provide event details, speakers, or topics..."
+                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium text-gray-900 outline-none focus:border-black shadow-xs"
+                />
+              </div>
+
+              {/* Location */}
+              <div>
+                <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider">
+                  Location / Platform <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={eventFormLoc}
+                  onChange={(e) => setEventFormLoc(e.target.value)}
+                  placeholder="e.g. Trivandrum Public Library & Online Stream"
+                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium text-gray-900 outline-none focus:border-black shadow-xs"
+                />
+              </div>
+
+              {/* Single Selectable Date & Time Input Box */}
+              <div>
+                <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider">
+                  Event Date & Time <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="datetime-local"
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (!val) return;
+                    const [datePart, timePart] = val.split("T");
+                    if (datePart) {
+                      const [y, m, d] = datePart.split("-");
+                      const dateObj = new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
+                      if (!isNaN(dateObj.getTime())) {
+                        const dayStr = String(dateObj.getDate()).padStart(2, "0");
+                        const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+                        const monthYearStr = `${monthNames[dateObj.getMonth()]} ${dateObj.getFullYear()}`;
+                        setEventFormDay(dayStr);
+                        setEventFormMonthYear(monthYearStr);
+                      }
+                    }
+                    if (timePart) {
+                      const [h, min] = timePart.split(":");
+                      let hour = parseInt(h, 10);
+                      const ampm = hour >= 12 ? "PM" : "AM";
+                      hour = hour % 12 || 12;
+                      const formattedHour = String(hour).padStart(2, "0");
+                      setEventFormTime(`${formattedHour}:${min} ${ampm}`);
+                    }
+                  }}
+                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-900 outline-none focus:border-black shadow-xs cursor-pointer"
+                />
+
+                {/* Selected Schedule Display Pill */}
+                {(eventFormDay || eventFormMonthYear || eventFormTime) && (
+                  <div className="mt-2 text-xs text-gray-700 font-medium bg-gray-100/80 px-3.5 py-2 rounded-xl flex items-center gap-2 border border-gray-200/60">
+                    <span className="font-bold text-gray-900">Selected Schedule:</span>
+                    <span>
+                      {eventFormDay ? `${eventFormDay} ` : ""}
+                      {eventFormMonthYear ? `${eventFormMonthYear}` : ""}
+                      {eventFormTime ? ` @ ${eventFormTime}` : ""}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Cover Image Upload (Only for Workshop and Past Archive) */}
+              {["WORKSHOP", "PAST_ARCHIVE"].includes(eventFormType) && (
+                <div>
+                  <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider">
+                    Workshop Cover Image <span className="text-rose-500">*</span>
+                  </label>
+                  {eventFormImage ? (
+                    <div className="relative rounded-2xl overflow-hidden border border-gray-200 h-40 bg-gray-50 flex items-center justify-center group">
+                      <img
+                        src={eventFormImage.startsWith("/") ? `${API_BASE_URL.replace(/\/api$/, "")}${eventFormImage}` : eventFormImage}
+                        alt="Event Cover"
+                        className="w-full h-full object-cover"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setEventFormImage("")}
+                        className="absolute top-2 right-2 p-1.5 bg-black/70 hover:bg-rose-600 text-white rounded-full transition-colors cursor-pointer"
+                        title="Remove image"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <label className="border-2 border-dashed border-gray-200 hover:border-black rounded-2xl p-4 flex flex-col items-center justify-center cursor-pointer transition-colors bg-gray-50/50 hover:bg-gray-50">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleEventImageUpload}
+                        disabled={uploadingEventImage}
+                        className="hidden"
+                      />
+                      <div className="text-center">
+                        <span className="text-xs font-bold text-gray-900">
+                          {uploadingEventImage ? "Uploading Image..." : "📁 Select Cover Image from Device"}
+                        </span>
+                        <p className="text-[10px] text-gray-500 mt-1">PNG, JPG, WEBP up to 5MB</p>
+                      </div>
+                    </label>
+                  )}
+                </div>
+              )}
+
+              {/* Stream / Meeting Link (Optional) - Commented out as requested
+              <div>
+                <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider">
+                  Stream / Meeting Link (Optional)
+                </label>
+                <input
+                  type="url"
+                  value={eventFormRegisterHref}
+                  onChange={(e) => setEventFormRegisterHref(e.target.value)}
+                  placeholder="https://zoom.us/j/... or https://youtube.com/live/..."
+                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium text-gray-900 outline-none focus:border-black shadow-xs"
+                />
+              </div>
+              */}
+
+              {/* Published Toggle */}
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="checkbox"
+                  id="event-publish-checkbox"
+                  checked={eventFormPublished}
+                  onChange={(e) => setEventFormPublished(e.target.checked)}
+                  className="w-4 h-4 rounded text-black focus:ring-black cursor-pointer"
+                />
+                <label htmlFor="event-publish-checkbox" className="text-xs font-bold text-gray-900 cursor-pointer">
+                  Publish Immediately on Events Page
+                </label>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-gray-100">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    setShowAddEventModal(false);
+                    resetEventForm();
+                  }}
+                  className="border border-gray-300"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  size="sm"
+                  disabled={submittingEvent || !eventFormTitle.trim() || !eventFormDesc.trim()}
+                  className="px-6 py-2"
+                >
+                  {submittingEvent ? "Saving..." : editingEventId ? "Update Event" : "Create Event"}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Registrations Modal for Editorial Team */}
+      {showRegistrationsModal && selectedEventForReg && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs animate-in fade-in font-poppins">
+          <div className="relative w-full max-w-2xl bg-white rounded-[28px] p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-gray-100 mb-4">
+              <div>
+                <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider">
+                  Attendee Registrations
+                </span>
+                <h3 className="text-xl font-bold text-gray-950 mt-1">
+                  {selectedEventForReg.title}
+                </h3>
+              </div>
+              <button
+                onClick={() => {
+                  setShowRegistrationsModal(false);
+                  setSelectedEventForReg(null);
+                  setRegistrationsList([]);
+                }}
+                className="p-1.5 text-gray-400 hover:text-gray-700 rounded-full hover:bg-gray-100 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {loadingRegistrations ? (
+              <div className="py-12 text-center text-xs font-semibold text-gray-500">
+                Loading attendee registrations...
+              </div>
+            ) : registrationsList.length === 0 ? (
+              <div className="py-12 text-center text-xs font-semibold text-gray-500 bg-gray-50 rounded-2xl border border-gray-100 p-6">
+                No user registrations recorded yet for this event.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between text-xs text-gray-500 font-medium pb-2 border-b border-gray-100">
+                  <span>Total Attendees: <strong className="text-gray-900">{registrationsList.length}</strong></span>
+                  <button
+                    onClick={() => {
+                      const csvHeader = "Name,Email,Phone,Notes,Registered At\n";
+                      const csvRows = registrationsList.map(r => 
+                        `"${r.name}","${r.email}","${r.phone || ''}","${(r.notes || '').replace(/"/g, '""')}","${new Date(r.createdAt).toLocaleString()}"`
+                      ).join("\n");
+                      const blob = new Blob([csvHeader + csvRows], { type: 'text/csv' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = `registrations-${selectedEventForReg.id}.csv`;
+                      a.click();
+                    }}
+                    className="px-3 py-1 bg-gray-100 hover:bg-black hover:text-white text-gray-900 rounded-lg text-xs font-bold transition-all cursor-pointer"
+                  >
+                    📥 Export CSV
+                  </button>
+                </div>
+
+                <div className="divide-y divide-gray-100 border border-gray-100 rounded-2xl overflow-hidden">
+                  {registrationsList.map((reg) => (
+                    <div key={reg.id} className="p-4 bg-white hover:bg-gray-50 transition-colors">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <div className="text-sm font-bold text-gray-950">{reg.name}</div>
+                          <div className="text-xs text-gray-600 font-medium mt-0.5">{reg.email} {reg.phone ? `• ${reg.phone}` : ''}</div>
+                          {reg.notes && (
+                            <div className="text-xs text-gray-500 bg-amber-50 border border-amber-200/60 p-2 rounded-xl mt-2 font-normal">
+                              💬 &quot;{reg.notes}&quot;
+                            </div>
+                          )}
+                        </div>
+                        <span className="text-[10px] text-gray-400 font-mono whitespace-nowrap">
+                          {new Date(reg.createdAt).toLocaleDateString()}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Move to Past Archive Modal with Image Picker */}
+      {showArchiveModal && selectedEventForArchive && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs animate-in fade-in font-poppins">
+          <div className="relative w-full max-w-md bg-white rounded-[28px] p-6 shadow-2xl overflow-y-auto max-h-[90vh]">
+            <div className="flex items-center justify-between pb-3 border-b border-gray-100 mb-4">
+              <div>
+                <span className="bg-amber-100 text-amber-800 text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider">
+                  Move to Past Archive
+                </span>
+                <h3 className="text-xl font-bold text-gray-950 mt-1 leading-snug">
+                  {selectedEventForArchive.title}
+                </h3>
+              </div>
+              <button
+                onClick={() => {
+                  setShowArchiveModal(false);
+                  setSelectedEventForArchive(null);
+                  setArchiveImage("");
+                }}
+                className="p-1.5 text-gray-400 hover:text-gray-700 rounded-full hover:bg-gray-100 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleConfirmArchive} className="space-y-4">
+              <p className="text-xs text-gray-600 leading-relaxed">
+                Upload or confirm a cover image for this event to be displayed in the <strong>Past Event Archive</strong>.
+              </p>
+
+              {/* Archive Cover Image Upload */}
+              <div>
+                <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider">
+                  Archive Cover Image (Recommended)
+                </label>
+                {archiveImage ? (
+                  <div className="relative rounded-2xl overflow-hidden border border-gray-200 h-40 bg-gray-50 flex items-center justify-center group">
+                    <img
+                      src={archiveImage.startsWith("/") ? `${API_BASE_URL.replace(/\/api$/, "")}${archiveImage}` : archiveImage}
+                      alt="Archive Cover"
+                      className="w-full h-full object-cover"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setArchiveImage("")}
+                      className="absolute top-2 right-2 p-1.5 bg-black/70 hover:bg-rose-600 text-white rounded-full transition-colors cursor-pointer"
+                      title="Remove image"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <label className="border-2 border-dashed border-gray-200 hover:border-black rounded-2xl p-4 flex flex-col items-center justify-center cursor-pointer transition-colors bg-gray-50/50 hover:bg-gray-50">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleArchiveImageUpload}
+                      disabled={uploadingArchiveImage}
+                      className="hidden"
+                    />
+                    <div className="text-center">
+                      <span className="text-xs font-bold text-gray-900">
+                        {uploadingArchiveImage ? "Uploading Image..." : "📁 Select Cover Image for Archive"}
+                      </span>
+                      <p className="text-[10px] text-gray-500 mt-1">PNG, JPG, WEBP up to 5MB</p>
+                    </div>
+                  </label>
+                )}
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-gray-100">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    setShowArchiveModal(false);
+                    setSelectedEventForArchive(null);
+                    setArchiveImage("");
+                  }}
+                  className="border border-gray-300"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  size="sm"
+                  disabled={archivingEvent || uploadingArchiveImage}
+                  className="px-6 py-2 bg-amber-600 hover:bg-amber-700 text-white border-none cursor-pointer"
+                >
+                  {archivingEvent ? "Archiving..." : "Confirm & Move to Archive"}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add / Edit Book Release Modal */}
+      {showAddBookModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs animate-in fade-in font-poppins">
+          <div className="relative w-full max-w-lg bg-white rounded-[28px] p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-gray-100 mb-4">
+              <h3 className="text-xl font-bold text-gray-950">
+                {editingBookId ? "Edit Book Release" : "Add Book Release"}
+              </h3>
+              <button
+                onClick={() => {
+                  setShowAddBookModal(false);
+                  resetBookForm();
+                }}
+                className="p-1.5 text-gray-400 hover:text-gray-700 rounded-full hover:bg-gray-100 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveBook} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider">
+                  Book Title <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={bookFormTitle}
+                  onChange={(e) => setBookFormTitle(e.target.value)}
+                  placeholder="e.g. Before Darkness Falls"
+                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-900 outline-none focus:border-black shadow-xs"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider">
+                  Author <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={bookFormAuthor}
+                  onChange={(e) => setBookFormAuthor(e.target.value)}
+                  placeholder="e.g. By Priyanka Menon"
+                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-900 outline-none focus:border-black shadow-xs"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider">
+                  Edition Tag
+                </label>
+                <input
+                  type="text"
+                  value={bookFormEditionTag}
+                  onChange={(e) => setBookFormEditionTag(e.target.value)}
+                  placeholder="e.g. Print Edition, Hardcover, Collector Edition"
+                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium text-gray-900 outline-none focus:border-black shadow-xs"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider">
+                  Description <span className="text-rose-500">*</span>
+                </label>
+                <textarea
+                  rows={3}
+                  required
+                  value={bookFormDesc}
+                  onChange={(e) => setBookFormDesc(e.target.value)}
+                  placeholder="The novel published on Akam is now available as a book..."
+                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium text-gray-900 outline-none focus:border-black shadow-xs"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider">
+                  Pre-order Link (Opens in new tab)
+                </label>
+                <input
+                  type="url"
+                  value={bookFormPreorderLink}
+                  onChange={(e) => setBookFormPreorderLink(e.target.value)}
+                  placeholder="https://amazon.com/..."
+                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium text-gray-900 outline-none focus:border-black shadow-xs"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="checkbox"
+                  id="book-publish-checkbox"
+                  checked={bookFormPublished}
+                  onChange={(e) => setBookFormPublished(e.target.checked)}
+                  className="w-4 h-4 rounded text-black focus:ring-black cursor-pointer"
+                />
+                <label htmlFor="book-publish-checkbox" className="text-xs font-bold text-gray-900 cursor-pointer">
+                  Publish Immediately on Homepage Showcase
+                </label>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-gray-100">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    setShowAddBookModal(false);
+                    resetBookForm();
+                  }}
+                  className="border border-gray-300"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  size="sm"
+                  disabled={submittingBook || !bookFormTitle.trim() || !bookFormAuthor.trim() || !bookFormDesc.trim()}
+                  className="px-6 py-2"
+                >
+                  {submittingBook ? "Saving..." : editingBookId ? "Update Book" : "Create Book"}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add / Edit Media Video Modal */}
+      {showAddMediaModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs animate-in fade-in font-poppins">
+          <div className="relative w-full max-w-lg bg-white rounded-[28px] p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-gray-100 mb-4">
+              <h3 className="text-xl font-bold text-gray-950">
+                {editingMediaId ? "Edit Media Video" : "Add Media Video"}
+              </h3>
+              <button
+                onClick={() => {
+                  setShowAddMediaModal(false);
+                  resetMediaForm();
+                }}
+                className="p-1.5 text-gray-400 hover:text-gray-700 rounded-full hover:bg-gray-100 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveMedia} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider">
+                  Video Title <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={mediaFormTitle}
+                  onChange={(e) => setMediaFormTitle(e.target.value)}
+                  placeholder="e.g. Sambhashanangal"
+                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-900 outline-none focus:border-black shadow-xs"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider">
+                  Category <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  value={mediaFormCategory}
+                  onChange={(e) => setMediaFormCategory(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-900 outline-none focus:border-black shadow-xs cursor-pointer"
+                >
+                  <option value="interviews">Interviews</option>
+                  <option value="conversations">Conversations</option>
+                  <option value="cultural">Cultural Programmes</option>
+                  <option value="recordings">Event Recordings</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider">
+                  YouTube Video Link <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="url"
+                  required
+                  value={mediaFormYoutubeUrl}
+                  onChange={(e) => setMediaFormYoutubeUrl(e.target.value)}
+                  placeholder="https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium text-gray-900 outline-none focus:border-black shadow-xs"
+                />
+                <p className="text-[11px] text-emerald-600 font-medium mt-1">
+                  ✨ Thumbnail auto-generated directly from YouTube ID (No image upload required).
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider">
+                  Description <span className="text-rose-500">*</span>
+                </label>
+                <textarea
+                  rows={3}
+                  required
+                  value={mediaFormDesc}
+                  onChange={(e) => setMediaFormDesc(e.target.value)}
+                  placeholder="Unraveling Malayalam literature, art, and heritage through candid dialogues..."
+                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium text-gray-900 outline-none focus:border-black shadow-xs"
+                />
+              </div>
+
+              <div className="space-y-2 pt-1">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="media-publish-checkbox"
+                    checked={mediaFormPublished}
+                    onChange={(e) => setMediaFormPublished(e.target.checked)}
+                    className="w-4 h-4 rounded text-black focus:ring-black cursor-pointer"
+                  />
+                  <label htmlFor="media-publish-checkbox" className="text-xs font-bold text-gray-900 cursor-pointer">
+                    Publish Immediately on Media Showcase Page
+                  </label>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="media-featured-checkbox"
+                    checked={mediaFormFeatured}
+                    onChange={(e) => setMediaFormFeatured(e.target.checked)}
+                    className="w-4 h-4 rounded text-amber-600 focus:ring-amber-500 cursor-pointer"
+                  />
+                  <label htmlFor="media-featured-checkbox" className="text-xs font-bold text-gray-900 cursor-pointer">
+                    ★ Feature on Homepage (Display in Featured Video section)
+                  </label>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-gray-100">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    setShowAddMediaModal(false);
+                    resetMediaForm();
+                  }}
+                  className="border border-gray-300"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  size="sm"
+                  disabled={submittingMedia || !mediaFormTitle.trim() || !mediaFormYoutubeUrl.trim() || !mediaFormDesc.trim()}
+                  className="px-6 py-2"
+                >
+                  {submittingMedia ? "Saving..." : editingMediaId ? "Update Video" : "Create Video"}
+                </Button>
+              </div>
+            </form>
           </div>
         </div>
       )}

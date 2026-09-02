@@ -27,14 +27,26 @@ export interface CommunityRow {
 export class CommunitiesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findAll(): Promise<CommunityRow[]> {
+  async findAll(includeInactive = false): Promise<CommunityRow[]> {
+    const whereSql = includeInactive ? '' : 'WHERE "isActive" = true';
     return this.prisma.query<CommunityRow>(
       `SELECT id, slug, name, description, "bannerUrl", "iconUrl", color,
               "isActive", "memberCount", "postCount", "createdAt", "updatedAt"
        FROM community
-       WHERE "isActive" = true
+       ${whereSql}
        ORDER BY name ASC`,
     );
+  }
+
+  async delete(slug: string): Promise<{ success: boolean }> {
+    const community = await this.prisma.queryOne<{ id: string }>(
+      `SELECT id FROM community WHERE slug = $1`,
+      [slug],
+    );
+    if (!community) throw new NotFoundException(`Community '${slug}' not found`);
+
+    await this.prisma.execute(`DELETE FROM community WHERE id = $1`, [community.id]);
+    return { success: true };
   }
 
   async findBySlug(slug: string, userId?: string): Promise<CommunityRow & { isMember: boolean }> {
