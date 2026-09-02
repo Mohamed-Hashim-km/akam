@@ -47,6 +47,7 @@ interface Category {
 function StoryCatalogContent() {
   const searchParams = useSearchParams();
   const initialCategory = searchParams.get("category") || "All";
+  const urlSearchParam = searchParams.get("search") || "";
 
   // Category & Filter State
   const [selectedCategory, setSelectedCategory] = useState<string>(() => {
@@ -63,8 +64,16 @@ function StoryCatalogContent() {
       sessionStorage.setItem("akam_stories_category", categoryName);
     }
   };
-  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [searchQuery, setSearchQuery] = useState<string>(urlSearchParam);
+  const [debouncedSearch, setDebouncedSearch] = useState<string>(urlSearchParam);
   const [categories, setCategories] = useState<Category[]>([]);
+
+  // Sync state if URL search param changes (e.g. from Navbar search)
+  useEffect(() => {
+    const currentUrlSearch = searchParams.get("search") || "";
+    setDebouncedSearch(currentUrlSearch);
+    setSearchQuery(currentUrlSearch);
+  }, [searchParams]);
 
   // Infinite Scroll & Data State
   const [stories, setStories] = useState<Story[]>([]);
@@ -164,7 +173,6 @@ function StoryCatalogContent() {
   }, [selectedCategory, searchQuery]);
 
   // Debounced search query handler
-  const [debouncedSearch, setDebouncedSearch] = useState("");
   useEffect(() => {
     const timer = setTimeout(() => {
       setSearchQuery(debouncedSearch);

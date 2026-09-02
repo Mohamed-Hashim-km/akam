@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import { Search, X, Bell, User, Menu, ChevronRight, CheckCheck, LogOut } from "lucide-react";
+import { Search, X, Bell, User, Menu, ChevronRight, CheckCheck, LogOut, Loader2, BookOpen, ArrowRight } from "lucide-react";
 import Button from "./ui/Button";
 import AuthModal from "./AuthModal";
 import { API_BASE_URL, apiFetch } from "@/lib/config";
@@ -24,6 +24,16 @@ interface NotificationItem {
   createdAt: string;
 }
 
+interface SearchResultStory {
+  id: string;
+  title: string;
+  slug: string;
+  category?: string;
+  coverImageUrl?: string | null;
+  authorName?: string | null;
+  authorEmail?: string;
+}
+
 export const Navbar: React.FC<NavbarProps> = ({
   onSearch,
   bgColor,
@@ -32,8 +42,14 @@ export const Navbar: React.FC<NavbarProps> = ({
   const pathname = usePathname();
   const router = useRouter();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<SearchResultStory[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [showSearchDropdown, setShowSearchDropdown] = useState(false);
+  const searchRef = useRef<HTMLDivElement>(null);
+  const mobileSearchRef = useRef<HTMLDivElement>(null);
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [targetRedirect, setTargetRedirect] = useState<string>("/submit");
   const [user, setUser] = useState<any>(null);
@@ -77,6 +93,49 @@ export const Navbar: React.FC<NavbarProps> = ({
     await fetchNotifications();
   };
 
+  // Lock body scroll when mobile menu drawer is open
+  useEffect(() => {
+    if (mobileMenuOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [mobileMenuOpen]);
+
+  // Live search effect
+  useEffect(() => {
+    if (!searchQuery.trim() || searchQuery.trim().length < 2) {
+      setSearchResults([]);
+      setIsSearching(false);
+      setShowSearchDropdown(false);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setIsSearching(true);
+      setShowSearchDropdown(true);
+      try {
+        const res = await apiFetch(
+          `${API_BASE_URL}/stories?status=APPROVED&limit=5&search=${encodeURIComponent(searchQuery.trim())}`
+        );
+        if (res.ok) {
+          const json = await res.json();
+          const data = json.data || (Array.isArray(json) ? json : []);
+          setSearchResults(data);
+        }
+      } catch (err) {
+        console.error("Live search failed", err);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
   useEffect(() => {
     loadUserData();
     window.addEventListener("akam_user_updated", loadUserData);
@@ -92,6 +151,14 @@ export const Navbar: React.FC<NavbarProps> = ({
     const handleClickOutside = (event: MouseEvent) => {
       if (notifRef.current && !notifRef.current.contains(event.target as Node)) {
         setNotificationsOpen(false);
+      }
+      if (
+        searchRef.current &&
+        !searchRef.current.contains(event.target as Node) &&
+        mobileSearchRef.current &&
+        !mobileSearchRef.current.contains(event.target as Node)
+      ) {
+        setShowSearchDropdown(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -199,6 +266,25 @@ export const Navbar: React.FC<NavbarProps> = ({
     if (onSearch) onSearch(val);
   };
 
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!searchQuery.trim()) return;
+    setShowSearchDropdown(false);
+    setSearchOpen(false);
+    setMobileSearchOpen(false);
+    setMobileMenuOpen(false);
+    if (onSearch) onSearch(searchQuery.trim());
+    router.push(`/stories?search=${encodeURIComponent(searchQuery.trim())}`);
+  };
+
+  const handleSelectSearchResult = (slugOrId: string) => {
+    setShowSearchDropdown(false);
+    setSearchOpen(false);
+    setMobileSearchOpen(false);
+    setMobileMenuOpen(false);
+    router.push(`/stories/${slugOrId}`);
+  };
+
   const handleStartWriting = () => {
     setMobileMenuOpen(false);
     if (user || localStorage.getItem("akam_user")) {
@@ -248,7 +334,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             </Link>
 
             {/* Desktop Navigation Links */}
-            <nav className="hidden md:flex items-center justify-center space-x-6 lg:space-x-8 text-sm lg:text-base font-normal text-gray-800">
+            <nav className="hidden lg:flex items-center justify-center space-x-6 lg:space-x-8 text-sm lg:text-base font-normal text-gray-800">
               {navLinks.map((link) => {
                 const isActive = currentActiveNav === link.name;
                 return (
@@ -272,11 +358,14 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
 
           {/* Desktop Right Side */}
-          <div className="hidden md:flex items-center space-x-3 lg:space-x-4">
+          <div className="hidden lg:flex items-center space-x-3 lg:space-x-4">
             {/* Search Bar */}
-            <div className="relative flex items-center">
+            <div className="relative flex items-center" ref={searchRef}>
               {searchOpen ? (
-                <div className="relative flex items-center animate-in fade-in zoom-in-95 duration-200">
+                <form
+                  onSubmit={handleSearchSubmit}
+                  className="relative flex items-center animate-in fade-in zoom-in-95 duration-200"
+                >
                   <Search className="absolute left-3 w-4 h-4 text-gray-400 pointer-events-none" />
                   <input
                     type="text"
@@ -284,16 +373,19 @@ export const Navbar: React.FC<NavbarProps> = ({
                     value={searchQuery}
                     onChange={handleSearchChange}
                     autoFocus
-                    onBlur={() => !searchQuery && setSearchOpen(false)}
-                    className="bg-white border border-gray-200 text-sm text-gray-900 placeholder-gray-400 pl-9 pr-8 py-2 rounded-full w-52 outline-none focus:border-gray-400 transition-all shadow-xs"
+                    className="bg-white border border-gray-200 text-sm text-gray-900 placeholder-gray-400 pl-9 pr-8 py-2 rounded-full w-60 outline-none focus:border-gray-400 focus:ring-2 focus:ring-black/5 transition-all shadow-xs"
                   />
                   <button
-                    onClick={() => setSearchOpen(false)}
-                    className="absolute right-2.5 p-1 text-gray-400 hover:text-gray-600 rounded-full"
+                    type="button"
+                    onClick={() => {
+                      setSearchOpen(false);
+                      setShowSearchDropdown(false);
+                    }}
+                    className="absolute right-2.5 p-1 text-gray-400 hover:text-gray-600 rounded-full cursor-pointer"
                   >
                     <X className="w-3.5 h-3.5" />
                   </button>
-                </div>
+                </form>
               ) : (
                 <button
                   onClick={() => setSearchOpen(true)}
@@ -302,6 +394,58 @@ export const Navbar: React.FC<NavbarProps> = ({
                 >
                   <Search className="w-4 h-4" />
                 </button>
+              )}
+
+              {/* Desktop Live Search Results Dropdown */}
+              {searchOpen && showSearchDropdown && (
+                <div className="absolute right-0 top-full mt-2 w-80 bg-white border border-gray-200 rounded-2xl shadow-xl z-50 overflow-hidden font-poppins animate-in fade-in zoom-in-95 duration-150">
+                  <div className="p-3 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
+                    <span className="text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
+                      <Search className="w-3.5 h-3.5 text-gray-500" /> Top Matches
+                    </span>
+                    {isSearching && <Loader2 className="w-3.5 h-3.5 text-gray-500 animate-spin" />}
+                  </div>
+
+                  <div className="max-h-72 overflow-y-auto divide-y divide-gray-100">
+                    {isSearching ? (
+                      <div className="p-4 text-center text-xs text-gray-500 flex items-center justify-center gap-2">
+                        <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+                        <span>Searching stories...</span>
+                      </div>
+                    ) : searchResults.length === 0 ? (
+                      <div className="p-4 text-center text-xs text-gray-500">
+                        No stories found for &ldquo;{searchQuery}&rdquo;
+                      </div>
+                    ) : (
+                      searchResults.map((story) => (
+                        <div
+                          key={story.id}
+                          onClick={() => handleSelectSearchResult(story.slug || story.id)}
+                          className="p-3 hover:bg-gray-50 flex items-center gap-3 transition-colors cursor-pointer group"
+                        >
+                          <div className="relative w-10 h-10 rounded-lg overflow-hidden bg-gray-100 shrink-0 border border-gray-200">
+                            <Image
+                              src={story.coverImageUrl || "/images/stories/ramachi.jpg"}
+                              alt={story.title}
+                              fill
+                              unoptimized
+                              className="object-cover group-hover:scale-105 transition-transform"
+                            />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h5 className="text-xs font-bold text-gray-900 group-hover:text-black truncate leading-snug">
+                              {story.title}
+                            </h5>
+                            <p className="text-[10px] text-gray-500 truncate mt-0.5">
+                              By {story.authorName || story.authorEmail || "Author"} &bull; {story.category || "Story"}
+                            </p>
+                          </div>
+                          <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-gray-900 shrink-0 transition-transform group-hover:translate-x-0.5" />
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
               )}
             </div>
 
@@ -361,36 +505,152 @@ export const Navbar: React.FC<NavbarProps> = ({
             </Button>
           </div>
 
-          {/* Mobile Toggle Button */}
-          <div className="flex md:hidden items-center gap-2">
+          {/* Mobile Right Controls: Search Icon, Bell, Menu */}
+          <div className="flex lg:hidden items-center gap-1.5">
+            {/* Mobile Search Toggle Icon */}
+            <button
+              onClick={() => {
+                const nextState = !mobileSearchOpen;
+                setMobileSearchOpen(nextState);
+                if (!nextState) {
+                  setShowSearchDropdown(false);
+                } else if (searchQuery.trim().length >= 2) {
+                  setShowSearchDropdown(true);
+                }
+              }}
+              className="p-2 text-gray-700 hover:text-black rounded-full hover:bg-black/5 cursor-pointer transition-colors"
+              aria-label="Search"
+            >
+              <Search className="w-5 h-5" />
+            </button>
+
+            {/* Mobile Notifications Bell */}
             {user && (
               <button
                 onClick={toggleNotifications}
-                className="relative p-2 text-gray-700 hover:text-black cursor-pointer"
+                className="relative p-2 text-gray-700 hover:text-black rounded-full hover:bg-black/5 cursor-pointer transition-colors"
                 aria-label="Notifications"
               >
                 <Bell className="w-5 h-5" />
                 {unreadCount > 0 && (
-                  <span className="absolute top-0 right-0 min-w-4 h-4 px-1 bg-rose-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                  <span className="absolute top-1 right-1 min-w-4 h-4 px-1 bg-rose-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
                     {unreadCount}
                   </span>
                 )}
               </button>
             )}
+
+            {/* Mobile Hamburger Menu Trigger */}
             <button
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="p-2 text-gray-800 rounded-lg hover:bg-black/5 focus:outline-none cursor-pointer"
-              aria-label="Toggle Menu"
+              onClick={() => setMobileMenuOpen(true)}
+              className="p-2 text-gray-800 rounded-lg hover:bg-black/5 focus:outline-none cursor-pointer transition-colors"
+              aria-label="Open Menu"
             >
-              {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+              <Menu className="w-6 h-6" />
             </button>
           </div>
+
+          {/* Mobile Header Search Bar (Expands Below Navbar) */}
+          {mobileSearchOpen && (
+            <div
+              ref={mobileSearchRef}
+              className="lg:hidden absolute top-full left-0 right-0 bg-white border-b border-gray-200 px-4 py-3 shadow-md z-40 animate-in fade-in slide-in-from-top-2 duration-200 font-poppins"
+            >
+              <div className="flex items-center gap-2 relative">
+                <form onSubmit={handleSearchSubmit} className="flex-1 flex items-center relative">
+                  <Search className="absolute left-3.5 w-4 h-4 text-gray-400 pointer-events-none" />
+                  <input
+                    type="text"
+                    placeholder="Search stories..."
+                    value={searchQuery}
+                    onChange={handleSearchChange}
+                    autoFocus
+                    className="w-full bg-gray-100 border border-transparent focus:border-gray-300 text-sm text-gray-900 placeholder-gray-400 pl-10 pr-9 py-2.5 rounded-full outline-none focus:ring-2 focus:ring-black/5"
+                  />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSearchQuery("");
+                        setShowSearchDropdown(false);
+                      }}
+                      className="absolute right-3 p-1 text-gray-400 hover:text-gray-600 rounded-full cursor-pointer"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </form>
+
+                <button
+                  onClick={() => {
+                    setMobileSearchOpen(false);
+                    setShowSearchDropdown(false);
+                  }}
+                  className="text-xs font-semibold text-gray-600 hover:text-black px-2.5 py-2 rounded-lg cursor-pointer shrink-0"
+                >
+                  Cancel
+                </button>
+              </div>
+
+              {/* Mobile Live Search Results Dropdown */}
+              {showSearchDropdown && (
+                <div className="mt-2.5 w-full bg-white border border-gray-200 rounded-2xl shadow-xl z-50 overflow-hidden font-poppins animate-in fade-in zoom-in-95 duration-150">
+                  <div className="p-3 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
+                    <span className="text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
+                      <Search className="w-3.5 h-3.5 text-gray-500" /> Top Matches
+                    </span>
+                    {isSearching && <Loader2 className="w-3.5 h-3.5 text-gray-500 animate-spin" />}
+                  </div>
+
+                  <div className="max-h-72 overflow-y-auto divide-y divide-gray-100">
+                    {isSearching ? (
+                      <div className="p-4 text-center text-xs text-gray-500 flex items-center justify-center gap-2">
+                        <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+                        <span>Searching stories...</span>
+                      </div>
+                    ) : searchResults.length === 0 ? (
+                      <div className="p-4 text-center text-xs text-gray-500">
+                        No stories found for &ldquo;{searchQuery}&rdquo;
+                      </div>
+                    ) : (
+                      searchResults.map((story) => (
+                        <div
+                          key={story.id}
+                          onClick={() => handleSelectSearchResult(story.slug || story.id)}
+                          className="p-3 hover:bg-gray-50 flex items-center gap-3 transition-colors cursor-pointer group"
+                        >
+                          <div className="relative w-10 h-10 rounded-lg overflow-hidden bg-gray-100 shrink-0 border border-gray-200">
+                            <Image
+                              src={story.coverImageUrl || "/images/stories/ramachi.jpg"}
+                              alt={story.title}
+                              fill
+                              unoptimized
+                              className="object-cover group-hover:scale-105 transition-transform"
+                            />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h5 className="text-xs font-bold text-gray-900 group-hover:text-black truncate leading-snug">
+                              {story.title}
+                            </h5>
+                            <p className="text-[10px] text-gray-500 truncate mt-0.5">
+                              By {story.authorName || story.authorEmail || "Author"} &bull; {story.category || "Story"}
+                            </p>
+                          </div>
+                          <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-gray-900 shrink-0 transition-transform group-hover:translate-x-0.5" />
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Responsive Notifications Popover Dropdown (Mobile + Desktop) */}
           {user && notificationsOpen && (
             <div
               ref={notifRef}
-              className="absolute right-4 md:right-16 top-full mt-3 w-[calc(100vw-32px)] sm:w-96 bg-white border border-gray-200 rounded-[24px] shadow-2xl z-50 p-4 font-poppins animate-in fade-in duration-150"
+              className="absolute right-4 lg:right-16 top-full mt-3 w-[calc(100vw-32px)] sm:w-96 bg-white border border-gray-200 rounded-[24px] shadow-2xl z-50 p-4 font-poppins animate-in fade-in duration-150"
             >
               <div className="flex items-center justify-between pb-3 border-b border-gray-100 mb-3">
                 <div className="flex items-center gap-2">
@@ -413,7 +673,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   )}
                   <button
                     onClick={() => setNotificationsOpen(false)}
-                    className="p-1 text-gray-400 hover:text-gray-700 rounded-full cursor-pointer md:hidden"
+                    className="p-1 text-gray-400 hover:text-gray-700 rounded-full cursor-pointer lg:hidden"
                   >
                     <X className="w-4 h-4" />
                   </button>
@@ -457,96 +717,124 @@ export const Navbar: React.FC<NavbarProps> = ({
           )}
         </div>
 
-        {/* Mobile Menu Dropdown / Sidebar */}
+        {/* Mobile Navigation Drawer Modal */}
         {mobileMenuOpen && (
-          <div className="md:hidden mt-3 pb-4 px-4 space-y-4 border-t border-black/10 pt-4 bg-white/95 backdrop-blur-md animate-in slide-in-from-top-2 duration-200">
-            <div className="relative flex items-center mb-2">
-              <Search className="absolute left-3.5 w-4 h-4 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search stories..."
-                value={searchQuery}
-                onChange={handleSearchChange}
-                className="bg-gray-50 border border-gray-200 text-sm text-gray-900 placeholder-gray-400 pl-9 pr-4 py-2.5 rounded-full w-full outline-none focus:ring-2 focus:ring-black/10"
-              />
-            </div>
+          <div className="fixed inset-0 z-50 lg:hidden font-poppins">
+            {/* Dark Backdrop Overlay */}
+            <div
+              className="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity animate-in fade-in duration-200"
+              onClick={() => setMobileMenuOpen(false)}
+            />
 
-            <nav className="flex flex-col space-y-3 font-normal text-base text-gray-800">
-              {navLinks.map((link) => {
-                const isActive = currentActiveNav === link.name;
-                return (
-                  <Link
-                    key={link.name}
-                    href={link.href}
-                    onClick={() => setMobileMenuOpen(false)}
-                    className="relative py-1.5 w-fit group/mob"
-                  >
-                    <span className={isActive ? "font-semibold text-black" : "hover:text-black"}>
-                      {link.name}
-                    </span>
-                    <span
-                      className={`absolute bottom-0 left-0 h-[2.5px] rounded-full transition-all duration-300 bg-[linear-gradient(to_right,#29ACD8,#26AFB1,#23B47B,#57C15C,#7FCA49,#D8E021)] ${
-                        isActive ? "w-full" : "w-0 group-hover/mob:w-full"
-                      }`}
+            {/* Drawer Panel */}
+            <div className="fixed inset-y-0 left-0 z-50 w-full max-w-xs sm:max-w-sm bg-white shadow-2xl flex flex-col justify-between overflow-y-auto animate-in slide-in-from-left duration-300 ease-out">
+              {/* Top Section: Logo & Close Button (Identically aligned with main navbar) */}
+              <div>
+                <div className="flex items-center justify-between px-4 py-3.5 border-b border-[#A4A4A4] bg-white">
+                  <Link href="/" onClick={() => setMobileMenuOpen(false)} className="flex items-center shrink-0">
+                    <Image
+                      src="/images/akamdigital.png"
+                      alt="AKAM Digital Logo"
+                      width={300}
+                      height={100}
+                      priority
+                      className="h-10 sm:h-14 w-auto object-contain transition-transform"
                     />
                   </Link>
-                );
-              })}
-            </nav>
-
-            <div className="pt-3 border-t border-gray-100 space-y-3">
-              {user ? (
-                <>
-                  <div className="flex items-center justify-between gap-3">
-                    <Link
-                      href="/profile"
-                      onClick={() => setMobileMenuOpen(false)}
-                      className="flex items-center gap-2 text-sm font-medium text-gray-900 bg-gray-50 border border-gray-200 px-4 py-2 rounded-full flex-1 min-w-0"
-                    >
-                      <User className="w-4 h-4 text-gray-600 shrink-0" />
-                      <span className="truncate">{getUserDisplayName(user)}</span>
-                    </Link>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      icon={<LogOut className="w-3.5 h-3.5" />}
-                      iconPosition="left"
-                      onClick={() => {
-                        setMobileMenuOpen(false);
-                        handleLogout();
-                      }}
-                      className="text-rose-600 border-rose-200 hover:bg-rose-50 cursor-pointer shrink-0"
-                    >
-                      Sign out
-                    </Button>
-                  </div>
-                  <Button
-                    variant="primary"
-                    size="md"
-                    onClick={handleStartWriting}
-                    className="w-full justify-center px-6 py-2.5 text-sm font-medium shadow-xs cursor-pointer"
-                  >
-                    Start writing
-                  </Button>
-                </>
-              ) : (
-                <div className="flex items-center justify-between gap-3">
                   <button
-                    onClick={() => handleOpenSignIn("/profile")}
-                    className="text-sm font-medium text-gray-900 bg-gray-50 border border-gray-200 px-5 py-2.5 rounded-full cursor-pointer flex-1"
+                    onClick={() => setMobileMenuOpen(false)}
+                    aria-label="Close menu"
+                    className="p-2 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-full transition-colors cursor-pointer"
                   >
-                    Sign in
+                    <X className="w-5 h-5" />
                   </button>
-                  <Button
-                    variant="primary"
-                    size="md"
-                    onClick={handleStartWriting}
-                    className="group px-6 py-2.5 text-sm font-medium shadow-xs cursor-pointer"
-                  >
-                    Start writing
-                  </Button>
                 </div>
-              )}
+
+                {/* Navigation Links */}
+                <nav className="p-6 flex flex-col space-y-2">
+                  {navLinks.map((link) => {
+                    const isActive = currentActiveNav === link.name;
+                    return (
+                      <Link
+                        key={link.name}
+                        href={link.href}
+                        onClick={() => setMobileMenuOpen(false)}
+                        className={`flex items-center justify-between px-4 py-3 rounded-xl transition-all ${
+                          isActive
+                            ? "bg-gray-900 text-white font-semibold shadow-xs"
+                            : "text-gray-800 hover:bg-gray-100 font-medium"
+                        }`}
+                      >
+                        <span>{link.name}</span>
+                        <ChevronRight
+                          className={`w-4 h-4 ${isActive ? "text-white" : "text-gray-400"}`}
+                        />
+                      </Link>
+                    );
+                  })}
+                </nav>
+              </div>
+
+              {/* Bottom Section: Profile / Actions */}
+              <div className="p-6 pt-4 border-t border-gray-100 space-y-4">
+                {user ? (
+                  <>
+                    <div className="flex items-center justify-between gap-2 p-3 bg-gray-50 border border-gray-200 rounded-2xl">
+                      <Link
+                        href="/profile"
+                        onClick={() => setMobileMenuOpen(false)}
+                        className="flex items-center gap-3 min-w-0 flex-1"
+                      >
+                        <div className="w-9 h-9 rounded-full bg-black/10 flex items-center justify-center shrink-0">
+                          <User className="w-5 h-5 text-gray-700" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-bold text-gray-900 truncate">
+                            {getUserDisplayName(user)}
+                          </p>
+                          <p className="text-[10px] text-gray-500 truncate">{user.email}</p>
+                        </div>
+                      </Link>
+                      <button
+                        onClick={() => {
+                          setMobileMenuOpen(false);
+                          handleLogout();
+                        }}
+                        title="Sign out"
+                        className="p-2 text-rose-600 hover:bg-rose-50 rounded-xl transition-colors shrink-0 cursor-pointer"
+                      >
+                        <LogOut className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    <Button
+                      variant="primary"
+                      size="md"
+                      onClick={handleStartWriting}
+                      className="w-full justify-center py-3 text-sm font-semibold shadow-md cursor-pointer rounded-full"
+                    >
+                      Start writing
+                    </Button>
+                  </>
+                ) : (
+                  <div className="space-y-3">
+                    <Button
+                      variant="primary"
+                      size="md"
+                      onClick={handleStartWriting}
+                      className="w-full justify-center py-3 text-sm font-semibold shadow-md cursor-pointer rounded-full"
+                    >
+                      Start writing
+                    </Button>
+                    <button
+                      onClick={() => handleOpenSignIn("/profile")}
+                      className="w-full py-3 text-sm font-semibold text-gray-900 bg-gray-100 hover:bg-gray-200 rounded-full transition-colors cursor-pointer text-center"
+                    >
+                      Sign in
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}
