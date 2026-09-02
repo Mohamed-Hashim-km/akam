@@ -127,6 +127,28 @@ export class EngagementService {
     };
   }
 
+  async getRecentComments(limit = 10) {
+    const sql = `
+      SELECT 
+        c.id,
+        c.content,
+        c."createdAt",
+        c."storyId",
+        s.title AS "storyTitle",
+        s.slug AS "storySlug",
+        u.id AS "userId",
+        u.name AS "userName",
+        u.email AS "userEmail",
+        u."avatarUrl" AS "userAvatarUrl"
+      FROM story_comment c
+      JOIN story s ON s.id = c."storyId"
+      JOIN "user" u ON u.id = c."userId"
+      ORDER BY c."createdAt" DESC
+      LIMIT $1
+    `;
+    return this.prisma.query<any>(sql, [limit]);
+  }
+
   async getComments(targetStoryId: string): Promise<CommentRow[]> {
     const storyId = await this.ensureStoryExists(targetStoryId);
 

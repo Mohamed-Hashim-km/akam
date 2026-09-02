@@ -44,6 +44,23 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [unreadCount, setUnreadCount] = useState<number>(0);
   const notifRef = useRef<HTMLDivElement>(null);
 
+  const fetchNotifications = async () => {
+    try {
+      const cRes = await apiFetch(`${API_BASE_URL}/notifications/unread-count`, { cache: "no-store" });
+      if (cRes.ok) {
+        const cData = await cRes.json();
+        setUnreadCount(cData.count || 0);
+      }
+
+      const nRes = await apiFetch(`${API_BASE_URL}/notifications`, { cache: "no-store" });
+      if (nRes.ok) {
+        setNotifications(await nRes.json());
+      }
+    } catch (e) {
+      console.error("Failed to load notifications", e);
+    }
+  };
+
   const loadUserData = async () => {
     const savedUser = localStorage.getItem("akam_user");
 
@@ -57,27 +74,20 @@ export const Navbar: React.FC<NavbarProps> = ({
       setUser(null);
     }
 
-    try {
-      // Fetch notifications via HttpOnly cookie credentials
-      const cRes = await apiFetch(`${API_BASE_URL}/notifications/unread-count`);
-      if (cRes.ok) {
-        const cData = await cRes.json();
-        setUnreadCount(cData.count || 0);
-      }
-
-      const nRes = await apiFetch(`${API_BASE_URL}/notifications`);
-      if (nRes.ok) {
-        setNotifications(await nRes.json());
-      }
-    } catch (e) {
-      console.error("Failed to load notifications", e);
-    }
+    await fetchNotifications();
   };
 
   useEffect(() => {
     loadUserData();
     window.addEventListener("akam_user_updated", loadUserData);
     window.addEventListener("storage", loadUserData);
+
+    // Real-time polling for notifications every 12 seconds
+    const pollInterval = setInterval(() => {
+      if (localStorage.getItem("akam_user")) {
+        fetchNotifications();
+      }
+    }, 12000);
 
     const handleClickOutside = (event: MouseEvent) => {
       if (notifRef.current && !notifRef.current.contains(event.target as Node)) {
@@ -90,8 +100,17 @@ export const Navbar: React.FC<NavbarProps> = ({
       window.removeEventListener("akam_user_updated", loadUserData);
       window.removeEventListener("storage", loadUserData);
       document.removeEventListener("mousedown", handleClickOutside);
+      clearInterval(pollInterval);
     };
   }, []);
+
+  const toggleNotifications = () => {
+    const nextState = !notificationsOpen;
+    setNotificationsOpen(nextState);
+    if (nextState) {
+      fetchNotifications();
+    }
+  };
 
   const handleMarkAllRead = async () => {
     try {
@@ -214,7 +233,7 @@ export const Navbar: React.FC<NavbarProps> = ({
       <header
         className={`w-full ${headerBgClass} py-3.5 relative z-50 border-b border-[#A4A4A4] font-poppins`}
       >
-        <div className="container px-4 mx-auto flex items-center justify-between gap-4 sm:gap-6 lg:gap-8">
+        <div className="container px-4 mx-auto flex items-center justify-between gap-4 sm:gap-6 lg:gap-8 relative">
           {/* Brand Logo & Links */}
           <div className="flex items-center gap-10 lg:gap-14">
             <Link href="/" className="flex items-center shrink-0 group">
@@ -286,82 +305,21 @@ export const Navbar: React.FC<NavbarProps> = ({
               )}
             </div>
 
-            {/* Notification Bell with Dropdown Popover */}
+            {/* Desktop Notification Bell */}
             {user && (
-              <div className="relative" ref={notifRef}>
-                <button
-                  onClick={() => setNotificationsOpen(!notificationsOpen)}
-                  className="relative w-10 h-10 rounded-full bg-white border border-gray-200 flex items-center justify-center text-gray-700 hover:bg-gray-50 transition-all cursor-pointer shadow-xs"
-                  aria-label="Notifications"
-                  title="Notifications"
-                >
-                  <Bell className="w-4 h-4" />
-                  {unreadCount > 0 && (
-                    <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 bg-rose-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center border border-white">
-                      {unreadCount}
-                    </span>
-                  )}
-                </button>
-
-                {/* Notifications Popover Dropdown */}
-                {notificationsOpen && (
-                  <div className="absolute right-0 mt-3 w-80 sm:w-96 bg-white border border-gray-200 rounded-[24px] shadow-2xl z-50 p-4 font-poppins animate-in fade-in duration-150">
-                    <div className="flex items-center justify-between pb-3 border-b border-gray-100 mb-3">
-                      <div className="flex items-center gap-2">
-                        <Bell className="w-4 h-4 text-gray-700" />
-                        <h4 className="text-sm font-bold text-gray-900">Notifications</h4>
-                        {unreadCount > 0 && (
-                          <span className="bg-rose-100 text-rose-700 font-bold text-[10px] px-2 py-0.5 rounded-full">
-                            {unreadCount} Unread
-                          </span>
-                        )}
-                      </div>
-                      {unreadCount > 0 && (
-                        <button
-                          onClick={handleMarkAllRead}
-                          className="text-[11px] font-semibold text-emerald-600 hover:text-emerald-700 flex items-center gap-1 cursor-pointer"
-                        >
-                          <CheckCheck className="w-3.5 h-3.5" /> Mark all read
-                        </button>
-                      )}
-                    </div>
-
-                    <div className="max-h-80 overflow-y-auto space-y-2 pr-1">
-                      {notifications.length === 0 ? (
-                        <div className="py-8 text-center text-xs text-gray-400">
-                          No notifications yet
-                        </div>
-                      ) : (
-                        notifications.map((n) => (
-                          <div
-                            key={n.id}
-                            onClick={() => !n.read && handleMarkRead(n.id)}
-                            className={`p-3 rounded-2xl border text-xs transition-all cursor-pointer ${
-                              n.read
-                                ? "bg-white border-gray-100 text-gray-600 hover:bg-gray-50"
-                                : "bg-amber-50/60 border-amber-200 text-gray-900 font-medium hover:bg-amber-50"
-                            }`}
-                          >
-                            <div className="flex items-start justify-between gap-2">
-                              <p className="leading-snug flex-1">{n.message}</p>
-                              {!n.read && (
-                                <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0 mt-1" />
-                              )}
-                            </div>
-                            <span className="text-[10px] text-gray-400 mt-1.5 block">
-                              {new Date(n.createdAt).toLocaleTimeString("en-US", {
-                                hour: "numeric",
-                                minute: "2-digit",
-                                hour12: true,
-                              })}
-                            </span>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </div>
+              <button
+                onClick={toggleNotifications}
+                className="relative w-10 h-10 rounded-full bg-white border border-gray-200 flex items-center justify-center text-gray-700 hover:bg-gray-50 transition-all cursor-pointer shadow-xs"
+                aria-label="Notifications"
+                title="Notifications"
+              >
+                <Bell className="w-4 h-4" />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 bg-rose-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center border border-white">
+                    {unreadCount}
+                  </span>
                 )}
-              </div>
+              </button>
             )}
 
             {/* Auth / Profile Link & Logout Button */}
@@ -407,7 +365,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           <div className="flex md:hidden items-center gap-2">
             {user && (
               <button
-                onClick={() => setNotificationsOpen(!notificationsOpen)}
+                onClick={toggleNotifications}
                 className="relative p-2 text-gray-700 hover:text-black cursor-pointer"
                 aria-label="Notifications"
               >
@@ -427,6 +385,76 @@ export const Navbar: React.FC<NavbarProps> = ({
               {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
             </button>
           </div>
+
+          {/* Responsive Notifications Popover Dropdown (Mobile + Desktop) */}
+          {user && notificationsOpen && (
+            <div
+              ref={notifRef}
+              className="absolute right-4 md:right-16 top-full mt-3 w-[calc(100vw-32px)] sm:w-96 bg-white border border-gray-200 rounded-[24px] shadow-2xl z-50 p-4 font-poppins animate-in fade-in duration-150"
+            >
+              <div className="flex items-center justify-between pb-3 border-b border-gray-100 mb-3">
+                <div className="flex items-center gap-2">
+                  <Bell className="w-4 h-4 text-gray-700" />
+                  <h4 className="text-sm font-bold text-gray-900">Notifications</h4>
+                  {unreadCount > 0 && (
+                    <span className="bg-rose-100 text-rose-700 font-bold text-[10px] px-2 py-0.5 rounded-full">
+                      {unreadCount} Unread
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  {unreadCount > 0 && (
+                    <button
+                      onClick={handleMarkAllRead}
+                      className="text-[11px] font-semibold text-emerald-600 hover:text-emerald-700 flex items-center gap-1 cursor-pointer"
+                    >
+                      <CheckCheck className="w-3.5 h-3.5" /> Mark all read
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setNotificationsOpen(false)}
+                    className="p-1 text-gray-400 hover:text-gray-700 rounded-full cursor-pointer md:hidden"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="max-h-80 overflow-y-auto space-y-2 pr-1">
+                {notifications.length === 0 ? (
+                  <div className="py-8 text-center text-xs text-gray-400">
+                    No notifications yet
+                  </div>
+                ) : (
+                  notifications.map((n) => (
+                    <div
+                      key={n.id}
+                      onClick={() => !n.read && handleMarkRead(n.id)}
+                      className={`p-3 rounded-2xl border text-xs transition-all cursor-pointer ${
+                        n.read
+                          ? "bg-white border-gray-100 text-gray-600 hover:bg-gray-50"
+                          : "bg-amber-50/60 border-amber-200 text-gray-900 font-medium hover:bg-amber-50"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="leading-snug flex-1">{n.message}</p>
+                        {!n.read && (
+                          <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0 mt-1" />
+                        )}
+                      </div>
+                      <span className="text-[10px] text-gray-400 mt-1.5 block">
+                        {new Date(n.createdAt).toLocaleTimeString("en-US", {
+                          hour: "numeric",
+                          minute: "2-digit",
+                          hour12: true,
+                        })}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Mobile Menu Dropdown / Sidebar */}

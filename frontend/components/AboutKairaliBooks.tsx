@@ -19,7 +19,7 @@ export const AboutKairaliBooks: React.FC<AboutKairaliBooksProps> = ({
   paragraph1 = 'Akam is proud to be an initiative of Kairali Books, established in 2004 with the vision of bringing "A Vadakkan Peruma" to the publishing world. Founded under the chairmanship of renowned film actor Sreenivasan and current Chairman & Managing Director O. Ashok Kumar, Kairali Books has grown into a cornerstone of Malayalam literature, boasting a catalog of over 1,600 titles across diverse genres.',
   paragraph2 = "First launched in 2010 as a acclaimed cultural print journal under the editorship of celebrated author C.V. Balakrishnan, Akam captured wide readership across Kerala. Today, Kairali Books continues to expand its global footprint—participating actively in international literary platforms like the Sharjah International Book Fair and hosting the annual Kairali International Cultural Festival (KICF) to celebrate the heritage, art, and tourism of North Malabar.",
   buttonText = "Explore Kairali Books",
-  buttonHref = "#kairali",
+  buttonHref = "https://kairalibooks.com",
   logoSrc = "/images/about/kairali-logo.png",
 }) => {
   return (
@@ -42,7 +42,7 @@ export const AboutKairaliBooks: React.FC<AboutKairaliBooksProps> = ({
             </p>
 
             <div className="flex items-center">
-              <a href={buttonHref}>
+              <a href={buttonHref} target="_blank" rel="noopener noreferrer">
                 <Button
                   variant="primary"
                   size="md"

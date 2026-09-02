@@ -18,6 +18,9 @@ import { CommunitiesModule } from './communities/communities.module.js';
 import { PostsModule } from './posts/posts.module.js';
 import { CommunityCommentsModule } from './community-comments/community-comments.module.js';
 import { VotesModule } from './votes/votes.module.js';
+import { EventsModule } from './events/events.module.js';
+import { BooksModule } from './books/books.module.js';
+import { MediaModule } from './media/media.module.js';
 
 @Module({
   imports: [
@@ -41,6 +44,9 @@ import { VotesModule } from './votes/votes.module.js';
     PostsModule,
     CommunityCommentsModule,
     VotesModule,
+    EventsModule,
+    BooksModule,
+    MediaModule,
   ],
   controllers: [AppController],
   providers: [AppService],

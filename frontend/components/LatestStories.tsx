@@ -212,7 +212,7 @@ export const LatestStories: React.FC<LatestStoriesProps> = ({
 
         {/* Bottom Navigation Arrows */}
         {stories.length > 0 && (
-          <div className="flex items-center gap-3 pt-4 sm:pt-6">
+          <div className="flex items-center justify-end gap-3 pt-4 sm:pt-6">
             <button
               onClick={() => swiperInstance?.slidePrev()}
               className="w-10 h-10 sm:w-11 sm:h-11 rounded-full border border-gray-300 bg-white flex items-center justify-center text-gray-700 hover:bg-gray-100 hover:border-gray-400 transition-all focus:outline-none cursor-pointer"
