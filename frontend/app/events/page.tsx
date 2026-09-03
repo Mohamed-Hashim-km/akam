@@ -66,6 +66,7 @@ export default function EventsPage() {
         location: e.location,
         imageSrc: e.imageSrc || e.image || e.imageUrl || e.coverImage || "",
         href: e.registerHref || undefined,
+        videoUrl: e.videoUrl || undefined,
       }));
 
       setSessions(mappedSessions);

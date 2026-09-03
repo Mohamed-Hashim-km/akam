@@ -132,6 +132,7 @@ export class EngagementService {
       SELECT 
         c.id,
         c.content,
+        c."isFeatured",
         c."createdAt",
         c."storyId",
         s.title AS "storyTitle",
@@ -143,10 +144,94 @@ export class EngagementService {
       FROM story_comment c
       JOIN story s ON s.id = c."storyId"
       JOIN "user" u ON u.id = c."userId"
+      WHERE c."isFeatured" = true
       ORDER BY c."createdAt" DESC
       LIMIT $1
     `;
     return this.prisma.query<any>(sql, [limit]);
+  }
+
+  async getCommentsEditorial(pageVal = 1, limitVal = 10, search?: string, featured?: string) {
+    const page = pageVal && pageVal > 0 ? pageVal : 1;
+    const limit = limitVal && limitVal > 0 ? limitVal : 10;
+    const offset = (page - 1) * limit;
+
+    const whereConditions: string[] = [];
+    const params: any[] = [];
+
+    if (search && search.trim()) {
+      params.push(`%${search.trim()}%`);
+      whereConditions.push(`(c.content ILIKE $${params.length} OR s.title ILIKE $${params.length} OR u.email ILIKE $${params.length} OR u.name ILIKE $${params.length})`);
+    }
+
+    if (featured === 'true') {
+      whereConditions.push(`c."isFeatured" = true`);
+    } else if (featured === 'false') {
+      whereConditions.push(`c."isFeatured" = false`);
+    }
+
+    const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
+
+    const countSql = `
+      SELECT COUNT(*) AS count
+      FROM story_comment c
+      JOIN story s ON s.id = c."storyId"
+      JOIN "user" u ON u.id = c."userId"
+      ${whereClause}
+    `;
+    const countRes = await this.prisma.queryOne<{ count: string }>(countSql, params);
+    const total = parseInt(countRes?.count ?? '0', 10);
+
+    const queryParams = [...params, limit, offset];
+    const dataSql = `
+      SELECT 
+        c.id,
+        c.content,
+        c."isFeatured",
+        c."createdAt",
+        c."storyId",
+        s.title AS "storyTitle",
+        s.slug AS "storySlug",
+        u.id AS "userId",
+        u.name AS "userName",
+        u.email AS "userEmail",
+        u."avatarUrl" AS "userAvatarUrl"
+      FROM story_comment c
+      JOIN story s ON s.id = c."storyId"
+      JOIN "user" u ON u.id = c."userId"
+      ${whereClause}
+      ORDER BY c."createdAt" DESC
+      LIMIT $${queryParams.length - 1} OFFSET $${queryParams.length}
+    `;
+
+    const data = await this.prisma.query<any>(dataSql, queryParams);
+    const totalPages = Math.ceil(total / limit) || 1;
+
+    return {
+      data,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages,
+      },
+    };
+  }
+
+  async toggleFeaturedComment(commentId: string) {
+    const existing = await this.prisma.queryOne<{ id: string; isFeatured: boolean }>(
+      `SELECT id, "isFeatured" FROM story_comment WHERE id = $1`,
+      [commentId],
+    );
+    if (!existing) throw new NotFoundException('Comment not found');
+
+    const newStatus = !existing.isFeatured;
+    await this.prisma.execute(
+      `UPDATE story_comment SET "isFeatured" = $1, "updatedAt" = now() WHERE id = $2`,
+      [newStatus, commentId],
+    );
+
+    return { id: commentId, isFeatured: newStatus };
   }
 
   async getComments(targetStoryId: string): Promise<CommentRow[]> {
@@ -168,8 +253,8 @@ export class EngagementService {
     const storyId = await this.ensureStoryExists(targetStoryId);
 
     const inserted = await this.prisma.queryOne<{ id: string }>(
-      `INSERT INTO story_comment (id, "userId", "storyId", content, "createdAt", "updatedAt")
-       VALUES (gen_random_uuid()::text, $1, $2, $3, now(), now())
+      `INSERT INTO story_comment (id, "userId", "storyId", content, "isFeatured", "createdAt", "updatedAt")
+       VALUES (gen_random_uuid()::text, $1, $2, $3, false, now(), now())
        RETURNING id`,
       [userId, storyId, content],
     );

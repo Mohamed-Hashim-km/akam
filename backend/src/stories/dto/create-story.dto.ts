@@ -13,4 +13,14 @@ export class CreateStoryDto {
   @IsOptional()
   @IsString()
   category?: string;
+
+  @IsOptional()
+  @IsString()
+  authorId?: string;
+
+  @IsOptional()
+  @IsString()
+  status?: string;
 }
+
+

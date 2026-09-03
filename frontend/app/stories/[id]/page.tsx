@@ -405,121 +405,57 @@ export default function StoryDetailPage() {
       );
     }
 
-    const sanitized = contentStr.replace(/\r\n/g, "\n");
+    // ── Markdown → HTML inline converter ────────────────────────────────────
+    const mdToHtml = (md: string): string => {
+      let h = md.replace(/&nbsp;/gi, " ");
+      // Headings
+      h = h.replace(/^###\s+(.*)$/gm, '<h3 class="text-xl font-bold my-4 text-gray-900">$1</h3>');
+      h = h.replace(/^##\s+(.*)$/gm, '<h2 class="text-2xl font-bold my-5 text-gray-950">$1</h2>');
+      // Bold / Italic
+      h = h.replace(/\*\*(.*?)\*\*/g, "<b>$1</b>");
+      h = h.replace(/__(.*?)__/g, "<b>$1</b>");
+      h = h.replace(/\*(.*?)\*/g, "<i>$1</i>");
+      // Blockquote
+      h = h.replace(/^>\s+(.*)$/gm, '<blockquote class="border-l-4 border-emerald-500 pl-4 py-2 italic my-4 text-gray-800 bg-gray-50/70 rounded-r-xl">$1</blockquote>');
+      // Links
+      h = h.replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-emerald-700 underline font-medium hover:text-emerald-900">$1</a>');
+      // Lists
+      h = h.replace(/^[\*\-]\s+(.*)$/gm, '<li class="ml-5 list-disc mb-1 text-gray-900">$1</li>');
+      h = h.replace(/^(\d+)\.\s+(.*)$/gm, '<li class="ml-5 list-decimal mb-1 text-gray-900">$2</li>');
+      // Strip leftover ** markers
+      h = h.replace(/\*\*/g, "");
+      return h;
+    };
 
-    let processedContent = sanitized.replace(
-      /!\[(.*?)\]\((.*?)\)/g,
-      '<img src="$2" alt="$1" />'
-    );
-
+    // ── Split at image boundaries ────────────────────────────────────────────
+    const withImgs = contentStr.replace(/!\[(.*?)\]\((.*?)\)/g, '<img src="$2" alt="$1" />');
     const imgRegex = /<img\s+[^>]*src=["']([^"']+)["'][^>]*>/gi;
     const parts: Array<{ type: "text"; value: string } | { type: "image"; src: string; alt: string }> = [];
     let lastIndex = 0;
     let match;
 
-    while ((match = imgRegex.exec(processedContent)) !== null) {
+    while ((match = imgRegex.exec(withImgs)) !== null) {
       if (match.index > lastIndex) {
-        const textChunk = processedContent.substring(lastIndex, match.index);
-        if (textChunk.trim()) parts.push({ type: "text", value: textChunk });
+        const chunk = withImgs.substring(lastIndex, match.index);
+        if (chunk.trim()) parts.push({ type: "text", value: chunk });
       }
       const src = match[1];
       if (src) parts.push({ type: "image", src, alt: "Story Inline Image" });
       lastIndex = imgRegex.lastIndex;
     }
-
-    if (lastIndex < processedContent.length) {
-      const textChunk = processedContent.substring(lastIndex);
-      if (textChunk.trim()) parts.push({ type: "text", value: textChunk });
+    if (lastIndex < withImgs.length) {
+      const chunk = withImgs.substring(lastIndex);
+      if (chunk.trim()) parts.push({ type: "text", value: chunk });
     }
+    if (parts.length === 0) parts.push({ type: "text", value: contentStr });
 
-    if (parts.length === 0) parts.push({ type: "text", value: sanitized });
-
+    // ── Render ───────────────────────────────────────────────────────────────
     return (
-      <div className="space-y-4">
+      <div className="space-y-0">
         {parts.map((part, idx) => {
-          if (part.type === "text") {
-            const isHtml = /<[a-z][\s\S]*>/i.test(part.value);
-            if (isHtml) {
-              return (
-                <div
-                  key={idx}
-                  className="prose prose-lg max-w-none text-gray-900 leading-relaxed font-normal [&_p]:mb-4 [&_p]:text-[#1A1A1A] [&_a]:text-emerald-700 [&_a]:underline [&_a]:font-medium [&_a]:hover:text-emerald-900 [&_ul]:list-disc [&_ul]:pl-6 [&_ul]:mb-4 [&_ol]:list-decimal [&_ol]:pl-6 [&_ol]:mb-4 [&_h2]:text-2xl [&_h2]:font-bold [&_h2]:my-4 [&_h2]:text-gray-950 [&_h3]:text-xl [&_h3]:font-bold [&_h3]:my-3 [&_h3]:text-gray-900 [&_blockquote]:border-l-4 [&_blockquote]:border-emerald-500 [&_blockquote]:pl-4 [&_blockquote]:py-2 [&_blockquote]:italic [&_blockquote]:my-4 [&_blockquote]:bg-gray-50/70 [&_blockquote]:rounded-r-xl"
-                  dangerouslySetInnerHTML={{ __html: part.value }}
-                />
-              );
-            }
-
-            let formattedText = part.value.replace(/&nbsp;/gi, " ");
-            formattedText = formattedText.replace(/^###\s+(.*)$/gm, '<h3 class="text-xl font-bold my-3 text-gray-900">$1</h3>');
-            formattedText = formattedText.replace(/^##\s+(.*)$/gm, '<h2 class="text-2xl font-bold my-4 text-gray-950">$1</h2>');
-            formattedText = formattedText.replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-emerald-700 underline font-medium hover:text-emerald-900">$1</a>');
-            formattedText = formattedText.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
-            formattedText = formattedText.replace(/\*(.*?)\*/g, '<i>$1</i>');
-            formattedText = formattedText.replace(/^>\s+(.*)$/gm, '<blockquote class="border-l-4 border-emerald-500 pl-4 py-2 italic my-4 text-gray-800 bg-gray-50/70 rounded-r-xl">$1</blockquote>');
-            formattedText = formattedText.replace(/\*\*/g, "");
-
-            const lines = formattedText.replace(/\r\n/g, "\n").split("\n");
-            const renderedElements: React.ReactNode[] = [];
-            let currentLines: string[] = [];
-
-            const flush = (key: string) => {
-              if (currentLines.length > 0) {
-                const text = currentLines.join("<br>");
-                if (text.trim()) {
-                  const containsInlineHtml = /<[a-z][\s\S]*>/i.test(text);
-                  if (containsInlineHtml) {
-                    renderedElements.push(
-                      <div
-                        key={key}
-                        className="text-gray-900 text-base sm:text-lg leading-relaxed font-normal mb-4 [&_a]:text-emerald-700 [&_a]:underline [&_a]:font-medium [&_a]:hover:text-emerald-900 [&_b]:font-bold [&_strong]:font-bold [&_h2]:text-2xl [&_h2]:font-bold [&_h2]:my-4 [&_h3]:text-xl [&_h3]:font-bold [&_h3]:my-3 [&_blockquote]:border-l-4 [&_blockquote]:border-emerald-500 [&_blockquote]:pl-4 [&_blockquote]:italic"
-                        dangerouslySetInnerHTML={{ __html: text }}
-                      />
-                    );
-                  } else {
-                    renderedElements.push(
-                      <p
-                        key={key}
-                        className="text-gray-900 text-base sm:text-lg leading-relaxed font-normal whitespace-pre-wrap tracking-normal mb-4"
-                      >
-                        {text}
-                      </p>
-                    );
-                  }
-                }
-                currentLines = [];
-              }
-            };
-
-            for (let i = 0; i < lines.length; i++) {
-              const line = lines[i];
-              const trimmed = line.trim();
-              if (!trimmed) {
-                flush(`flush-${i}`);
-                renderedElements.push(<p key={`empty-${i}`} className="mb-4"><br /></p>);
-                continue;
-              }
-              if (
-                trimmed.startsWith("<h2") ||
-                trimmed.startsWith("<h3") ||
-                trimmed.startsWith("<blockquote") ||
-                trimmed.startsWith("<ul") ||
-                trimmed.startsWith("<ol") ||
-                trimmed.startsWith("<div")
-              ) {
-                flush(`flush-${i}`);
-                renderedElements.push(
-                  <div key={`block-${i}`} dangerouslySetInnerHTML={{ __html: trimmed }} />
-                );
-                continue;
-              }
-              currentLines.push(trimmed);
-            }
-            flush("flush-end");
-
-            return <div key={idx} className="space-y-4">{renderedElements}</div>;
-          } else {
+          if (part.type === "image") {
             return (
-              <div key={idx} className="my-6 sm:my-8 flex justify-center">
+              <div key={idx} className="my-8 sm:my-10 flex justify-center">
                 <img
                   src={part.src}
                   alt={part.alt}
@@ -528,6 +464,46 @@ export default function StoryDetailPage() {
               </div>
             );
           }
+
+          // Text — line-by-line: first blank = paragraph end, extra blanks = section gap
+          const lines = part.value.replace(/\r\n/g, "\n").split("\n");
+          const blocks: React.ReactNode[] = [];
+          let paraLines: string[] = [];
+
+          const flushPara = (key: string) => {
+            if (paraLines.length > 0) {
+              const combined = paraLines.join("<br />");
+              if (combined.trim()) {
+                blocks.push(
+                  <div
+                    key={key}
+                    className="text-[#1A1A1A] text-base sm:text-lg leading-[1.9] mb-6 font-normal [&_b]:font-bold [&_i]:italic [&_a]:text-emerald-700 [&_a]:underline [&_a]:hover:text-emerald-900 [&_h2]:text-2xl [&_h2]:font-bold [&_h2]:my-5 [&_h2]:text-gray-950 [&_h3]:text-xl [&_h3]:font-bold [&_h3]:my-4 [&_h3]:text-gray-900 [&_blockquote]:border-l-4 [&_blockquote]:border-emerald-500 [&_blockquote]:pl-4 [&_blockquote]:py-2 [&_blockquote]:italic [&_blockquote]:my-4 [&_blockquote]:bg-gray-50/70 [&_blockquote]:rounded-r-xl [&_li]:ml-5 [&_li]:list-disc [&_li]:mb-1"
+                    dangerouslySetInnerHTML={{ __html: mdToHtml(combined) }}
+                  />
+                );
+              }
+              paraLines = [];
+            }
+          };
+
+          lines.forEach((line, li) => {
+            if (line.trim() === "") {
+              if (paraLines.length > 0) {
+                // First blank line after text → end the paragraph
+                flushPara(`${idx}-p-${li}`);
+              } else {
+                // Consecutive blank line → visible section gap
+                blocks.push(
+                  <div key={`${idx}-gap-${li}`} className="mb-10 select-none" aria-hidden="true" />
+                );
+              }
+            } else {
+              paraLines.push(line);
+            }
+          });
+          flushPara(`${idx}-p-end`);
+
+          return <div key={idx}>{blocks}</div>;
         })}
       </div>
     );

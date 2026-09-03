@@ -2,11 +2,12 @@
 
 import React, { useState } from "react";
 import Image from "next/image";
-import { MapPin, ChevronLeft, ChevronRight } from "lucide-react";
+import { MapPin, ChevronLeft, ChevronRight, Play, X } from "lucide-react";
 import { Swiper, SwiperSlide } from "swiper/react";
 import { Navigation } from "swiper/modules";
 import type { Swiper as SwiperClass } from "swiper";
 import { API_BASE_URL } from "@/lib/config";
+import { getYouTubeEmbedUrl } from "@/lib/youtube";
 
 // Swiper CSS imports
 import "swiper/css";
@@ -30,6 +31,7 @@ export interface PastEventItem {
   imageSrc: string;
   imageAlt?: string;
   href?: string;
+  videoUrl?: string;
 }
 
 export interface PastEventArchiveProps {
@@ -44,6 +46,7 @@ export const PastEventArchive: React.FC<PastEventArchiveProps> = ({
   isLoading = false,
 }) => {
   const [swiperInstance, setSwiperInstance] = useState<SwiperClass | null>(null);
+  const [activeVideoUrl, setActiveVideoUrl] = useState<string | null>(null);
 
   if (isLoading) {
     return (
@@ -120,8 +123,8 @@ export const PastEventArchive: React.FC<PastEventArchiveProps> = ({
           >
             {events.map((item) => (
               <SwiperSlide key={item.id} className="flex flex-col">
-                <div className="bg-white border border-gray-100  rounded-2xl sm:rounded-3xl overflow-hidden flex-1 flex flex-col justify-between transition-all duration-300 group cursor-pointer shadow-xs ">
-                  {/* Header Image with Reduced Height */}
+                <div className="bg-white border border-gray-100 rounded-2xl sm:rounded-3xl overflow-hidden flex-1 flex flex-col justify-between transition-all duration-300 group shadow-xs">
+                  {/* Header Image — plain display only */}
                   {item.imageSrc ? (
                     <div className="relative w-full aspect-[16/8] bg-gray-100 overflow-hidden">
                       <Image
@@ -154,10 +157,22 @@ export const PastEventArchive: React.FC<PastEventArchiveProps> = ({
                       </p>
                     </div>
 
-                    {/* Location Meta */}
-                    <div className="flex items-center gap-2 text-xs sm:text-sm text-[#5A6560C2] font-medium pt-3 border-t border-gray-100 group-hover:border-black/5 transition-colors">
-                      <MapPin className="w-4 h-4 text-[#5A6560C2] shrink-0" />
-                      <span className="truncate">{item.location}</span>
+                    {/* Location Meta + Watch Recording Button */}
+                    <div className="flex items-center justify-between gap-3 pt-3 border-t border-gray-100 group-hover:border-black/5 transition-colors flex-wrap">
+                      <div className="flex items-center gap-2 text-xs sm:text-sm text-[#5A6560C2] font-medium min-w-0">
+                        <MapPin className="w-4 h-4 text-[#5A6560C2] shrink-0" />
+                        <span className="truncate">{item.location}</span>
+                      </div>
+
+                      {item.videoUrl && (
+                        <button
+                          onClick={() => setActiveVideoUrl(item.videoUrl!)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all cursor-pointer shadow-xs shrink-0"
+                        >
+                          <Play className="w-3 h-3 fill-white" />
+                          Watch Recording
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -166,9 +181,41 @@ export const PastEventArchive: React.FC<PastEventArchiveProps> = ({
           </Swiper>
         </div>
       </div>
+
+      {/* Video Lightbox Modal — same style as Media page */}
+      {activeVideoUrl && (
+        <div
+          onClick={() => setActiveVideoUrl(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/85 backdrop-blur-md animate-in fade-in cursor-pointer"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="relative w-full max-w-4xl bg-black rounded-3xl overflow-hidden shadow-2xl border border-white/10 cursor-default"
+          >
+            {/* Floating Close Button */}
+            <button
+              onClick={() => setActiveVideoUrl(null)}
+              className="absolute top-4 right-4 z-20 w-10 h-10 rounded-full bg-black/60 hover:bg-black text-white/80 hover:text-white flex items-center justify-center transition-all border border-white/20 cursor-pointer shadow-md"
+              aria-label="Close video"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            {/* 16:9 Embedded Video Player */}
+            <div className="relative w-full aspect-video bg-black">
+              <iframe
+                src={`${getYouTubeEmbedUrl(activeVideoUrl)}?autoplay=1`}
+                title="Event Recording"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+                className="w-full h-full border-none"
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 };
 
 export default PastEventArchive;
-

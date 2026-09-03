@@ -51,6 +51,11 @@ export class CreateEventDto {
   @IsString()
   registerHref?: string;
 
+  @ApiPropertyOptional({ example: 'https://youtu.be/abc123' })
+  @IsOptional()
+  @IsString()
+  videoUrl?: string;
+
   @ApiPropertyOptional({ default: true })
   @IsOptional()
   @IsBoolean()

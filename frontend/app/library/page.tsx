@@ -154,9 +154,7 @@ export default function LibraryPage() {
         <div className="container px-4 mx-auto max-w-6xl">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div>
-              <div className="inline-flex items-center gap-2 px-3 py-1 bg-amber-50 border border-amber-200 rounded-full text-amber-800 text-xs font-semibold mb-3">
-                <Sparkles className="w-3.5 h-3.5" /> Personal Reading Dashboard
-              </div>
+              
               <h1 className="text-3xl sm:text-4xl font-extrabold text-gray-950 tracking-tight">
                 My Story Library
               </h1>

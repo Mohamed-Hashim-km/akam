@@ -42,6 +42,25 @@ import {
   Inbox,
   FileText,
   Edit3,
+  UserPlus,
+  Upload,
+  Image as ImageIcon,
+  Bold,
+  Italic,
+  Underline,
+  Strikethrough,
+  Heading2,
+  Heading3,
+  List,
+  ListOrdered,
+  Link as LinkIcon,
+  Unlink,
+  Quote,
+  Undo,
+  Redo,
+  RemoveFormatting,
+  Save,
+  Globe,
 } from "lucide-react";
 import Button from "@/components/ui/Button";
 import AuthModal from "@/components/AuthModal";
@@ -70,6 +89,7 @@ interface RosterUser {
   avatarUrl: string | null;
   role: "READER" | "AUTHOR" | "EDITOR" | "ADMIN";
   isFeatured?: boolean;
+  sortOrder?: number;
   createdAt?: string;
 }
 
@@ -116,7 +136,7 @@ function formatDateTime(dateStr?: string | null) {
   });
 }
 
-type TabType = "queue" | "reports" | "inquiries" | "catalog" | "authors" | "categories" | "notifications" | "settings" | "editors-note" | "communities" | "events" | "books" | "media" | "editions";
+type TabType = "queue" | "reports" | "inquiries" | "catalog" | "authors" | "categories" | "notifications" | "settings" | "editors-note" | "communities" | "events" | "books" | "media" | "editions" | "reviews";
 
 function PaginationFooter({
   meta,
@@ -238,6 +258,127 @@ function EditorialDashboardContent() {
   const [inquiryStatusFilter, setInquiryStatusFilter] = useState("ALL");
   const [selectedInquiry, setSelectedInquiry] = useState<ContactInquiryItem | null>(null);
 
+  // Reader Reviews State
+  const [reviewsList, setReviewsList] = useState<any[]>([]);
+  const [reviewsMeta, setReviewsMeta] = useState({ total: 0, page: 1, limit: 10, totalPages: 1 });
+  const [reviewFeaturedFilter, setReviewFeaturedFilter] = useState<"ALL" | "FEATURED" | "HIDDEN">("HIDDEN");
+  const [selectedReview, setSelectedReview] = useState<any | null>(null);
+
+  // Editorial Notifications State
+  const [notificationsList, setNotificationsList] = useState<any[]>([]);
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
+
+  // Register New Author Modal State
+  const [registerAuthorModalOpen, setRegisterAuthorModalOpen] = useState(false);
+  const [authorFormName, setAuthorFormName] = useState("");
+  const [authorFormEmail, setAuthorFormEmail] = useState("");
+  const [authorFormBio, setAuthorFormBio] = useState("");
+  const [authorFormAvatarFile, setAuthorFormAvatarFile] = useState<File | null>(null);
+  const [authorFormAvatarPreview, setAuthorFormAvatarPreview] = useState<string | null>(null);
+  const [authorFormIsFeatured, setAuthorFormIsFeatured] = useState(false);
+  const [authorFormSortOrder, setAuthorFormSortOrder] = useState(0);
+  const [savingAuthor, setSavingAuthor] = useState(false);
+
+  // Author Story Creation Studio Modal State
+  const [authorStoryStudioOpen, setAuthorStoryStudioOpen] = useState(false);
+  const [storyAuthorTarget, setStoryAuthorTarget] = useState<RosterUser | null>(null);
+  const [storyStudioTitle, setStoryStudioTitle] = useState("");
+  const [storyStudioCategory, setStoryStudioCategory] = useState("Fiction");
+  const [storyStudioContent, setStoryStudioContent] = useState("");
+  const [storyStudioCoverFile, setStoryStudioCoverFile] = useState<File | null>(null);
+  const [storyStudioCoverPreview, setStoryStudioCoverPreview] = useState<string | null>(null);
+  const [storyStudioActiveTab, setStoryStudioActiveTab] = useState<"write" | "preview">("write");
+  const [savingAuthorStory, setSavingAuthorStory] = useState(false);
+
+  const authorCoverInputRef = React.useRef<HTMLInputElement>(null);
+  const authorInlineInputRef = React.useRef<HTMLInputElement>(null);
+  const authorAvatarInputRef = React.useRef<HTMLInputElement>(null);
+  const authorEditorRef = React.useRef<HTMLDivElement>(null);
+
+  const [activeFormats, setActiveFormats] = useState({
+    bold: false,
+    italic: false,
+    underline: false,
+    strikeThrough: false,
+    h2: false,
+    h3: false,
+    unorderedList: false,
+    orderedList: false,
+    blockquote: false,
+  });
+
+  const updateActiveFormats = React.useCallback(() => {
+    if (!authorEditorRef.current) return;
+    try {
+      const formatBlock = (document.queryCommandValue("formatBlock") || "").toString().toLowerCase();
+      setActiveFormats({
+        bold: document.queryCommandState("bold"),
+        italic: document.queryCommandState("italic"),
+        underline: document.queryCommandState("underline"),
+        strikeThrough: document.queryCommandState("strikeThrough"),
+        h2: formatBlock === "h2",
+        h3: formatBlock === "h3",
+        unorderedList: document.queryCommandState("insertUnorderedList"),
+        orderedList: document.queryCommandState("insertOrderedList"),
+        blockquote: formatBlock === "blockquote",
+      });
+    } catch {
+      // Ignore command state errors
+    }
+  }, []);
+
+  const [authorLinkModalOpen, setAuthorLinkModalOpen] = useState(false);
+  const [authorLinkUrl, setAuthorLinkUrl] = useState("");
+  const [authorLinkText, setAuthorLinkText] = useState("");
+  const authorSavedRangeRef = React.useRef<Range | null>(null);
+
+  const handleAuthorOpenLinkModal = () => {
+    if (typeof window !== "undefined") {
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount > 0) {
+        authorSavedRangeRef.current = sel.getRangeAt(0).cloneRange();
+        setAuthorLinkText(sel.toString());
+      } else {
+        authorSavedRangeRef.current = null;
+        setAuthorLinkText("");
+      }
+    }
+    setAuthorLinkUrl("");
+    setAuthorLinkModalOpen(true);
+  };
+
+  const handleAuthorApplyLink = () => {
+    if (!authorLinkUrl.trim()) {
+      setAuthorLinkModalOpen(false);
+      return;
+    }
+    let finalUrl = authorLinkUrl.trim();
+    if (!/^https?:\/\//i.test(finalUrl)) {
+      finalUrl = `https://${finalUrl}`;
+    }
+
+    if (authorEditorRef.current) {
+      authorEditorRef.current.focus();
+      if (authorSavedRangeRef.current && typeof window !== "undefined") {
+        const sel = window.getSelection();
+        if (sel) {
+          sel.removeAllRanges();
+          sel.addRange(authorSavedRangeRef.current);
+        }
+      }
+
+      const selectionText = window.getSelection()?.toString();
+      if (authorLinkText.trim() && (!selectionText || selectionText !== authorLinkText)) {
+        const linkHtml = `<a href="${finalUrl}" target="_blank" rel="noopener noreferrer" class="text-emerald-700 underline font-medium hover:text-emerald-900">${authorLinkText}</a>`;
+        document.execCommand("insertHTML", false, linkHtml);
+      } else {
+        document.execCommand("createLink", false, finalUrl);
+      }
+      setStoryStudioContent(authorEditorRef.current.innerHTML);
+    }
+    setAuthorLinkModalOpen(false);
+  };
+
   // Flipbook Preview State for Masika Editions
   const [openFlipbookEdition, setOpenFlipbookEdition] = useState<any | null>(null);
 
@@ -281,6 +422,7 @@ function EditorialDashboardContent() {
   const [showArchiveModal, setShowArchiveModal] = useState(false);
   const [selectedEventForArchive, setSelectedEventForArchive] = useState<any | null>(null);
   const [archiveImage, setArchiveImage] = useState("");
+  const [archiveVideoUrl, setArchiveVideoUrl] = useState("");
   const [uploadingArchiveImage, setUploadingArchiveImage] = useState(false);
   const [archivingEvent, setArchivingEvent] = useState(false);
 
@@ -756,7 +898,18 @@ function EditorialDashboardContent() {
             setCategoriesList(json);
           }
         }
-      } else if (tab === "settings") {
+      } else if (tab === "notifications") {
+        const nRes = await apiFetch(`${API_BASE_URL}/notifications`);
+        if (nRes.ok) {
+          const json = await nRes.json();
+          setNotificationsList(Array.isArray(json) ? json : json.data || []);
+        }
+        const uRes = await apiFetch(`${API_BASE_URL}/notifications/unread-count`);
+        if (uRes.ok) {
+          const uJson = await uRes.json();
+          setUnreadNotificationCount(uJson.count || 0);
+        }
+      } else if (tab === "settings" || tab === "editors-note") {
         const noteRes = await apiFetch(`${API_BASE_URL}/settings/editors-note`);
         if (noteRes.ok) {
           const json = await noteRes.json();
@@ -826,18 +979,58 @@ function EditorialDashboardContent() {
             setMediaList(Array.isArray(json) ? json : []);
           }
         }
-      } else if ((tab as string) === "settings" || (tab as string) === "editors-note") {
-        const sRes = await apiFetch(`${API_BASE_URL}/editorial/settings/editors-note`);
-        if (sRes.ok) {
-          const json = await sRes.json();
-          if (json.title) setEditorsNoteTitle(json.title);
-          if (json.note) setEditorsNoteContent(json.note);
+      } else if (tab === "reviews") {
+        const rSearch = query ? `&search=${encodeURIComponent(query)}` : '';
+        const rFeatured = reviewFeaturedFilter !== 'ALL' ? `&featured=${reviewFeaturedFilter === 'FEATURED' ? 'true' : 'false'}` : '';
+        const revRes = await apiFetch(`${API_BASE_URL}/stories/comments/editorial?page=${page}&limit=10${rSearch}${rFeatured}`);
+        if (revRes.ok) {
+          const json = await revRes.json();
+          if (json.data) {
+            setReviewsList(json.data);
+            if (json.meta) setReviewsMeta(json.meta);
+          } else {
+            setReviewsList(Array.isArray(json) ? json : []);
+          }
         }
       }
     } catch (err) {
       console.error("Failed to load section data", err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleToggleFeaturedReview = async (commentId: string) => {
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/stories/comments/${commentId}/toggle-featured`, {
+        method: "PATCH",
+      });
+      if (res.ok) {
+        setFeedbackMessage("Reader review homepage featured status updated.");
+        fetchDashboardData("reviews", currentPage, searchQuery);
+        setTimeout(() => setFeedbackMessage(null), 3000);
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        alert(errData.message || "Failed to toggle review featured status.");
+      }
+    } catch (err) {
+      console.error("Failed to toggle featured review", err);
+    }
+  };
+
+  const handleDeleteReviewComment = async (commentId: string) => {
+    if (!confirm("Are you sure you want to delete this reader review comment?")) return;
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/stories/comments/${commentId}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        setFeedbackMessage("Reader review deleted successfully.");
+        fetchDashboardData("reviews", currentPage, searchQuery);
+        setTimeout(() => setFeedbackMessage(null), 3000);
+      }
+    } catch (err) {
+      console.error("Failed to delete review", err);
     }
   };
 
@@ -983,6 +1176,7 @@ function EditorialDashboardContent() {
         body: JSON.stringify({
           type: "PAST_ARCHIVE",
           imageSrc: archiveImage.trim() || undefined,
+          videoUrl: archiveVideoUrl.trim() || undefined,
         }),
       });
 
@@ -991,6 +1185,7 @@ function EditorialDashboardContent() {
         setShowArchiveModal(false);
         setSelectedEventForArchive(null);
         setArchiveImage("");
+        setArchiveVideoUrl("");
         fetchDashboardData("events", currentPage, searchQuery);
         setTimeout(() => setFeedbackMessage(null), 3000);
       } else {
@@ -1168,10 +1363,226 @@ function EditorialDashboardContent() {
         fetchDashboardData("communities", currentPage, searchQuery);
         setTimeout(() => setFeedbackMessage(null), 3000);
       } else {
-        alert("Failed to delete community");
+        const err = await res.json();
+        alert(err.message || "Failed to delete community");
       }
     } catch (err) {
       console.error(err);
+      alert("Error deleting community");
+    }
+  };
+
+  const convertHtmlToMarkdown = (htmlStr: string): string => {
+    if (!htmlStr) return "";
+    let result = htmlStr;
+
+    result = result.replace(/&nbsp;/gi, " ");
+    result = result.replace(/&#160;/gi, " ");
+
+    result = result.replace(/<div contenteditable="false".*?<img src="(.*?)".*?<\/div>/gi, "\n\n![Inline Image]($1)\n\n");
+    result = result.replace(/<img\s+[^>]*src=["']([^"']+)["'][^>]*>/gi, "\n\n![Inline Image]($1)\n\n");
+
+    result = result.replace(/<a\s+[^>]*href=["']([^"']+)["'][^>]*>(.*?)<\/a>/gi, "[$2]($1)");
+
+    result = result.replace(/<b>(.*?)<\/b>/gi, "**$1**");
+    result = result.replace(/<strong>(.*?)<\/strong>/gi, "**$1**");
+    result = result.replace(/<i>(.*?)<\/i>/gi, "*$1*");
+    result = result.replace(/<em>(.*?)<\/em>/gi, "*$1*");
+    result = result.replace(/<u>(.*?)<\/u>/gi, "<u>$1</u>");
+    result = result.replace(/<s>(.*?)<\/s>/gi, "~~$1~~");
+    result = result.replace(/<strike>(.*?)<\/strike>/gi, "~~$1~~");
+
+    result = result.replace(/<h2[^>]*>(.*?)<\/h2>/gi, "\n\n## $1\n\n");
+    result = result.replace(/<h3[^>]*>(.*?)<\/h3>/gi, "\n\n### $1\n\n");
+
+    result = result.replace(/<blockquote[^>]*>(.*?)<\/blockquote>/gi, "\n\n> $1\n\n");
+
+    result = result.replace(/<li[^>]*>(.*?)<\/li>/gi, "- $1\n");
+    result = result.replace(/<\/?ul[^>]*>/gi, "\n\n");
+    result = result.replace(/<\/?ol[^>]*>/gi, "\n\n");
+
+    result = result.replace(/<p[^>]*><br\s*\/?>\s*<\/p>/gi, "§BLANK§");
+    result = result.replace(/<div[^>]*aria-hidden[^>]*><\/div>/gi, "§BLANK§");
+    result = result.replace(/<p[^>]*>\s*<\/p>/gi, "§BLANK§");
+
+    result = result.replace(/<\/p>\s*<p[^>]*>/gi, "\n\n");
+    result = result.replace(/<p[^>]*>/gi, "");
+    result = result.replace(/<\/p>/gi, "\n\n");
+    result = result.replace(/<br\s*\/?>/gi, "\n");
+    result = result.replace(/<div[^>]*>/gi, "\n\n").replace(/<\/div>/gi, "");
+
+    result = result.replace(/§BLANK§/g, "\n");
+    result = result.replace(/<(?!u|\/u)[^>]+>/gi, "");
+
+    result = result.replace(/\*\*\s+/g, "**");
+    result = result.replace(/\s+\*\*/g, "**");
+    result = result.replace(/\r\n/g, "\n");
+    result = result.replace(/\n{9,}/g, "\n\n\n\n\n\n\n\n");
+
+    return result.trim();
+  };
+
+  const handleCreateAuthorSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!authorFormName.trim() || !authorFormEmail.trim()) {
+      alert("Name and email are required.");
+      return;
+    }
+
+    setSavingAuthor(true);
+    try {
+      let avatarUrl = "";
+      if (authorFormAvatarFile) {
+        const formData = new FormData();
+        formData.append("file", authorFormAvatarFile);
+        const upRes = await apiFetch(`${API_BASE_URL}/uploads/image`, {
+          method: "POST",
+          body: formData,
+        });
+        if (upRes.ok) {
+          const json = await upRes.json();
+          avatarUrl = json.url;
+        }
+      }
+
+      const res = await apiFetch(`${API_BASE_URL}/users/create-author`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: authorFormName.trim(),
+          email: authorFormEmail.trim(),
+          bio: authorFormBio.trim(),
+          avatarUrl: avatarUrl || undefined,
+          isFeatured: authorFormIsFeatured,
+          sortOrder: authorFormSortOrder,
+        }),
+      });
+
+      if (res.ok) {
+        setFeedbackMessage(`Author '${authorFormName}' registered successfully!`);
+        setRegisterAuthorModalOpen(false);
+        setAuthorFormName("");
+        setAuthorFormEmail("");
+        setAuthorFormBio("");
+        setAuthorFormAvatarFile(null);
+        setAuthorFormAvatarPreview(null);
+        setAuthorFormIsFeatured(false);
+        setAuthorFormSortOrder(0);
+        fetchDashboardData("authors", currentPage, searchQuery);
+        setTimeout(() => setFeedbackMessage(null), 3500);
+      } else {
+        const errData = await res.json();
+        alert(errData.message || "Failed to register author");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error registering author");
+    } finally {
+      setSavingAuthor(false);
+    }
+  };
+
+  const handleAuthorEditorKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      const editor = authorEditorRef.current;
+      if (!editor) return;
+
+      document.execCommand("defaultParagraphSeparator", false, "p");
+
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount > 0) {
+        const range = sel.getRangeAt(0);
+        let node: Node | null = range.startContainer;
+
+        while (node && node !== editor) {
+          if (node.nodeType === Node.ELEMENT_NODE && (node as Element).tagName === "DIV") {
+            document.execCommand("formatBlock", false, "p");
+            break;
+          }
+          node = node.parentNode;
+        }
+
+        if (range.startContainer === editor || range.startContainer.parentNode === editor) {
+          document.execCommand("formatBlock", false, "p");
+        }
+      }
+
+      document.execCommand("insertParagraph", false);
+      if (editor) {
+        setStoryStudioContent(editor.innerHTML);
+      }
+      setTimeout(updateActiveFormats, 10);
+    }
+  };
+
+  const executeAuthorCommand = (command: string, value: string | undefined = undefined) => {
+    if (!authorEditorRef.current) return;
+    authorEditorRef.current.focus();
+    document.execCommand(command, false, value);
+    setStoryStudioContent(authorEditorRef.current.innerHTML);
+    setTimeout(updateActiveFormats, 10);
+  };
+
+  const handleAuthorStorySubmit = async (publishDirectly: boolean) => {
+    if (!storyAuthorTarget) return;
+
+    const rawEditorHtml = authorEditorRef.current ? authorEditorRef.current.innerHTML : storyStudioContent;
+    const markdownContent = convertHtmlToMarkdown(rawEditorHtml);
+
+    if (!storyStudioTitle.trim() || !markdownContent.trim()) {
+      alert("Please enter a story title and content.");
+      return;
+    }
+
+    setSavingAuthorStory(true);
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/stories`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: storyStudioTitle.trim(),
+          content: markdownContent,
+          category: storyStudioCategory,
+          authorId: storyAuthorTarget.id,
+          status: publishDirectly ? "APPROVED" : "DRAFT",
+        }),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.message || "Failed to create story");
+      }
+
+      const story = await res.json();
+
+      if (storyStudioCoverFile) {
+        const formData = new FormData();
+        formData.append("file", storyStudioCoverFile);
+        await apiFetch(`${API_BASE_URL}/stories/${story.id}/cover`, {
+          method: "POST",
+          body: formData,
+        });
+      }
+
+      if (publishDirectly) {
+        setFeedbackMessage(`Story '${storyStudioTitle}' created & published for ${storyAuthorTarget.name || storyAuthorTarget.email}!`);
+      } else {
+        setFeedbackMessage(`Story draft created for ${storyAuthorTarget.name || storyAuthorTarget.email}!`);
+      }
+
+      setAuthorStoryStudioOpen(false);
+      setStoryStudioTitle("");
+      setStoryStudioContent("");
+      setStoryStudioCoverFile(null);
+      setStoryStudioCoverPreview(null);
+      fetchDashboardData("catalog");
+      setTimeout(() => setFeedbackMessage(null), 3500);
+    } catch (err: any) {
+      console.error(err);
+      alert(err.message || "Error creating story for author");
+    } finally {
+      setSavingAuthorStory(false);
     }
   };
 
@@ -1210,7 +1621,7 @@ function EditorialDashboardContent() {
     if (user && ['EDITOR', 'ADMIN'].includes(user.role)) {
       fetchDashboardData(activeTab, currentPage, searchQuery);
     }
-  }, [activeTab, currentPage, reportStatusFilter, reportTypeFilter, inquiryStatusFilter, eventFilterType]);
+  }, [activeTab, currentPage, reportStatusFilter, reportTypeFilter, inquiryStatusFilter, eventFilterType, reviewFeaturedFilter]);
 
   // Server-side debounced search handler
   useEffect(() => {
@@ -1363,6 +1774,27 @@ function EditorialDashboardContent() {
     }
   };
 
+  const handleSortOrderChange = async (userId: string, sortOrder: number) => {
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/users/${userId}/sort-order`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sortOrder }),
+      });
+      if (res.ok) {
+        setFeedbackMessage("Author priority order updated!");
+        fetchDashboardData("authors", currentPage, searchQuery);
+        setTimeout(() => setFeedbackMessage(null), 3000);
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        alert(errData.message || "Failed to update author priority order");
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Error updating author priority order");
+    }
+  };
+
   const handleDeleteStory = async (storyId: string) => {
     if (!confirm("Are you sure you want to delete this story?")) return;
     try {
@@ -1454,91 +1886,58 @@ function EditorialDashboardContent() {
       return <p className="text-gray-400 italic py-4">No narrative text content submitted for this story.</p>;
     }
 
-    let processedContent = contentStr.replace(
-      new RegExp("!\\[(.*?)\\]\\((.*?)\\)", "g"),
-      '<img src="$2" alt="$1" />'
-    );
+    // ── Markdown-to-HTML inline converter (same logic as submit page) ──────
+    const mdToHtml = (md: string): string => {
+      let h = md;
+      h = h.replace(/&nbsp;/gi, " ");
+      // Images
+      h = h.replace(/!\[(.*?)\]\((.*?)\)/g, '<img src="$2" alt="$1" class="my-6 w-full max-w-3xl mx-auto max-h-[500px] object-cover rounded-2xl" />');
+      // Headings
+      h = h.replace(/^###\s+(.*)$/gm, '<h3 class="text-xl font-bold my-4 text-gray-900">$1</h3>');
+      h = h.replace(/^##\s+(.*)$/gm, '<h2 class="text-2xl font-bold my-5 text-gray-950">$1</h2>');
+      // Bold / Italic
+      h = h.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
+      h = h.replace(/__(.*?)__/g, '<b>$1</b>');
+      h = h.replace(/\*(.*?)\*/g, '<i>$1</i>');
+      // Blockquote
+      h = h.replace(/^>\s+(.*)$/gm, '<blockquote class="border-l-4 border-emerald-500 pl-4 py-2 italic my-4 text-gray-800 bg-gray-50/70 rounded-r-xl">$1</blockquote>');
+      // Links
+      h = h.replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-emerald-700 underline font-medium hover:text-emerald-900">$1</a>');
+      // Lists
+      h = h.replace(/^[\*\-]\s+(.*)$/gm, '<li class="ml-5 list-disc mb-1 text-gray-900">$1</li>');
+      h = h.replace(/^(\d+)\.\s+(.*)$/gm, '<li class="ml-5 list-decimal mb-1 text-gray-900">$2</li>');
+      return h;
+    };
 
-    const imgRegex = new RegExp('<img\\s+[^>]*src=["\']([^"\']+)["\'][^>]*>', "gi");
+    // ── Split content at image boundaries ────────────────────────────────────
+    const withHtmlImgs = contentStr.replace(/!\[(.*?)\]\((.*?)\)/g, '<img src="$2" alt="$1" />');
+    const imgRegex = /<img\s+[^>]*src=["']([^"']+)["'][^>]*>/gi;
     const parts: Array<{ type: "text"; value: string } | { type: "image"; src: string; alt: string }> = [];
     let lastIndex = 0;
     let match;
 
-    while ((match = imgRegex.exec(processedContent)) !== null) {
+    while ((match = imgRegex.exec(withHtmlImgs)) !== null) {
       if (match.index > lastIndex) {
-        const textChunk = processedContent.substring(lastIndex, match.index);
-        if (textChunk.trim()) {
-          parts.push({ type: "text", value: textChunk });
-        }
+        const chunk = withHtmlImgs.substring(lastIndex, match.index);
+        if (chunk.trim()) parts.push({ type: "text", value: chunk });
       }
-
       const src = match[1];
-      if (src) {
-        parts.push({ type: "image", src, alt: "Story Inline Image" });
-      }
-
+      if (src) parts.push({ type: "image", src, alt: "Story Inline Image" });
       lastIndex = imgRegex.lastIndex;
     }
-
-    if (lastIndex < processedContent.length) {
-      const textChunk = processedContent.substring(lastIndex);
-      if (textChunk.trim()) {
-        parts.push({ type: "text", value: textChunk });
-      }
+    if (lastIndex < withHtmlImgs.length) {
+      const chunk = withHtmlImgs.substring(lastIndex);
+      if (chunk.trim()) parts.push({ type: "text", value: chunk });
     }
+    if (parts.length === 0) parts.push({ type: "text", value: contentStr });
 
-    if (parts.length === 0) {
-      parts.push({ type: "text", value: processedContent });
-    }
-
+    // ── Render ────────────────────────────────────────────────────────────────
     return (
-      <div className="space-y-4">
+      <div className="space-y-0">
         {parts.map((part, idx) => {
-          if (part.type === "text") {
-            const isHtml = new RegExp("<[a-z][\\s\\S]*>", "i").test(part.value);
-            if (isHtml) {
-              return (
-                <div
-                  key={idx}
-                  className="prose max-w-none text-gray-900 text-base leading-snug sm:leading-relaxed font-normal [&_p]:mb-3 [&_p]:text-[#1A1A1A] [&_a]:text-emerald-700 [&_a]:underline [&_a]:font-medium [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:list-decimal [&_ol]:pl-6 [&_h2]:text-xl [&_h2]:font-bold [&_h2]:my-3 [&_h3]:text-lg [&_h3]:font-bold [&_h3]:my-2 [&_blockquote]:border-l-4 [&_blockquote]:border-emerald-500 [&_blockquote]:pl-4 [&_blockquote]:italic"
-                  dangerouslySetInnerHTML={{ __html: part.value }}
-                />
-              );
-            }
-
-            let formattedText = part.value;
-            formattedText = formattedText.replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-emerald-700 underline font-medium hover:text-emerald-900">$1</a>');
-            formattedText = formattedText.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
-            formattedText = formattedText.replace(/\*(.*?)\*/g, '<i>$1</i>');
-
-            const paragraphs = formattedText.replace(/\r\n/g, "\n").split("\n\n");
+          if (part.type === "image") {
             return (
-              <div key={idx} className="space-y-3">
-                {paragraphs.map((pText, pIdx) => {
-                  if (!pText.trim()) {
-                    return <p key={pIdx} className="h-5 mb-3"><br /></p>;
-                  }
-                  const containsInlineHtml = /<[a-z][\s\S]*>/i.test(pText);
-                  if (containsInlineHtml) {
-                    return (
-                      <div
-                        key={pIdx}
-                        className="text-gray-900 text-base leading-snug sm:leading-relaxed font-normal mb-3 [&_a]:text-emerald-700 [&_a]:underline [&_a]:font-medium"
-                        dangerouslySetInnerHTML={{ __html: pText }}
-                      />
-                    );
-                  }
-                  return (
-                    <p key={pIdx} className="text-gray-900 text-base leading-snug sm:leading-relaxed font-normal whitespace-pre-wrap tracking-tight mb-3">
-                      {pText}
-                    </p>
-                  );
-                })}
-              </div>
-            );
-          } else {
-            return (
-              <div key={idx} className="my-6 sm:my-8 flex justify-center">
+              <div key={idx} className="my-8 flex justify-center">
                 <img
                   src={part.src}
                   alt={part.alt}
@@ -1547,6 +1946,45 @@ function EditorialDashboardContent() {
               </div>
             );
           }
+
+          // Text part — split by newlines and render paragraphs + spacers
+          const rawText = part.value.replace(/\r\n/g, "\n");
+          const lines = rawText.split("\n");
+          const blocks: React.ReactNode[] = [];
+          let paraLines: string[] = [];
+
+          const flushPara = (key: string) => {
+            if (paraLines.length > 0) {
+              const combined = paraLines.join("<br />");
+              if (combined.trim()) {
+                blocks.push(
+                  <div
+                    key={key}
+                    className="text-[#1A1A1A] text-base sm:text-lg leading-[1.9] mb-6 font-normal [&_b]:font-bold [&_i]:italic [&_a]:text-emerald-700 [&_a]:underline [&_h2]:text-2xl [&_h2]:font-bold [&_h2]:my-4 [&_h3]:text-xl [&_h3]:font-bold [&_h3]:my-3 [&_blockquote]:border-l-4 [&_blockquote]:border-emerald-500 [&_blockquote]:pl-4 [&_blockquote]:italic [&_blockquote]:my-3 [&_li]:ml-5 [&_li]:list-disc"
+                    dangerouslySetInnerHTML={{ __html: mdToHtml(combined) }}
+                  />
+                );
+              }
+              paraLines = [];
+            }
+          };
+
+          lines.forEach((line, li) => {
+            if (line.trim() === "") {
+              if (paraLines.length > 0) {
+                // First blank line after text → flush paragraph
+                flushPara(`${idx}-p-${li}`);
+              } else {
+                // Consecutive blank line → section gap spacer
+                blocks.push(<div key={`${idx}-gap-${li}`} className="mb-10 select-none" aria-hidden="true" />);
+              }
+            } else {
+              paraLines.push(line);
+            }
+          });
+          flushPara(`${idx}-p-end`);
+
+          return <div key={idx}>{blocks}</div>;
         })}
       </div>
     );
@@ -1689,6 +2127,66 @@ function EditorialDashboardContent() {
             </button>
 
             <button
+              onClick={() => handleTabChange("authors")}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
+                activeTab === "authors"
+                  ? "bg-[#040706] text-white shadow-xs"
+                  : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+              }`}
+            >
+              <Users className="w-4 h-4 text-blue-500 shrink-0" />
+              <span>Author Roster</span>
+            </button>
+
+            <button
+              onClick={() => handleTabChange("catalog")}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
+                activeTab === "catalog"
+                  ? "bg-[#040706] text-white shadow-xs"
+                  : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+              }`}
+            >
+              <BookOpen className="w-4 h-4 text-emerald-500 shrink-0" />
+              <span>Published Catalog</span>
+            </button>
+
+            <button
+              onClick={() => handleTabChange("categories")}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
+                activeTab === "categories"
+                  ? "bg-[#040706] text-white shadow-xs"
+                  : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+              }`}
+            >
+              <Tag className="w-4 h-4 text-purple-500 shrink-0" />
+              <span>Story Categories</span>
+            </button>
+
+            <button
+              onClick={() => handleTabChange("editors-note")}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
+                activeTab === "settings" || activeTab === "editors-note"
+                  ? "bg-[#040706] text-white shadow-xs"
+                  : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+              }`}
+            >
+              <FileText className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>Home Page Editor's Note</span>
+            </button>
+
+            <button
+              onClick={() => handleTabChange("notifications")}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
+                activeTab === "notifications"
+                  ? "bg-[#040706] text-white shadow-xs"
+                  : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+              }`}
+            >
+              <Bell className="w-4 h-4 text-indigo-500 shrink-0" />
+              <span>Editorial Alerts</span>
+            </button>
+
+            <button
               onClick={() => handleTabChange("reports")}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
                 activeTab === "reports"
@@ -1710,66 +2208,6 @@ function EditorialDashboardContent() {
             >
               <Mail className="w-4 h-4 text-emerald-400 shrink-0" />
               <span>Contact Inquiries</span>
-            </button>
-
-            <button
-              onClick={() => handleTabChange("catalog")}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
-                activeTab === "catalog"
-                  ? "bg-[#040706] text-white shadow-xs"
-                  : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
-              }`}
-            >
-              <BookOpen className="w-4 h-4 text-emerald-500 shrink-0" />
-              <span>Published Catalog</span>
-            </button>
-
-            <button
-              onClick={() => handleTabChange("authors")}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
-                activeTab === "authors"
-                  ? "bg-[#040706] text-white shadow-xs"
-                  : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
-              }`}
-            >
-              <Users className="w-4 h-4 text-blue-500 shrink-0" />
-              <span>Author Roster</span>
-            </button>
-
-            <button
-              onClick={() => handleTabChange("categories")}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
-                activeTab === "categories"
-                  ? "bg-[#040706] text-white shadow-xs"
-                  : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
-              }`}
-            >
-              <Tag className="w-4 h-4 text-purple-500 shrink-0" />
-              <span>Story Categories</span>
-            </button>
-
-            <button
-              onClick={() => handleTabChange("notifications")}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
-                activeTab === "notifications"
-                  ? "bg-[#040706] text-white shadow-xs"
-                  : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
-              }`}
-            >
-              <Bell className="w-4 h-4 text-indigo-500 shrink-0" />
-              <span>Editorial Alerts</span>
-            </button>
-
-            <button
-              onClick={() => handleTabChange("editors-note")}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
-                activeTab === "settings" || activeTab === "editors-note"
-                  ? "bg-[#040706] text-white shadow-xs"
-                  : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
-              }`}
-            >
-              <FileText className="w-4 h-4 text-emerald-400 shrink-0" />
-              <span>Home Page Editor's Note</span>
             </button>
 
             <button
@@ -1831,6 +2269,18 @@ function EditorialDashboardContent() {
               <Archive className="w-4 h-4 text-violet-500 shrink-0" />
               <span>Masika (Digital Editions)</span>
             </button>
+
+            <button
+              onClick={() => handleTabChange("reviews")}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
+                activeTab === "reviews"
+                  ? "bg-[#040706] text-white shadow-xs"
+                  : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+              }`}
+            >
+              <MessageSquare className="w-4 h-4 text-emerald-500 shrink-0" />
+              <span>Reader Reviews (Homepage)</span>
+            </button>
           </nav>
         </div>
 
@@ -1857,7 +2307,7 @@ function EditorialDashboardContent() {
       </aside>
 
       {/* Main Content Area */}
-      <main className="flex-1 p-4 sm:p-6 lg:p-10 max-w-7xl mx-auto w-full text-left">
+      <main className="w-full flex-1 min-w-0 p-4 sm:p-6 lg:p-10 max-w-7xl mx-auto text-left space-y-8">
 
         {/* Global Feedback Banner */}
         {feedbackMessage && (
@@ -1873,8 +2323,8 @@ function EditorialDashboardContent() {
         )}
 
         {/* Dynamic Section Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
-          <div>
+        <div className="space-y-2 mb-8 pb-6 border-b border-gray-200/60">
+          <div className="flex items-center justify-between gap-4">
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-950 tracking-tight">
               {activeTab === "queue" && "Pending Review Queue"}
               {activeTab === "reports" && "Reported Content Moderation"}
@@ -1885,32 +2335,41 @@ function EditorialDashboardContent() {
               {activeTab === "settings" && "Home Page Editor's Note"}
               {activeTab === "communities" && "Community Moderation & Management"}
               {activeTab === "events" && "Events & Workshops Management"}
+              {activeTab === "books" && "Upcoming Book Releases Management"}
+              {activeTab === "media" && "Media Showcase Management"}
+              {activeTab === "editions" && "Previous Editions (Flipbook Archive)"}
+              {activeTab === "reviews" && "Reader Reviews & Comments"}
             </h1>
-            <p className="text-xs text-gray-500 font-medium">
-              {activeTab === "queue" && "Review pending author submissions and approve or reject content."}
-              {activeTab === "reports" && "Investigate reader flag reports submitted against stories and comments."}
-              {activeTab === "catalog" && "Browse all active stories currently published on AKAM Digital."}
-              {activeTab === "authors" && "Manage all registered platform users, writers, and role permissions."}
-              {activeTab === "categories" && "Manage category labels, Malayalam translations, and genre classifications."}
-              {activeTab === "notifications" && "Event logs for story submissions, approvals, and rejections."}
-              {activeTab === "settings" && "Update the featured Editor's Note title and message displayed on the main homepage."}
-              {activeTab === "communities" && "Moderate community posts and comments, lock threads, pin posts, and inspect community rosters."}
-              {activeTab === "events" && "Manage upcoming reading sessions, discussions, workshops, and past archives."}
-            </p>
+
+            {/* Quick Action Button */}
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              icon={<RefreshCw className="w-3.5 h-3.5" />}
+              iconPosition="left"
+              onClick={() => checkAuthAndFetchData()}
+              className="border border-gray-300 shadow-xs cursor-pointer shrink-0"
+            >
+              Refresh Data
+            </Button>
           </div>
 
-          {/* Quick Action Button */}
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            icon={<RefreshCw className="w-3.5 h-3.5" />}
-            iconPosition="left"
-            onClick={() => checkAuthAndFetchData()}
-            className="self-start sm:self-auto border border-gray-300 shadow-xs cursor-pointer w-full sm:w-auto justify-center"
-          >
-            Refresh Data
-          </Button>
+          <p className="text-xs sm:text-sm text-gray-500 font-medium leading-relaxed max-w-3xl">
+            {activeTab === "queue" && "Review pending author submissions and approve or reject content."}
+            {activeTab === "reports" && "Investigate reader flag reports submitted against stories and comments."}
+            {activeTab === "catalog" && "Browse all active stories currently published on AKAM Digital."}
+            {activeTab === "authors" && "Manage all registered platform users, writers, and role permissions."}
+            {activeTab === "categories" && "Manage category labels, Malayalam translations, and genre classifications."}
+            {activeTab === "notifications" && "Event logs for story submissions, approvals, and rejections."}
+            {activeTab === "settings" && "Update the featured Editor's Note title and message displayed on the main homepage."}
+            {activeTab === "communities" && "Moderate community posts and comments, lock threads, pin posts, and inspect community rosters."}
+            {activeTab === "events" && "Manage upcoming reading sessions, discussions, workshops, and past archives."}
+            {activeTab === "books" && "Manage upcoming print and digital book releases."}
+            {activeTab === "media" && "Manage YouTube video interviews and podcast media links."}
+            {activeTab === "editions" && "Upload and publish monthly digital issue PDFs."}
+            {activeTab === "reviews" && "Curate reader comments and feature select reviews on the main website homepage."}
+          </p>
         </div>
 
         {/* TAB 1: PENDING QUEUE */}
@@ -2547,7 +3006,7 @@ function EditorialDashboardContent() {
 
         {/* TAB 3: USER & AUTHOR ROSTER */}
         {activeTab === "authors" && (
-          <div className="space-y-6">
+          <div className="space-y-6 font-poppins">
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
               <div className="relative max-w-md w-full">
                 <Search className="absolute left-3.5 top-3 w-4 h-4 text-gray-400" />
@@ -2560,9 +3019,23 @@ function EditorialDashboardContent() {
                 />
               </div>
 
-              <span className="text-xs font-semibold text-gray-700 bg-white border border-gray-200 px-4 py-2 rounded-2xl shadow-xs self-start sm:self-auto">
-                Total Registered Users: {authorsMeta.total || allUsers.length}
-              </span>
+              <div className="flex items-center gap-3 flex-wrap justify-between sm:justify-end">
+                <Button
+                  type="button"
+                  variant="primary"
+                  size="sm"
+                  icon={<UserPlus className="w-4 h-4" />}
+                  iconPosition="left"
+                  onClick={() => setRegisterAuthorModalOpen(true)}
+                  className="shadow-xs text-xs font-semibold px-4 py-2.5 cursor-pointer"
+                >
+                  + Register New Author
+                </Button>
+
+                <span className="text-xs font-semibold text-gray-700 bg-white border border-gray-200 px-4 py-2.5 rounded-2xl shadow-xs">
+                  Total Registered Users: {authorsMeta.total || allUsers.length}
+                </span>
+              </div>
             </div>
 
             {/* Mobile Card List View (< 640px) */}
@@ -2571,7 +3044,7 @@ function EditorialDashboardContent() {
                 <div key={u.id} className="bg-white border border-gray-200 rounded-2xl p-4 shadow-xs space-y-3">
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className="relative w-9 h-9 rounded-full overflow-hidden bg-gray-900 text-white flex items-center justify-center font-bold text-xs shrink-0">
+                      <div className="relative w-10 h-10 rounded-full overflow-hidden bg-gray-900 text-white flex items-center justify-center font-bold text-xs shrink-0 border border-gray-200">
                         {u.avatarUrl ? (
                           <Image src={u.avatarUrl} alt="Avatar" fill className="object-cover" unoptimized />
                         ) : (
@@ -2583,45 +3056,92 @@ function EditorialDashboardContent() {
                         <p className="text-xs text-gray-500 truncate">{u.email}</p>
                       </div>
                     </div>
-                    <span
-                      className={`font-bold text-[10px] uppercase tracking-wider px-2.5 py-1 rounded-xl shadow-xs shrink-0 ${
+                    <select
+                      value={u.role}
+                      onChange={(e) => handleRoleChange(u.id, e.target.value)}
+                      className={`font-bold text-[10px] uppercase tracking-wider px-2.5 py-1 rounded-xl outline-none cursor-pointer shadow-xs shrink-0 border ${
                         u.role === "ADMIN"
-                          ? "bg-rose-100 text-rose-800"
+                          ? "bg-rose-100 text-rose-800 border-rose-300"
                           : u.role === "EDITOR"
-                          ? "bg-amber-100 text-amber-800"
+                          ? "bg-amber-100 text-amber-800 border-amber-300"
                           : u.role === "AUTHOR"
-                          ? "bg-[#E4F953] text-[#040706]"
-                          : "bg-gray-100 text-gray-700"
+                          ? "bg-[#E4F953] text-[#040706] border-lime-400"
+                          : "bg-gray-100 text-gray-700 border-gray-300"
                       }`}
                     >
-                      {u.role}
-                    </span>
+                      <option value="READER">READER</option>
+                      <option value="AUTHOR">AUTHOR</option>
+                      <option value="EDITOR">EDITOR</option>
+                      <option value="ADMIN">ADMIN</option>
+                    </select>
                   </div>
-                  <div className="pt-2 border-t border-gray-100 flex items-center justify-between gap-3">
-                    <button
-                      type="button"
-                      onClick={() => handleToggleFeaturedAuthor(u.id)}
-                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer shadow-xs ${
-                        u.isFeatured
-                          ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
-                          : "bg-gray-100 text-gray-600 border border-gray-200"
-                      }`}
-                    >
-                      <Sparkles className={`w-3.5 h-3.5 ${u.isFeatured ? "text-emerald-600 fill-emerald-600" : "text-gray-400"}`} />
-                      {u.isFeatured ? "Masika Featured" : "+ Feature"}
-                    </button>
+                  <div className="pt-2 border-t border-gray-100 flex flex-wrap items-center justify-between gap-2.5">
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-semibold text-gray-700">Role:</span>
-                      <select
-                        value={u.role}
-                        onChange={(e) => handleRoleChange(u.id, e.target.value)}
-                        className="px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-800 outline-none focus:border-black cursor-pointer shadow-xs"
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        icon={<Edit3 className="w-3.5 h-3.5" />}
+                        iconPosition="left"
+                        onClick={() => {
+                          setStoryAuthorTarget(u);
+                          setStoryStudioTitle("");
+                          setStoryStudioContent("");
+                          setStoryStudioCoverFile(null);
+                          setStoryStudioCoverPreview(null);
+                          setAuthorStoryStudioOpen(true);
+                        }}
+                        className="text-xs px-3 py-1.5 border border-gray-300 font-semibold cursor-pointer shadow-2xs"
                       >
-                        <option value="READER">READER</option>
-                        <option value="AUTHOR">AUTHOR</option>
-                        <option value="EDITOR">EDITOR</option>
-                        <option value="ADMIN">ADMIN</option>
-                      </select>
+                        + Write Story
+                      </Button>
+                      <button
+                        type="button"
+                        onClick={() => handleToggleFeaturedAuthor(u.id)}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer shadow-xs ${
+                          u.isFeatured
+                            ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                            : "bg-gray-100 text-gray-600 border border-gray-200"
+                        }`}
+                      >
+                        <Sparkles className={`w-3.5 h-3.5 ${u.isFeatured ? "text-emerald-600 fill-emerald-600" : "text-gray-400"}`} />
+                        {u.isFeatured ? "Featured" : "+ Feature"}
+                      </button>
+                    </div>
+                    
+                    <div className="flex items-center gap-1.5 ml-auto">
+                      <span className="text-xs font-semibold text-gray-600">Priority:</span>
+                      <input
+                        type="number"
+                        min="0"
+                        id={`mobile-priority-input-${u.id}`}
+                        defaultValue={u.sortOrder ?? 0}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            const val = parseInt((e.target as HTMLInputElement).value, 10);
+                            if (!isNaN(val)) {
+                              handleSortOrderChange(u.id, val);
+                            }
+                          }
+                        }}
+                        className="w-14 px-2 py-1 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-center text-gray-900 outline-none focus:border-black shadow-xs"
+                      />
+                      <button
+                        type="button"
+                        title="Save Priority"
+                        onClick={() => {
+                          const input = document.getElementById(`mobile-priority-input-${u.id}`) as HTMLInputElement;
+                          if (input) {
+                            const val = parseInt(input.value, 10);
+                            if (!isNaN(val)) {
+                              handleSortOrderChange(u.id, val);
+                            }
+                          }
+                        }}
+                        className="p-1.5 bg-gray-100 hover:bg-black hover:text-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 transition cursor-pointer shadow-xs"
+                      >
+                        <Save className="w-3.5 h-3.5" />
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -2630,16 +3150,17 @@ function EditorialDashboardContent() {
 
             {/* Desktop Table View (>= 640px) */}
             <div className="hidden sm:block bg-white border border-gray-200 rounded-[28px] overflow-hidden shadow-xs">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse min-w-[650px]">
+              <div className="overflow-x-auto w-full">
+                <table className="w-full text-left text-xs border-collapse min-w-[1100px]">
                   <thead>
-                    <tr className="bg-gray-50 border-b border-gray-200 text-gray-500 font-semibold uppercase tracking-wider">
-                      <th className="py-4 px-6">User</th>
-                      <th className="py-4 px-6">Email Address</th>
-                      <th className="py-4 px-6">Role Tier</th>
-                      <th className="py-4 px-6">Masika Featured</th>
-                      <th className="py-4 px-6">Joined Date</th>
-                      <th className="py-4 px-6 text-right">Update Role</th>
+                    <tr className="bg-gray-50 border-b border-gray-200 text-gray-500 font-semibold uppercase tracking-wider whitespace-nowrap">
+                      <th className="py-4 px-6 min-w-[200px]">User</th>
+                      <th className="py-4 px-6 min-w-[220px]">Email Address</th>
+                      <th className="py-4 px-6 min-w-[140px]">Role Tier</th>
+                      <th className="py-4 px-6 min-w-[170px]">Masika Featured</th>
+                      <th className="py-4 px-6 min-w-[130px]">Priority (#)</th>
+                      <th className="py-4 px-6 min-w-[120px]">Joined Date</th>
+                      <th className="py-4 px-6 min-w-[160px] text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 text-gray-800">
@@ -2647,31 +3168,36 @@ function EditorialDashboardContent() {
                       <tr key={u.id} className="hover:bg-gray-50/80 transition-colors">
                         <td className="py-4 px-6 font-semibold text-gray-900">
                           <div className="flex items-center gap-3">
-                            <div className="relative w-8 h-8 rounded-full overflow-hidden bg-gray-900 text-white flex items-center justify-center font-bold text-xs shrink-0">
+                            <div className="relative w-8 h-8 rounded-full overflow-hidden bg-gray-900 text-white flex items-center justify-center font-bold text-xs shrink-0 border border-gray-200">
                               {u.avatarUrl ? (
                                 <Image src={u.avatarUrl} alt="Avatar" fill className="object-cover" unoptimized />
                               ) : (
                                 <span>{(u.name || u.email)[0].toUpperCase()}</span>
                               )}
                             </div>
-                            <span className="truncate max-w-[150px]">{u.name || "No name set"}</span>
+                            <span className="truncate max-w-[160px] font-bold">{u.name || "No name set"}</span>
                           </div>
                         </td>
                         <td className="py-4 px-6 text-gray-600 font-medium">{u.email}</td>
-                        <td className="py-4 px-6">
-                          <span
-                            className={`font-bold text-[10px] uppercase tracking-wider px-3 py-1 rounded-xl shadow-xs whitespace-nowrap ${
+                        <td className="py-4 px-6 whitespace-nowrap">
+                          <select
+                            value={u.role}
+                            onChange={(e) => handleRoleChange(u.id, e.target.value)}
+                            className={`font-bold text-[10px] uppercase tracking-wider px-3 py-1.5 rounded-xl border outline-none cursor-pointer shadow-xs transition-all ${
                               u.role === "ADMIN"
-                                ? "bg-rose-100 text-rose-800"
+                                ? "bg-rose-100 text-rose-800 border-rose-300"
                                 : u.role === "EDITOR"
-                                ? "bg-amber-100 text-amber-800"
+                                ? "bg-amber-100 text-amber-800 border-amber-300"
                                 : u.role === "AUTHOR"
-                                ? "bg-[#E4F953] text-[#040706]"
-                                : "bg-gray-100 text-gray-700"
+                                ? "bg-[#E4F953] text-[#040706] border-lime-400"
+                                : "bg-gray-100 text-gray-700 border-gray-300"
                             }`}
                           >
-                            {u.role}
-                          </span>
+                            <option value="READER">READER</option>
+                            <option value="AUTHOR">AUTHOR</option>
+                            <option value="EDITOR">EDITOR</option>
+                            <option value="ADMIN">ADMIN</option>
+                          </select>
                         </td>
                         <td className="py-4 px-6 whitespace-nowrap">
                           <button
@@ -2687,20 +3213,63 @@ function EditorialDashboardContent() {
                             {u.isFeatured ? "Featured Author" : "+ Feature Author"}
                           </button>
                         </td>
+                        <td className="py-4 px-6 whitespace-nowrap">
+                          <div className="flex items-center gap-1.5">
+                            <input
+                              type="number"
+                              min="0"
+                              id={`priority-input-${u.id}`}
+                              defaultValue={u.sortOrder ?? 0}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  const val = parseInt((e.target as HTMLInputElement).value, 10);
+                                  if (!isNaN(val)) {
+                                    handleSortOrderChange(u.id, val);
+                                  }
+                                }
+                              }}
+                              className="w-14 px-2 py-1.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-center text-gray-900 outline-none focus:border-black shadow-xs"
+                            />
+                            <button
+                              type="button"
+                              title="Save Priority"
+                              onClick={() => {
+                                const input = document.getElementById(`priority-input-${u.id}`) as HTMLInputElement;
+                                if (input) {
+                                  const val = parseInt(input.value, 10);
+                                  if (!isNaN(val)) {
+                                    handleSortOrderChange(u.id, val);
+                                  }
+                                }
+                              }}
+                              className="p-1.5 bg-gray-100 hover:bg-black hover:text-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 transition cursor-pointer shadow-xs flex items-center justify-center"
+                            >
+                              <Save className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
                         <td className="py-4 px-6 text-gray-500 whitespace-nowrap">
                           {u.createdAt ? new Date(u.createdAt).toLocaleDateString() : "N/A"}
                         </td>
                         <td className="py-4 px-6 text-right whitespace-nowrap">
-                          <select
-                            value={u.role}
-                            onChange={(e) => handleRoleChange(u.id, e.target.value)}
-                            className="px-3.5 py-1.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-800 outline-none focus:border-black cursor-pointer shadow-xs"
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            icon={<Edit3 className="w-3.5 h-3.5" />}
+                            iconPosition="left"
+                            onClick={() => {
+                              setStoryAuthorTarget(u);
+                              setStoryStudioTitle("");
+                              setStoryStudioContent("");
+                              setStoryStudioCoverFile(null);
+                              setStoryStudioCoverPreview(null);
+                              setAuthorStoryStudioOpen(true);
+                            }}
+                            className="border border-gray-300 text-xs px-3.5 py-1.5 font-semibold cursor-pointer shadow-xs hover:bg-gray-100 inline-flex items-center gap-1.5 whitespace-nowrap"
                           >
-                            <option value="READER">READER</option>
-                            <option value="AUTHOR">AUTHOR</option>
-                            <option value="EDITOR">EDITOR</option>
-                            <option value="ADMIN">ADMIN</option>
-                          </select>
+                            + Write Story
+                          </Button>
                         </td>
                       </tr>
                     ))}
@@ -2790,9 +3359,81 @@ function EditorialDashboardContent() {
 
         {/* TAB 5: NOTIFICATIONS */}
         {activeTab === "notifications" && (
-          <div className="bg-white border border-gray-200 rounded-[28px] p-6 sm:p-8 shadow-xs">
-            <h3 className="text-xl font-bold text-gray-900 mb-2">Editorial Logs & Event Stream</h3>
-            <p className="text-xs text-gray-500 mb-6">Real-time alerts triggered on submission, approval, or rejection.</p>
+          <div className="bg-white border border-gray-200 rounded-[28px] p-6 sm:p-8 shadow-xs font-poppins space-y-6">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-gray-100">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-xl font-bold text-gray-950">Editorial Logs & Event Stream</h3>
+                  {unreadNotificationCount > 0 && (
+                    <span className="bg-emerald-500 text-white text-[10px] font-extrabold px-2.5 py-0.5 rounded-full">
+                      {unreadNotificationCount} UNREAD
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-gray-500 mt-1">Real-time alerts triggered on story submission, approval, or rejection.</p>
+              </div>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={async () => {
+                  await apiFetch(`${API_BASE_URL}/notifications/read-all`, { method: "PATCH" });
+                  fetchDashboardData("notifications");
+                }}
+                className="text-xs font-semibold border border-gray-300 shadow-xs cursor-pointer"
+              >
+                Mark All as Read
+              </Button>
+            </div>
+
+            {notificationsList.length === 0 ? (
+              <div className="py-12 text-center text-gray-400">
+                <Bell className="w-10 h-10 mx-auto text-gray-300 mb-3" />
+                <p className="text-sm font-semibold text-gray-700">No Editorial Alerts Yet</p>
+                <p className="text-xs text-gray-400 mt-1">Submission and review logs will appear here when authors submit content.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {notificationsList.map((item) => (
+                  <div
+                    key={item.id}
+                    className={`p-4 rounded-2xl border transition-all flex items-start justify-between gap-4 ${
+                      !item.read ? "bg-emerald-50/50 border-emerald-200" : "bg-gray-50/70 border-gray-200/80"
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${
+                        item.type === "STORY_SUBMITTED"
+                          ? "bg-amber-100 text-amber-700"
+                          : item.type === "STORY_APPROVED"
+                          ? "bg-emerald-100 text-emerald-700"
+                          : "bg-rose-100 text-rose-700"
+                      }`}>
+                        <Bell className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-gray-900">{item.message}</p>
+                        <p className="text-[11px] text-gray-400 mt-1">
+                          {new Date(item.createdAt).toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+                    {!item.read && (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await apiFetch(`${API_BASE_URL}/notifications/${item.id}/read`, { method: "PATCH" });
+                          fetchDashboardData("notifications");
+                        }}
+                        className="text-[11px] font-semibold text-emerald-700 hover:underline shrink-0 cursor-pointer"
+                      >
+                        Mark Read
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -3213,6 +3854,17 @@ function EditorialDashboardContent() {
                       {ev.day && ev.monthYear && (
                         <div>🗓️ {ev.day} {ev.monthYear}</div>
                       )}
+                      {ev.videoUrl && (
+                        <a
+                          href={ev.videoUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 text-emerald-700 hover:text-emerald-900 font-semibold underline underline-offset-2 transition-colors"
+                        >
+                          🎥 View Recording
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
+                      )}
                     </div>
                   </div>
 
@@ -3604,7 +4256,6 @@ function EditorialDashboardContent() {
             />
           </div>
         )}
-      </main>
 
       {/* Add/Edit Edition Modal */}
       {showAddEditionModal && (
@@ -3755,6 +4406,293 @@ function EditorialDashboardContent() {
         </div>
       )}
 
+      {/* Reader Reviews Management Tab Panel */}
+      {activeTab === "reviews" && (
+        <div className="space-y-6 font-poppins">
+          {/* Top Showcase Header Card */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-white p-6 sm:p-8 rounded-[28px] border border-gray-200/80 shadow-xs">
+            <div>
+              <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider inline-flex items-center gap-1.5 shadow-2xs">
+                <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                Reader Curation & Testimonials
+              </span>
+              <h2 className="text-2xl font-bold text-gray-950 mt-2 tracking-tight">Reader Reviews & Comments</h2>
+              <p className="text-xs text-gray-500 mt-1 max-w-xl">Curate reader comments and feature select reviews on the main website homepage slider.</p>
+            </div>
+
+            <div className="flex items-center gap-3 shrink-0">
+              <span className="text-xs font-semibold text-gray-700 bg-gray-50 border border-gray-200/80 px-4 py-2.5 rounded-2xl shadow-xs">
+                Total Reviews: <strong className="text-gray-900">{reviewsMeta.total || reviewsList.length}</strong>
+              </span>
+            </div>
+          </div>
+
+          {/* Search & Filter Toolbar */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
+            <div className="relative max-w-md w-full">
+              <Search className="absolute left-3.5 top-3 w-4 h-4 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search reader reviews by content, story title, or reviewer..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-2xl text-xs font-medium outline-none focus:border-black shadow-xs transition-all"
+              />
+            </div>
+
+            {/* Status Filter Segment Control */}
+            <div className="flex items-center gap-1.5 bg-gray-100/90 p-1.5 rounded-2xl border border-gray-200/80 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  setReviewFeaturedFilter("ALL");
+                  setCurrentPage(1);
+                }}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  reviewFeaturedFilter === "ALL"
+                    ? "bg-white text-gray-950 shadow-xs"
+                    : "text-gray-600 hover:text-gray-950"
+                }`}
+              >
+                All Reviews
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setReviewFeaturedFilter("FEATURED");
+                  setCurrentPage(1);
+                }}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  reviewFeaturedFilter === "FEATURED"
+                    ? "bg-emerald-600 text-white shadow-xs"
+                    : "text-gray-600 hover:text-gray-950"
+                }`}
+              >
+                <Sparkles className="w-3.5 h-3.5" /> Featured
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setReviewFeaturedFilter("HIDDEN");
+                  setCurrentPage(1);
+                }}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  reviewFeaturedFilter === "HIDDEN"
+                    ? "bg-white text-gray-950 shadow-xs"
+                    : "text-gray-600 hover:text-gray-950"
+                }`}
+              >
+                Hidden
+              </button>
+            </div>
+          </div>
+
+          {/* Reviews List / Table */}
+          {loading ? (
+            <div className="py-20 flex justify-center items-center">
+              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-black"></div>
+            </div>
+          ) : reviewsList.length === 0 ? (
+            <div className="bg-white rounded-[28px] p-12 text-center border border-gray-200/80 shadow-xs">
+              <MessageSquare className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+              <h3 className="text-base font-bold text-gray-900">No Reader Reviews Found</h3>
+              <p className="text-xs text-gray-500 max-w-sm mx-auto mt-1">Reader comments posted on stories will appear here for editorial curation and homepage featuring.</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {/* Mobile Card List View (< 640px) */}
+              <div className="block sm:hidden space-y-4">
+                {reviewsList.map((rev) => (
+                  <div key={rev.id} className="bg-white border border-gray-200 rounded-2xl p-4 shadow-xs space-y-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="relative w-8 h-8 rounded-full overflow-hidden bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-xs shrink-0 border border-emerald-200">
+                          {rev.userAvatarUrl ? (
+                            <img
+                              src={rev.userAvatarUrl}
+                              alt="Avatar"
+                              className="w-full h-full object-cover rounded-full"
+                              onError={(e) => {
+                                const el = e.currentTarget;
+                                el.style.display = "none";
+                                const parent = el.parentElement;
+                                if (parent && !parent.querySelector("span")) {
+                                  const sp = document.createElement("span");
+                                  sp.textContent = (rev.userName || rev.userEmail || "R")[0].toUpperCase();
+                                  parent.appendChild(sp);
+                                }
+                              }}
+                            />
+                          ) : (
+                            <span>{(rev.userName || rev.userEmail || "R")[0].toUpperCase()}</span>
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <h4 className="font-bold text-gray-900 text-xs truncate">{rev.userName || rev.userEmail}</h4>
+                          <p className="text-[10px] text-gray-500 truncate">{rev.storyTitle}</p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleToggleFeaturedReview(rev.id)}
+                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[10px] font-semibold shadow-xs shrink-0 transition-all cursor-pointer ${
+                          rev.isFeatured
+                            ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                            : "bg-gray-100 text-gray-600 border border-gray-200"
+                        }`}
+                      >
+                        <Sparkles className={`w-3 h-3 ${rev.isFeatured ? "text-emerald-600 fill-emerald-600" : "text-gray-400"}`} />
+                        {rev.isFeatured ? "Featured" : "Hidden"}
+                      </button>
+                    </div>
+
+                    <div
+                      onClick={() => setSelectedReview(rev)}
+                      className="text-xs italic text-gray-800 bg-gray-50 p-3 rounded-xl border border-gray-100 cursor-pointer hover:bg-gray-100/70 transition"
+                    >
+                      &ldquo;{rev.content}&rdquo;
+                    </div>
+
+                    <div className="pt-2 border-t border-gray-100 flex items-center justify-between text-[11px] text-gray-500">
+                      <span>{new Date(rev.createdAt).toLocaleDateString()}</span>
+                      <div className="flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedReview(rev)}
+                          className="text-gray-700 hover:text-black font-semibold"
+                        >
+                          View
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteReviewComment(rev.id)}
+                          className="text-rose-600 hover:underline font-semibold"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Desktop Table View (>= 640px) */}
+              <div className="hidden sm:block bg-white border border-gray-200 rounded-[28px] overflow-hidden shadow-xs">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs border-collapse min-w-[700px]">
+                    <thead>
+                      <tr className="bg-gray-50 border-b border-gray-200 text-gray-500 font-semibold uppercase tracking-wider">
+                        <th className="py-4 px-6">Reviewer</th>
+                        <th className="py-4 px-6">Story Title</th>
+                        <th className="py-4 px-6">Comment / Review Content</th>
+                        <th className="py-4 px-6">Homepage Status</th>
+                        <th className="py-4 px-6">Date</th>
+                        <th className="py-4 px-6 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 text-gray-800">
+                      {reviewsList.map((rev) => (
+                        <tr key={rev.id} className="hover:bg-gray-50/80 transition-colors">
+                          <td className="py-4 px-6 font-semibold text-gray-900">
+                            <div className="flex items-center gap-3">
+                              <div className="relative w-8 h-8 rounded-full overflow-hidden bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-xs shrink-0 border border-emerald-200">
+                                {rev.userAvatarUrl ? (
+                                  <img
+                                    src={rev.userAvatarUrl}
+                                    alt="Avatar"
+                                    className="w-full h-full object-cover rounded-full"
+                                    onError={(e) => {
+                                      const el = e.currentTarget;
+                                      el.style.display = "none";
+                                      const parent = el.parentElement;
+                                      if (parent && !parent.querySelector("span")) {
+                                        const sp = document.createElement("span");
+                                        sp.textContent = (rev.userName || rev.userEmail || "R")[0].toUpperCase();
+                                        parent.appendChild(sp);
+                                      }
+                                    }}
+                                  />
+                                ) : (
+                                  <span>{(rev.userName || rev.userEmail || "R")[0].toUpperCase()}</span>
+                                )}
+                              </div>
+                              <div className="min-w-0 max-w-[150px]">
+                                <p className="truncate font-bold text-gray-900">{rev.userName || "Reader"}</p>
+                                <p className="truncate text-[10px] text-gray-500 font-normal">{rev.userEmail}</p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-4 px-6 font-medium text-gray-700 max-w-[180px]">
+                            <Link
+                              href={`/stories/${rev.storySlug || rev.storyId}`}
+                              target="_blank"
+                              className="font-semibold text-gray-900 hover:text-emerald-700 transition flex items-center gap-1 group/link"
+                            >
+                              <span className="line-clamp-2 leading-snug">{rev.storyTitle}</span>
+                              <ExternalLink className="w-3 h-3 text-gray-400 opacity-0 group-hover/link:opacity-100 transition-opacity shrink-0" />
+                            </Link>
+                          </td>
+                          <td className="py-4 px-6 max-w-[320px]">
+                            <div
+                              onClick={() => setSelectedReview(rev)}
+                              className="italic text-gray-800 line-clamp-2 leading-relaxed bg-gray-50/80 p-2.5 rounded-xl border border-gray-100 cursor-pointer hover:bg-gray-100/80 transition"
+                              title="Click to view full comment"
+                            >
+                              &ldquo;{rev.content}&rdquo;
+                            </div>
+                          </td>
+                          <td className="py-4 px-6 whitespace-nowrap">
+                            <button
+                              type="button"
+                              onClick={() => handleToggleFeaturedReview(rev.id)}
+                              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer shadow-xs ${
+                                rev.isFeatured
+                                  ? "bg-emerald-100 text-emerald-800 border border-emerald-300 hover:bg-emerald-200"
+                                  : "bg-gray-100 text-gray-600 border border-gray-200 hover:bg-gray-200"
+                              }`}
+                            >
+                              <Sparkles className={`w-3.5 h-3.5 ${rev.isFeatured ? "text-emerald-600 fill-emerald-600" : "text-gray-400"}`} />
+                              {rev.isFeatured ? "★ Featured" : "☆ Hidden"}
+                            </button>
+                          </td>
+                          <td className="py-4 px-6 text-gray-500 whitespace-nowrap font-medium">
+                            {new Date(rev.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                          </td>
+                          <td className="py-4 px-6 text-right whitespace-nowrap">
+                            <div className="flex items-center justify-end gap-1">
+                              <button
+                                type="button"
+                                onClick={() => setSelectedReview(rev)}
+                                className="p-2 text-gray-500 hover:text-black hover:bg-gray-100 rounded-xl transition cursor-pointer"
+                                title="View Comment Details"
+                              >
+                                <Eye className="w-4 h-4" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteReviewComment(rev.id)}
+                                className="p-2 text-rose-500 hover:bg-rose-50 rounded-xl transition cursor-pointer"
+                                title="Delete Comment"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <PaginationFooter meta={reviewsMeta} onPageChange={handlePageChange} />
+            </div>
+          )}
+        </div>
+      )}
+
+      </main>
+
       {/* Reader Modal */}
       {selectedStory && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs animate-in fade-in">
@@ -3783,8 +4721,13 @@ function EditorialDashboardContent() {
             </div>
 
             {selectedStory.coverImageUrl && (
-              <div className="relative w-full max-w-md mx-auto aspect-[3/4] sm:aspect-[4/5] rounded-[28px] overflow-hidden mb-6 bg-gray-100 border border-gray-200 shadow-md">
-                <Image src={selectedStory.coverImageUrl} alt={selectedStory.title} fill unoptimized className="object-cover" />
+              <div className="w-full max-w-md mx-auto h-64 sm:h-80 rounded-[28px] overflow-hidden mb-6 bg-gray-100 border border-gray-200 shadow-md shrink-0 relative">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={selectedStory.coverImageUrl}
+                  alt={selectedStory.title || "Story Cover"}
+                  className="w-full h-full object-cover"
+                />
               </div>
             )}
 
@@ -4311,6 +5254,7 @@ function EditorialDashboardContent() {
                   setShowArchiveModal(false);
                   setSelectedEventForArchive(null);
                   setArchiveImage("");
+                  setArchiveVideoUrl("");
                 }}
                 className="p-1.5 text-gray-400 hover:text-gray-700 rounded-full hover:bg-gray-100 cursor-pointer"
               >
@@ -4363,6 +5307,25 @@ function EditorialDashboardContent() {
                 )}
               </div>
 
+              {/* Optional Recording Video URL */}
+              <div>
+                <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider">
+                  Event Recording Video URL
+                  <span className="ml-1.5 text-[10px] font-normal text-gray-400 normal-case">(Optional)</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="url"
+                    value={archiveVideoUrl}
+                    onChange={(e) => setArchiveVideoUrl(e.target.value)}
+                    placeholder="https://youtu.be/... or https://youtube.com/watch?v=..."
+                    className="w-full pl-9 pr-4 py-2.5 bg-white border border-gray-200 rounded-2xl text-xs font-medium outline-none focus:border-black shadow-xs transition-all"
+                  />
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">🎥</span>
+                </div>
+                <p className="text-[10px] text-gray-400 mt-1">Paste a YouTube or video recording link for this archived event.</p>
+              </div>
+
               <div className="flex items-center justify-end gap-3 pt-3 border-t border-gray-100">
                 <Button
                   type="button"
@@ -4372,6 +5335,7 @@ function EditorialDashboardContent() {
                     setShowArchiveModal(false);
                     setSelectedEventForArchive(null);
                     setArchiveImage("");
+                    setArchiveVideoUrl("");
                   }}
                   className="border border-gray-300"
                 >
@@ -4658,6 +5622,91 @@ function EditorialDashboardContent() {
         </div>
       )}
 
+      {/* Reader Review Detail Modal */}
+      {selectedReview && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white rounded-[28px] max-w-lg w-full p-6 sm:p-8 space-y-6 shadow-2xl relative border border-gray-200">
+            <div className="flex items-start justify-between gap-4 border-b border-gray-100 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="relative w-10 h-10 rounded-full overflow-hidden bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-sm shrink-0 border border-emerald-200">
+                  {selectedReview.userAvatarUrl ? (
+                    <Image src={selectedReview.userAvatarUrl} alt="Avatar" fill className="object-cover" unoptimized />
+                  ) : (
+                    <span>{(selectedReview.userName || selectedReview.userEmail || "R")[0].toUpperCase()}</span>
+                  )}
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-gray-950">{selectedReview.userName || "Reader Reviewer"}</h3>
+                  <p className="text-xs text-gray-500">{selectedReview.userEmail}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedReview(null)}
+                className="p-1.5 text-gray-400 hover:text-black hover:bg-gray-100 rounded-full transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Associated Story</span>
+                <Link
+                  href={`/stories/${selectedReview.storySlug || selectedReview.storyId}`}
+                  target="_blank"
+                  className="flex items-center gap-1.5 text-sm font-bold text-gray-900 hover:text-emerald-700 hover:underline"
+                >
+                  <BookOpen className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>{selectedReview.storyTitle}</span>
+                  <ExternalLink className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                </Link>
+              </div>
+
+              <div>
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1.5">Review / Comment Content</span>
+                <div className="p-4 bg-gray-50 border border-gray-200 rounded-2xl text-xs sm:text-sm text-gray-900 leading-relaxed italic whitespace-pre-wrap">
+                  &ldquo;{selectedReview.content}&rdquo;
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between text-xs text-gray-500 pt-1">
+                <span>Submitted on: <strong className="text-gray-700">{new Date(selectedReview.createdAt).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</strong></span>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-gray-100">
+              <button
+                type="button"
+                onClick={() => {
+                  handleToggleFeaturedReview(selectedReview.id);
+                  setSelectedReview((prev: any) => prev ? { ...prev, isFeatured: !prev.isFeatured } : null);
+                }}
+                className={`w-full sm:w-auto px-4 py-2.5 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer shadow-xs ${
+                  selectedReview.isFeatured
+                    ? "bg-emerald-100 text-emerald-800 border border-emerald-300 hover:bg-emerald-200"
+                    : "bg-gray-100 text-gray-700 border border-gray-200 hover:bg-gray-200"
+                }`}
+              >
+                <Sparkles className={`w-3.5 h-3.5 ${selectedReview.isFeatured ? "text-emerald-600 fill-emerald-600" : "text-gray-400"}`} />
+                {selectedReview.isFeatured ? "★ Featured on Homepage" : "+ Feature on Homepage"}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  handleDeleteReviewComment(selectedReview.id);
+                  setSelectedReview(null);
+                }}
+                className="w-full sm:w-auto px-4 py-2.5 bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-200 rounded-xl text-xs font-semibold transition cursor-pointer"
+              >
+                Delete Review
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Masika Edition Flipbook Modal */}
       {openFlipbookEdition && (
         <EditionFlipbook
@@ -4666,6 +5715,664 @@ function EditorialDashboardContent() {
           onClose={() => setOpenFlipbookEdition(null)}
         />
       )}
+
+      {/* Register New Author Modal */}
+      {registerAuthorModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs animate-in fade-in font-poppins">
+          <div className="relative w-full max-w-lg bg-white rounded-[28px] p-6 sm:p-8 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-gray-100 mb-6">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-[#E4F953] text-[#040706] flex items-center justify-center font-bold shadow-xs">
+                  <UserPlus className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-gray-950">Register New Author</h3>
+                  <p className="text-xs text-gray-500">Create or elevate an author profile on the AKAM Digital platform.</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setRegisterAuthorModalOpen(false)}
+                className="p-1.5 text-gray-400 hover:text-gray-700 rounded-full hover:bg-gray-100 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateAuthorSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-gray-900 mb-1.5 uppercase tracking-wider">
+                  Author Name <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={authorFormName}
+                  onChange={(e) => setAuthorFormName(e.target.value)}
+                  placeholder="e.g. Madhavan Nair"
+                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-900 outline-none focus:border-black shadow-xs"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-900 mb-1.5 uppercase tracking-wider">
+                  Email Address <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="email"
+                  required
+                  value={authorFormEmail}
+                  onChange={(e) => setAuthorFormEmail(e.target.value)}
+                  placeholder="author@akamdigital.com"
+                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-900 outline-none focus:border-black shadow-xs"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-900 mb-1.5 uppercase tracking-wider">
+                  Author Bio / Summary
+                </label>
+                <textarea
+                  rows={3}
+                  value={authorFormBio}
+                  onChange={(e) => setAuthorFormBio(e.target.value)}
+                  placeholder="Acclaimed novelist, essayist, and contributor to Masika Journal..."
+                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium text-gray-900 outline-none focus:border-black shadow-xs"
+                />
+              </div>
+
+              {/* Avatar Upload */}
+              <div>
+                <label className="block text-xs font-bold text-gray-900 mb-1.5 uppercase tracking-wider">
+                  Profile Avatar Picture
+                </label>
+                <div className="flex items-center gap-3">
+                  {authorFormAvatarPreview ? (
+                    <div className="relative w-12 h-12 rounded-full overflow-hidden border border-gray-300 shadow-xs shrink-0 bg-gray-100">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={authorFormAvatarPreview} alt="Avatar Preview" className="w-full h-full object-cover" />
+                    </div>
+                  ) : (
+                    <div className="w-12 h-12 rounded-full bg-gray-100 border border-gray-200 flex items-center justify-center text-gray-400 font-bold text-sm shrink-0">
+                      {authorFormName ? authorFormName[0].toUpperCase() : "A"}
+                    </div>
+                  )}
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => authorAvatarInputRef.current?.click()}
+                    className="text-xs border border-gray-300 font-semibold cursor-pointer shadow-xs"
+                  >
+                    {authorFormAvatarPreview ? "Change Picture" : "Upload Picture"}
+                  </Button>
+                  <input
+                    ref={authorAvatarInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        const file = e.target.files[0];
+                        setAuthorFormAvatarFile(file);
+                        setAuthorFormAvatarPreview(URL.createObjectURL(file));
+                      }
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2 pt-2 border-t border-gray-100">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="author-featured-checkbox"
+                    checked={authorFormIsFeatured}
+                    onChange={(e) => setAuthorFormIsFeatured(e.target.checked)}
+                    className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                  />
+                  <label htmlFor="author-featured-checkbox" className="text-xs font-bold text-gray-900 cursor-pointer">
+                    ★ Feature Author on Masika Journal Showcase
+                  </label>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-gray-700">Display Priority (#):</span>
+                  <input
+                    type="number"
+                    min="0"
+                    value={authorFormSortOrder}
+                    onChange={(e) => setAuthorFormSortOrder(parseInt(e.target.value, 10) || 0)}
+                    className="w-20 px-3 py-1 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-center text-gray-900 outline-none focus:border-black shadow-xs"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-100">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setRegisterAuthorModalOpen(false)}
+                  className="border border-gray-300"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  size="sm"
+                  disabled={savingAuthor || !authorFormName.trim() || !authorFormEmail.trim()}
+                  className="px-6 py-2.5 text-xs font-semibold cursor-pointer shadow-xs"
+                >
+                  {savingAuthor ? "Registering..." : "Register Author"}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Author Story Creation Studio Modal */}
+      {authorStoryStudioOpen && storyAuthorTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/75 backdrop-blur-xs animate-in fade-in font-poppins">
+          <div className="relative w-full max-w-4xl bg-white rounded-[32px] p-5 sm:p-8 shadow-2xl max-h-[92vh] overflow-y-auto flex flex-col space-y-6">
+            {/* Header */}
+            <div className="flex items-center justify-between pb-4 border-b border-gray-200">
+              <div>
+                <span className="bg-[#E4F953] text-[#040706] font-bold text-[10px] uppercase tracking-wider px-3 py-1 rounded-xl shadow-xs">
+                  AUTHORING STUDIO
+                </span>
+                <h2 className="text-2xl sm:text-3xl font-bold text-gray-950 mt-1">
+                  Draft Story for {storyAuthorTarget.name || storyAuthorTarget.email}
+                </h2>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Write narrative, format paragraphs, upload cover art, and publish on behalf of {storyAuthorTarget.name || storyAuthorTarget.email}.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAuthorStoryStudioOpen(false)}
+                className="p-2 text-gray-400 hover:text-black rounded-full hover:bg-gray-100 cursor-pointer"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            {/* Cover Dropzone */}
+            <div>
+              <label className="block text-xs font-bold text-gray-900 uppercase tracking-wider mb-2">
+                Main Story Cover Image <span className="text-rose-500">*</span>
+              </label>
+              <div
+                className="relative border-2 border-dashed border-gray-200 hover:border-gray-400 rounded-2xl p-4 bg-gray-50/50 flex flex-col items-center justify-center text-center cursor-pointer min-h-[160px] transition-all"
+                onClick={() => authorCoverInputRef.current?.click()}
+              >
+                {storyStudioCoverPreview ? (
+                  <div className="relative w-full max-w-xs h-40 rounded-xl overflow-hidden shadow-xs border border-gray-200 bg-gray-100">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={storyStudioCoverPreview} alt="Cover Preview" className="w-full h-full object-cover" />
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setStoryStudioCoverFile(null);
+                        setStoryStudioCoverPreview(null);
+                      }}
+                      className="absolute top-2 right-2 text-xs py-1 px-2.5 shadow-md bg-white"
+                    >
+                      Change Cover
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center">
+                    <Upload className="w-6 h-6 text-gray-400 mb-2" />
+                    <span className="text-xs font-semibold text-gray-900 mb-0.5">Click to upload story cover image</span>
+                    <span className="text-[11px] text-gray-400">PNG, JPG or WebP up to 5MB</span>
+                  </div>
+                )}
+                <input
+                  ref={authorCoverInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files[0]) {
+                      const file = e.target.files[0];
+                      setStoryStudioCoverFile(file);
+                      setStoryStudioCoverPreview(URL.createObjectURL(file));
+                    }
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Title & Category Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="md:col-span-2">
+                <label className="block text-xs font-bold text-gray-900 uppercase tracking-wider mb-1.5">
+                  Story Title <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Enter a compelling title..."
+                  value={storyStudioTitle}
+                  onChange={(e) => setStoryStudioTitle(e.target.value)}
+                  className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-sm font-semibold text-gray-900 outline-none focus:border-black shadow-xs"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-900 uppercase tracking-wider mb-1.5">
+                  Story Category <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  value={storyStudioCategory}
+                  onChange={(e) => setStoryStudioCategory(e.target.value)}
+                  className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-900 outline-none focus:border-black cursor-pointer shadow-xs"
+                >
+                  <option value="Fiction">Fiction</option>
+                  <option value="Non-Fiction">Non-Fiction</option>
+                  <option value="Poetry">Poetry</option>
+                  <option value="Culture">Culture</option>
+                  <option value="Technology">Technology</option>
+                  <option value="Opinion">Opinion</option>
+                  <option value="Literature">Literature</option>
+                  <option value="General">General</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Editor Toolbar & Canvas */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant={storyStudioActiveTab === "write" ? "primary" : "secondary"}
+                    size="sm"
+                    icon={<Edit3 className="w-3.5 h-3.5" />}
+                    iconPosition="left"
+                    onClick={() => setStoryStudioActiveTab("write")}
+                    className="shadow-xs text-xs cursor-pointer"
+                  >
+                    Write Story
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={storyStudioActiveTab === "preview" ? "primary" : "secondary"}
+                    size="sm"
+                    icon={<Eye className="w-3.5 h-3.5" />}
+                    iconPosition="left"
+                    onClick={() => setStoryStudioActiveTab("preview")}
+                    className="shadow-xs text-xs cursor-pointer"
+                  >
+                    Reader Preview
+                  </Button>
+                </div>
+
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  icon={<ImageIcon className="w-3.5 h-3.5 text-gray-700" />}
+                  iconPosition="left"
+                  onClick={() => authorInlineInputRef.current?.click()}
+                  className="shadow-xs text-xs border border-gray-300 bg-white hover:bg-gray-50 text-gray-800 cursor-pointer"
+                >
+                  Insert Inline Image
+                </Button>
+                <input
+                  ref={authorInlineInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={async (e) => {
+                    if (!e.target.files || !e.target.files[0]) return;
+                    const file = e.target.files[0];
+                    const formData = new FormData();
+                    formData.append("file", file);
+                    try {
+                      const res = await apiFetch(`${API_BASE_URL}/uploads/image`, {
+                        method: "POST",
+                        body: formData,
+                      });
+                      if (res.ok) {
+                        const json = await res.json();
+                        if (authorEditorRef.current) {
+                          authorEditorRef.current.focus();
+                          const imgHtml = `<div contenteditable="false" class="my-6 text-center select-none"><img src="${json.url}" alt="Inline image" class="max-h-[420px] w-auto mx-auto rounded-2xl border border-gray-200 shadow-md object-cover inline-block" /></div><p><br></p>`;
+                          document.execCommand("insertHTML", false, imgHtml);
+                          setStoryStudioContent(authorEditorRef.current.innerHTML);
+                        }
+                      }
+                    } catch (err) {
+                      console.error(err);
+                    }
+                  }}
+                />
+              </div>
+
+              {/* Editorial Formatting Toolbar (Identical to /submit Page) */}
+              {storyStudioActiveTab === "write" && (
+                <div className="bg-white border border-gray-200 rounded-2xl p-2 flex flex-wrap items-center gap-1.5 shadow-xs sticky top-0 z-20">
+                  {/* Text Style Group */}
+                  <div className="flex items-center gap-1 pr-2 border-r border-gray-200">
+                    <button
+                      type="button"
+                      title="Bold (Ctrl+B)"
+                      onClick={() => executeAuthorCommand("bold")}
+                      className={`p-2 rounded-xl transition-all cursor-pointer ${
+                        activeFormats.bold
+                          ? "bg-[#E4F953] text-[#040706] font-bold shadow-xs border border-lime-400"
+                          : "text-gray-600 hover:bg-gray-100 hover:text-black"
+                      }`}
+                    >
+                      <Bold className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      title="Italic (Ctrl+I)"
+                      onClick={() => executeAuthorCommand("italic")}
+                      className={`p-2 rounded-xl transition-all cursor-pointer ${
+                        activeFormats.italic
+                          ? "bg-[#E4F953] text-[#040706] font-bold shadow-xs border border-lime-400"
+                          : "text-gray-600 hover:bg-gray-100 hover:text-black"
+                      }`}
+                    >
+                      <Italic className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      title="Underline (Ctrl+U)"
+                      onClick={() => executeAuthorCommand("underline")}
+                      className={`p-2 rounded-xl transition-all cursor-pointer ${
+                        activeFormats.underline
+                          ? "bg-[#E4F953] text-[#040706] font-bold shadow-xs border border-lime-400"
+                          : "text-gray-600 hover:bg-gray-100 hover:text-black"
+                      }`}
+                    >
+                      <Underline className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      title="Strikethrough"
+                      onClick={() => executeAuthorCommand("strikeThrough")}
+                      className={`p-2 rounded-xl transition-all cursor-pointer ${
+                        activeFormats.strikeThrough
+                          ? "bg-[#E4F953] text-[#040706] font-bold shadow-xs border border-lime-400"
+                          : "text-gray-600 hover:bg-gray-100 hover:text-black"
+                      }`}
+                    >
+                      <Strikethrough className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {/* Headings Group */}
+                  <div className="flex items-center gap-1 pr-2 border-r border-gray-200">
+                    <button
+                      type="button"
+                      title="Section Heading (H2)"
+                      onClick={() =>
+                        executeAuthorCommand("formatBlock", activeFormats.h2 ? "<p>" : "<h2>")
+                      }
+                      className={`px-2.5 py-1.5 rounded-xl font-bold text-xs transition-all flex items-center gap-1 cursor-pointer ${
+                        activeFormats.h2
+                          ? "bg-[#E4F953] text-[#040706] shadow-xs border border-lime-400"
+                          : "text-gray-600 hover:bg-gray-100 hover:text-black"
+                      }`}
+                    >
+                      <Heading2 className="w-4 h-4" /> H2
+                    </button>
+                    <button
+                      type="button"
+                      title="Subheading (H3)"
+                      onClick={() =>
+                        executeAuthorCommand("formatBlock", activeFormats.h3 ? "<p>" : "<h3>")
+                      }
+                      className={`px-2.5 py-1.5 rounded-xl font-bold text-xs transition-all flex items-center gap-1 cursor-pointer ${
+                        activeFormats.h3
+                          ? "bg-[#E4F953] text-[#040706] shadow-xs border border-lime-400"
+                          : "text-gray-600 hover:bg-gray-100 hover:text-black"
+                      }`}
+                    >
+                      <Heading3 className="w-4 h-4" /> H3
+                    </button>
+                  </div>
+
+                  {/* Lists Group */}
+                  <div className="flex items-center gap-1 pr-2 border-r border-gray-200">
+                    <button
+                      type="button"
+                      title="Bullet Points List"
+                      onClick={() => executeAuthorCommand("insertUnorderedList")}
+                      className={`p-2 rounded-xl transition-all cursor-pointer ${
+                        activeFormats.unorderedList
+                          ? "bg-[#E4F953] text-[#040706] font-bold shadow-xs border border-lime-400"
+                          : "text-gray-600 hover:bg-gray-100 hover:text-black"
+                      }`}
+                    >
+                      <List className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      title="Numbered Points List"
+                      onClick={() => executeAuthorCommand("insertOrderedList")}
+                      className={`p-2 rounded-xl transition-all cursor-pointer ${
+                        activeFormats.orderedList
+                          ? "bg-[#E4F953] text-[#040706] font-bold shadow-xs border border-lime-400"
+                          : "text-gray-600 hover:bg-gray-100 hover:text-black"
+                      }`}
+                    >
+                      <ListOrdered className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {/* Hyperlink & Quotes Group */}
+                  <div className="flex items-center gap-1 pr-2 border-r border-gray-200">
+                    <button
+                      type="button"
+                      title="Add / Edit Hyperlink"
+                      onClick={handleAuthorOpenLinkModal}
+                      className="p-2 rounded-xl text-gray-600 hover:bg-gray-100 hover:text-black transition-all cursor-pointer"
+                    >
+                      <LinkIcon className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      title="Remove Hyperlink"
+                      onClick={() => executeAuthorCommand("unlink")}
+                      className="p-2 rounded-xl text-gray-600 hover:bg-gray-100 hover:text-black transition-all cursor-pointer"
+                    >
+                      <Unlink className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      title="Pull Quote Block"
+                      onClick={() =>
+                        executeAuthorCommand("formatBlock", activeFormats.blockquote ? "<p>" : "blockquote")
+                      }
+                      className={`p-2 rounded-xl transition-all cursor-pointer ${
+                        activeFormats.blockquote
+                          ? "bg-[#E4F953] text-[#040706] font-bold shadow-xs border border-lime-400"
+                          : "text-gray-600 hover:bg-gray-100 hover:text-black"
+                      }`}
+                    >
+                      <Quote className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {/* History & Cleanup Group */}
+                  <div className="flex items-center gap-1">
+                    <button type="button" title="Undo" onClick={() => executeAuthorCommand("undo")} className="p-2 rounded-xl text-gray-600 hover:bg-gray-100 hover:text-black cursor-pointer"><Undo className="w-4 h-4" /></button>
+                    <button type="button" title="Redo" onClick={() => executeAuthorCommand("redo")} className="p-2 rounded-xl text-gray-600 hover:bg-gray-100 hover:text-black cursor-pointer"><Redo className="w-4 h-4" /></button>
+                    <button type="button" title="Remove Formatting" onClick={() => executeAuthorCommand("removeFormat")} className="p-2 rounded-xl text-gray-600 hover:bg-gray-100 hover:text-black cursor-pointer"><RemoveFormatting className="w-4 h-4" /></button>
+                  </div>
+                </div>
+              )}
+
+              {/* Canvas or Reader Preview */}
+              {storyStudioActiveTab === "write" ? (
+                <div>
+                  <div
+                    ref={authorEditorRef}
+                    contentEditable
+                    suppressContentEditableWarning
+                    onInput={() => {
+                      if (authorEditorRef.current) {
+                        setStoryStudioContent(authorEditorRef.current.innerHTML);
+                      }
+                      updateActiveFormats();
+                    }}
+                    onKeyUp={updateActiveFormats}
+                    onMouseUp={updateActiveFormats}
+                    onSelect={updateActiveFormats}
+                    onKeyDown={handleAuthorEditorKeyDown}
+                    onFocus={() => {
+                      if (typeof window !== "undefined") {
+                        document.execCommand("defaultParagraphSeparator", false, "p");
+                      }
+                      updateActiveFormats();
+                    }}
+                    className="w-full p-6 bg-white border border-gray-200 rounded-[24px] text-base text-gray-900 outline-none focus:border-black transition-all leading-relaxed min-h-[300px] shadow-xs font-poppins overflow-y-auto [&_p]:mb-4 [&_p]:mt-0 [&_p]:leading-relaxed [&_ul]:list-disc [&_ul]:pl-6 [&_ul]:mb-4 [&_ol]:list-decimal [&_ol]:pl-6 [&_ol]:mb-4 [&_a]:text-emerald-700 [&_a]:underline [&_h2]:text-2xl [&_h2]:font-bold [&_h2]:mt-6 [&_h2]:mb-3 [&_h3]:text-xl [&_h3]:font-bold [&_h3]:mt-5 [&_h3]:mb-2 [&_blockquote]:border-l-4 [&_blockquote]:border-emerald-500 [&_blockquote]:pl-4 [&_blockquote]:py-2 [&_blockquote]:italic [&_blockquote]:my-4 [&_blockquote]:bg-gray-50/70"
+                  />
+                  <p className="text-[11px] text-gray-400 mt-1.5 px-2">
+                    Pressing <kbd className="bg-gray-100 px-1 py-0.5 rounded text-gray-700 font-mono text-[10px]">Enter</kbd> creates double-spaced paragraph breaks (<code className="font-mono text-[10px]">\n\n</code>).
+                  </p>
+                </div>
+              ) : (
+                <div className="bg-gray-50 p-6 rounded-[24px] border border-gray-200 text-gray-900 leading-relaxed font-poppins">
+                  <h2 className="text-2xl font-bold mb-4 text-gray-950">{storyStudioTitle || "Untitled Story"}</h2>
+                  <div className="prose max-w-none text-base">
+                    {renderStoryContent(convertHtmlToMarkdown(authorEditorRef.current ? authorEditorRef.current.innerHTML : storyStudioContent))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Action Bar */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-gray-200">
+              <Button
+                type="button"
+                variant="secondary"
+                size="md"
+                onClick={() => setAuthorStoryStudioOpen(false)}
+                className="w-full sm:w-auto border border-gray-300 font-medium text-xs cursor-pointer"
+              >
+                Cancel
+              </Button>
+
+              <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
+                {/* <Button
+                  type="button"
+                  variant="secondary"
+                  size="md"
+                  icon={<Save className="w-4 h-4" />}
+                  iconPosition="left"
+                  disabled={savingAuthorStory || !storyStudioTitle.trim()}
+                  onClick={() => handleAuthorStorySubmit(false)}
+                  className="w-full sm:w-auto border border-gray-300 font-semibold text-xs cursor-pointer"
+                >
+                  {savingAuthorStory ? "Saving Draft..." : "Save Draft for Author"}
+                </Button> */}
+                <Button
+                  type="button"
+                  variant="primary"
+                  size="md"
+                  icon={<Sparkles className="w-4 h-4" />}
+                  iconPosition="left"
+                  disabled={savingAuthorStory || !storyStudioTitle.trim()}
+                  onClick={() => handleAuthorStorySubmit(true)}
+                  className="w-full sm:w-auto font-semibold text-xs cursor-pointer"
+                >
+                  {savingAuthorStory ? "Publishing..." : "Publish Story Directly"}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Authoring Studio Hyperlink Modal (Identical to /submit Page) */}
+      {authorLinkModalOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in font-poppins">
+          <div className="relative w-full max-w-md bg-white rounded-3xl p-6 shadow-2xl border border-gray-200">
+            <button
+              onClick={() => setAuthorLinkModalOpen(false)}
+              className="absolute top-5 right-5 text-gray-400 hover:text-black p-1 rounded-full hover:bg-gray-100 transition-all cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-700">
+                <Globe className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-gray-900">Insert Hyperlink</h3>
+                <p className="text-xs text-gray-500">Add an external link or reference URL</p>
+              </div>
+            </div>
+
+            <div className="space-y-4 mb-6">
+              <div>
+                <label className="block text-xs font-semibold text-gray-800 uppercase tracking-wider mb-1.5">
+                  Link Text <span className="text-gray-400 font-normal">(Optional)</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Read full study"
+                  value={authorLinkText}
+                  onChange={(e) => setAuthorLinkText(e.target.value)}
+                  className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-900 outline-none focus:border-black focus:bg-white transition-all font-medium shadow-xs"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-800 uppercase tracking-wider mb-1.5">
+                  Target URL <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="url"
+                  placeholder="https://example.com"
+                  value={authorLinkUrl}
+                  onChange={(e) => setAuthorLinkUrl(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleAuthorApplyLink();
+                  }}
+                  autoFocus
+                  className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-900 outline-none focus:border-black focus:bg-white transition-all font-medium shadow-xs"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3">
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => setAuthorLinkModalOpen(false)}
+                className="px-4 py-2 text-xs border border-gray-300 cursor-pointer"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="primary"
+                size="sm"
+                onClick={handleAuthorApplyLink}
+                className="px-5 py-2 text-xs cursor-pointer"
+              >
+                Apply Hyperlink
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
