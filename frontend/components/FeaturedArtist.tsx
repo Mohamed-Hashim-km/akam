@@ -2,7 +2,8 @@
 
 import React, { useEffect, useState } from "react";
 import Image from "next/image";
-import { ChevronDown, Loader2 } from "lucide-react";
+import Link from "next/link";
+import { ChevronDown, Loader2, X, Sparkles, User, BookOpen } from "lucide-react";
 import { API_BASE_URL, apiFetch } from "@/lib/config";
 
 export interface ArtistItem {
@@ -27,6 +28,9 @@ export const FeaturedArtist: React.FC<FeaturedArtistProps> = ({
   const [loadingMore, setLoadingMore] = useState(false);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
+
+  // Author Profile Modal State
+  const [selectedArtist, setSelectedArtist] = useState<ArtistItem | null>(null);
 
   const mapAuthorsToArtistItems = (authors: any[]): ArtistItem[] => {
     return authors.map((u: any, idx: number) => ({
@@ -123,11 +127,15 @@ export const FeaturedArtist: React.FC<FeaturedArtistProps> = ({
         </h2>
 
         {/* Artists Grid */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-8 lg:gap-12 items-start justify-items-center">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-8 sm:gap-8 lg:gap-12 items-start justify-items-center">
           {displayArtists.map((artist) => (
-            <div key={artist.id} className="flex flex-col items-center text-center group cursor-pointer w-full">
+            <div
+              key={artist.id}
+              onClick={() => setSelectedArtist(artist)}
+              className="flex flex-col items-center text-center group cursor-pointer w-full max-w-[180px] sm:max-w-none"
+            >
               {/* Circle Image Avatar Container */}
-              <div className="relative w-36 h-36 sm:w-44 sm:h-44 lg:w-48 lg:h-48 rounded-full overflow-hidden shadow-sm border border-gray-100 group-hover:scale-105 group-hover:shadow-md transition-all duration-300 bg-gray-100 flex items-center justify-center">
+              <div className="relative w-28 h-28 xs:w-32 xs:h-32 sm:w-44 sm:h-44 lg:w-48 lg:h-48 rounded-full overflow-hidden border border-gray-100 group-hover:scale-105 transition-all duration-300 bg-gray-100 flex items-center justify-center shrink-0">
                 {artist.imageSrc ? (
                   <Image
                     src={artist.imageSrc}
@@ -144,8 +152,8 @@ export const FeaturedArtist: React.FC<FeaturedArtistProps> = ({
                 )}
               </div>
 
-              {/* Name matching card titles */}
-              <h3 className="text-lg sm:text-xl font-semibold text-dark-bg tracking-tight mt-5 group-hover:text-black transition-colors truncate max-w-[220px]">
+              {/* Name matching card titles - Allows natural word breaking */}
+              <h3 className="text-lg lg:text-xl font-semibold text-dark-bg tracking-tight mt-3 sm:mt-5 group-hover:text-black transition-colors text-center w-full px-1 break-words leading-tight sm:leading-snug">
                 {artist.name}
               </h3>
 
@@ -178,6 +186,77 @@ export const FeaturedArtist: React.FC<FeaturedArtistProps> = ({
           </div>
         )}
       </div>
+
+      {/* Author Profile Popup Modal */}
+      {selectedArtist && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in font-poppins">
+          <div className="relative w-full max-w-md bg-white rounded-[32px] p-6 sm:p-8 shadow-2xl border border-gray-100 overflow-hidden">
+            {/* Top Close Button */}
+            <button
+              type="button"
+              onClick={() => setSelectedArtist(null)}
+              className="absolute top-5 right-5 text-gray-400 hover:text-black p-1.5 rounded-full hover:bg-gray-100 transition-all cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            {/* Featured Badge */}
+            <div className="flex items-center gap-2 mb-4">
+              <span className="bg-[#E4F953] text-[#040706] font-bold text-[10px] uppercase tracking-wider px-3 py-1 rounded-xl shadow-2xs flex items-center gap-1">
+                <Sparkles className="w-3 h-3" /> Featured AKAM Author
+              </span>
+            </div>
+
+            {/* Profile Avatar */}
+            <div className="relative w-28 h-28 sm:w-36 sm:h-36 rounded-full overflow-hidden border-4 border-gray-50 mx-auto mb-4 bg-gray-100 flex items-center justify-center shrink-0">
+              {selectedArtist.imageSrc ? (
+                <Image
+                  src={selectedArtist.imageSrc}
+                  alt={selectedArtist.name}
+                  fill
+                  className="object-cover object-center"
+                  unoptimized={selectedArtist.imageSrc.startsWith("http")}
+                />
+              ) : (
+                <span className="text-4xl font-bold text-gray-700">
+                  {selectedArtist.name[0]?.toUpperCase()}
+                </span>
+              )}
+            </div>
+
+            {/* Author Name */}
+            <h3 className="text-2xl sm:text-3xl font-bold text-gray-950 text-center tracking-tight mb-1">
+              {selectedArtist.name}
+            </h3>
+            <p className="text-xs sm:text-sm font-semibold text-emerald-700 text-center mb-6">
+              Verified Platform Author
+            </p>
+
+            {/* Full Biography */}
+            <div className="bg-gray-50 border border-gray-200/80 rounded-2xl p-5 mb-6 text-gray-800 text-sm leading-relaxed max-h-[220px] overflow-y-auto font-normal">
+              <span className="block text-[11px] font-bold uppercase tracking-wider text-gray-400 mb-2">
+                Author Biography
+              </span>
+              <p className="text-gray-900 leading-relaxed font-normal whitespace-pre-line">
+                {selectedArtist.bio}
+              </p>
+            </div>
+
+            {/* Actions */}
+            {/* <div className="flex items-center gap-3">
+              <Link href="/library" className="w-full">
+                <button
+                  type="button"
+                  onClick={() => setSelectedArtist(null)}
+                  className="w-full py-3 bg-black hover:bg-gray-800 text-white rounded-2xl text-xs font-semibold tracking-wide transition cursor-pointer shadow-xs flex items-center justify-center gap-2"
+                >
+                  <BookOpen className="w-4 h-4" /> Explore Published Stories
+                </button>
+              </Link>
+            </div> */}
+          </div>
+        </div>
+      )}
     </section>
   );
 };

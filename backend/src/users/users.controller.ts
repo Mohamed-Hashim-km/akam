@@ -21,6 +21,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
 import type { AuthUser } from '../auth/decorators/current-user.decorator.js';
 import { UsersService } from './users.service.js';
 import { UpdateProfileDto } from './dto/update-profile.dto.js';
+import { CreateAuthorDto } from './dto/create-author.dto.js';
 import { UploadsService } from '../uploads/uploads.service.js';
 
 @ApiTags('Users')
@@ -130,4 +131,22 @@ export class UsersController {
   async toggleFeatured(@Param('id') id: string) {
     return this.usersService.toggleFeatured(id);
   }
+
+  @Patch(':id/sort-order')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('EDITOR', 'ADMIN')
+  @ApiOperation({ summary: '[Editor/Admin] Update user priority sort order' })
+  async updateSortOrder(@Param('id') id: string, @Body('sortOrder') sortOrder: number) {
+    const val = typeof sortOrder === 'number' ? sortOrder : parseInt(sortOrder || '0', 10);
+    return this.usersService.updateSortOrder(id, isNaN(val) ? 0 : val);
+  }
+
+  @Post('create-author')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('EDITOR', 'ADMIN')
+  @ApiOperation({ summary: '[Editor/Admin] Create or elevate user as Author' })
+  async createAuthor(@Body() dto: CreateAuthorDto) {
+    return this.usersService.createAuthorByAdmin(dto);
+  }
 }
+

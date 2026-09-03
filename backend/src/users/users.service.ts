@@ -10,6 +10,7 @@ export type UserRow = {
   avatarUrl: string | null;
   role: string;
   isFeatured?: boolean;
+  sortOrder?: number;
   createdAt?: string;
 };
 
@@ -38,7 +39,7 @@ export class UsersService {
 
     const queryParams = [...params, limit, offset];
     const data = await this.prisma.query<UserRow>(
-      `SELECT id, email, name, bio, "avatarUrl", role, "isFeatured", "createdAt"
+      `SELECT id, email, name, bio, "avatarUrl", role, "isFeatured", "sortOrder", "createdAt"
        FROM "user"
        ${whereSql}
        ORDER BY "createdAt" DESC
@@ -59,7 +60,7 @@ export class UsersService {
 
   async findById(id: string): Promise<UserRow> {
     const user = await this.prisma.queryOne<UserRow>(
-      `SELECT id, email, name, bio, "avatarUrl", role, "isFeatured", "createdAt"
+      `SELECT id, email, name, bio, "avatarUrl", role, "isFeatured", "sortOrder", "createdAt"
        FROM "user" WHERE id = $1`,
       [id],
     );
@@ -78,10 +79,10 @@ export class UsersService {
     const total = parseInt(countRow?.count ?? '0', 10);
 
     const data = await this.prisma.query<UserRow>(
-      `SELECT id, email, name, bio, "avatarUrl", role, "isFeatured", "createdAt"
+      `SELECT id, email, name, bio, "avatarUrl", role, "isFeatured", "sortOrder", "createdAt"
        FROM "user"
        WHERE "isFeatured" = true
-       ORDER BY "updatedAt" DESC
+       ORDER BY CASE WHEN "sortOrder" > 0 THEN 0 ELSE 1 END ASC, "sortOrder" ASC, "updatedAt" DESC
        LIMIT $1 OFFSET $2`,
       [limit, offset],
     );
@@ -112,10 +113,10 @@ export class UsersService {
     const total = parseInt(countRow?.count ?? '0', 10);
 
     const data = await this.prisma.query<UserRow>(
-      `SELECT id, email, name, bio, "avatarUrl", role, "isFeatured", "createdAt"
+      `SELECT id, email, name, bio, "avatarUrl", role, "isFeatured", "sortOrder", "createdAt"
        FROM "user"
        WHERE role = 'AUTHOR'::"Role"
-       ORDER BY "createdAt" DESC
+       ORDER BY CASE WHEN "sortOrder" > 0 THEN 0 ELSE 1 END ASC, "sortOrder" ASC, "createdAt" DESC
        LIMIT $1 OFFSET $2`,
       [limit, offset],
     );
@@ -141,8 +142,19 @@ export class UsersService {
     const user = await this.prisma.queryOne<UserRow>(
       `UPDATE "user" SET "isFeatured" = $1, "updatedAt" = now()
        WHERE id = $2
-       RETURNING id, email, name, bio, "avatarUrl", role, "isFeatured", "createdAt"`,
+       RETURNING id, email, name, bio, "avatarUrl", role, "isFeatured", "sortOrder", "createdAt"`,
       [newStatus, id],
+    );
+    if (!user) throw new NotFoundException('User not found');
+    return user;
+  }
+
+  async updateSortOrder(id: string, sortOrder: number): Promise<UserRow> {
+    const user = await this.prisma.queryOne<UserRow>(
+      `UPDATE "user" SET "sortOrder" = $1, "updatedAt" = now()
+       WHERE id = $2
+       RETURNING id, email, name, bio, "avatarUrl", role, "isFeatured", "sortOrder", "createdAt"`,
+      [sortOrder, id],
     );
     if (!user) throw new NotFoundException('User not found');
     return user;
@@ -153,7 +165,7 @@ export class UsersService {
       const user = await this.prisma.queryOne<UserRow>(
         `UPDATE "user" SET name = $1, bio = $2, "updatedAt" = now()
          WHERE id = $3
-         RETURNING id, email, name, bio, "avatarUrl", role, "isFeatured"`,
+         RETURNING id, email, name, bio, "avatarUrl", role, "isFeatured", "sortOrder"`,
         [dto.name, dto.bio, id],
       );
       return user!;
@@ -161,7 +173,7 @@ export class UsersService {
       const user = await this.prisma.queryOne<UserRow>(
         `UPDATE "user" SET name = $1, "updatedAt" = now()
          WHERE id = $2
-         RETURNING id, email, name, bio, "avatarUrl", role, "isFeatured"`,
+         RETURNING id, email, name, bio, "avatarUrl", role, "isFeatured", "sortOrder"`,
         [dto.name, id],
       );
       return user!;
@@ -169,7 +181,7 @@ export class UsersService {
       const user = await this.prisma.queryOne<UserRow>(
         `UPDATE "user" SET bio = $1, "updatedAt" = now()
          WHERE id = $2
-         RETURNING id, email, name, bio, "avatarUrl", role, "isFeatured"`,
+         RETURNING id, email, name, bio, "avatarUrl", role, "isFeatured", "sortOrder"`,
         [dto.bio, id],
       );
       return user!;
@@ -181,7 +193,7 @@ export class UsersService {
     const user = await this.prisma.queryOne<UserRow>(
       `UPDATE "user" SET "avatarUrl" = $1, "updatedAt" = now()
        WHERE id = $2
-       RETURNING id, email, name, bio, "avatarUrl", role, "isFeatured"`,
+       RETURNING id, email, name, bio, "avatarUrl", role, "isFeatured", "sortOrder"`,
       [avatarUrl, id],
     );
     return user!;
@@ -191,7 +203,7 @@ export class UsersService {
     const user = await this.prisma.queryOne<UserRow>(
       `UPDATE "user" SET role = CASE WHEN role = 'READER'::"Role" THEN 'AUTHOR'::"Role" ELSE role END, "updatedAt" = now()
        WHERE id = $1
-       RETURNING id, email, name, bio, "avatarUrl", role, "isFeatured"`,
+       RETURNING id, email, name, bio, "avatarUrl", role, "isFeatured", "sortOrder"`,
       [id],
     );
     return user!;
@@ -201,10 +213,51 @@ export class UsersService {
     const user = await this.prisma.queryOne<UserRow>(
       `UPDATE "user" SET role = $1::"Role", "updatedAt" = now()
        WHERE id = $2
-       RETURNING id, email, name, bio, "avatarUrl", role, "isFeatured"`,
+       RETURNING id, email, name, bio, "avatarUrl", role, "isFeatured", "sortOrder"`,
       [newRole, id],
     );
     if (!user) throw new NotFoundException('User not found');
     return user;
   }
+
+  async createAuthorByAdmin(dto: any): Promise<UserRow> {
+    const emailVal = dto.email.toLowerCase().trim();
+    const existing = await this.prisma.queryOne<{ id: string }>(
+      `SELECT id FROM "user" WHERE LOWER(email) = LOWER($1) LIMIT 1`,
+      [emailVal],
+    );
+
+    if (existing) {
+      const updated = await this.prisma.queryOne<UserRow>(
+        `UPDATE "user"
+         SET role = 'AUTHOR'::"Role",
+             name = COALESCE($1, name),
+             bio = COALESCE($2, bio),
+             "avatarUrl" = COALESCE($3, "avatarUrl"),
+             "isFeatured" = COALESCE($4, "isFeatured"),
+             "sortOrder" = COALESCE($5, "sortOrder"),
+             "updatedAt" = now()
+         WHERE id = $6
+         RETURNING id, email, name, bio, "avatarUrl", role, "isFeatured", "sortOrder", "createdAt"`,
+        [dto.name || null, dto.bio || null, dto.avatarUrl || null, dto.isFeatured ?? null, dto.sortOrder ?? 0, existing.id],
+      );
+      return updated!;
+    }
+
+    const nameVal = dto.name.trim();
+    const bioVal = dto.bio?.trim() || null;
+    const avatarVal = dto.avatarUrl?.trim() || null;
+    const isFeaturedVal = dto.isFeatured ?? false;
+    const sortOrderVal = dto.sortOrder ?? 0;
+
+    const user = await this.prisma.queryOne<UserRow>(
+      `INSERT INTO "user" (id, email, name, bio, "avatarUrl", role, "isFeatured", "sortOrder", "createdAt", "updatedAt")
+       VALUES (gen_random_uuid()::text, $1, $2, $3, $4, 'AUTHOR'::"Role", $5, $6, now(), now())
+       RETURNING id, email, name, bio, "avatarUrl", role, "isFeatured", "sortOrder", "createdAt"`,
+      [emailVal, nameVal, bioVal, avatarVal, isFeaturedVal, sortOrderVal],
+    );
+
+    return user!;
+  }
 }
+

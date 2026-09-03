@@ -148,6 +148,17 @@ export class StoriesService {
       );
     }
 
+    const isEditorOrAdmin = ['EDITOR', 'ADMIN'].includes(userRow.role);
+    const targetAuthorId =
+      dto.authorId && isEditorOrAdmin
+        ? dto.authorId
+        : authorId;
+
+    const initialStatus =
+      dto.status && isEditorOrAdmin && ['APPROVED', 'PENDING', 'DRAFT'].includes(dto.status)
+        ? dto.status
+        : 'DRAFT';
+
     const baseSlug = slugify(dto.title);
     let slug = baseSlug;
     let counter = 0;
@@ -165,9 +176,9 @@ export class StoriesService {
 
     const story = await this.prisma.queryOne<StoryRow>(
       `INSERT INTO story (id, title, slug, content, category, status, "authorId", "createdAt", "updatedAt")
-       VALUES (gen_random_uuid()::text, $1, $2, $3, $4, 'DRAFT'::"StoryStatus", $5, now(), now())
+       VALUES (gen_random_uuid()::text, $1, $2, $3, $4, $5::"StoryStatus", $6, now(), now())
        RETURNING id, title, slug, category, status, "createdAt"`,
-      [dto.title, slug, dto.content, categoryVal, authorId],
+      [dto.title, slug, dto.content, categoryVal, initialStatus, targetAuthorId],
     );
 
     return story!;
@@ -228,9 +239,14 @@ export class StoriesService {
     return { id, status: 'PENDING' };
   }
 
-  async uploadCover(id: string, authorId: string, coverImageUrl: string) {
+  async uploadCover(id: string, userId: string, coverImageUrl: string) {
     const story = await this.findOne(id);
-    if (story.authorId !== authorId) throw new ForbiddenException('Not your story');
+    const userRow = await this.prisma.queryOne<{ role: string }>(
+      `SELECT role FROM "user" WHERE id = $1`,
+      [userId],
+    );
+    const isEditorOrAdmin = userRow && ['EDITOR', 'ADMIN'].includes(userRow.role);
+    if (story.authorId !== userId && !isEditorOrAdmin) throw new ForbiddenException('Not authorized');
 
     return this.prisma.queryOne(
       `UPDATE story SET "coverImageUrl" = $1, "updatedAt" = now()

@@ -175,7 +175,8 @@ export default function SubmitStoryPage() {
       if (currentParagraphLines.length > 0) {
         const text = currentParagraphLines.join("<br>");
         if (text.trim()) {
-          resultBlocks.push(`<p class="mb-4 leading-relaxed text-gray-900 whitespace-pre-wrap">${text}</p>`);
+          // Standard story paragraph: generous line-height + bottom margin
+          resultBlocks.push(`<p class="mb-6 leading-[1.9] text-gray-900 whitespace-pre-wrap">${text}</p>`);
         }
         currentParagraphLines = [];
       }
@@ -187,9 +188,11 @@ export default function SubmitStoryPage() {
 
       if (!trimmed) {
         if (currentParagraphLines.length > 0) {
+          // First blank line after text → end the paragraph normally
           flushParagraph();
         } else {
-          resultBlocks.push('<p class="mb-4"><br></p>');
+          // Consecutive blank line (double-Enter) → visible section gap
+          resultBlocks.push('<div class="mb-10 select-none" aria-hidden="true"></div>');
         }
         continue;
       }
@@ -378,8 +381,41 @@ export default function SubmitStoryPage() {
 
   const handleEditorKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
-      // Ensure browser creates <p> paragraph blocks with spacing on Enter key press
+      e.preventDefault();
+
+      const editor = editorRef.current;
+      if (!editor) return;
+
+      // Set default paragraph separator to p
       document.execCommand("defaultParagraphSeparator", false, "p");
+
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount > 0) {
+        const range = sel.getRangeAt(0);
+        let node: Node | null = range.startContainer;
+
+        // Convert stray <div> block to <p>
+        while (node && node !== editor) {
+          if (node.nodeType === Node.ELEMENT_NODE && (node as Element).tagName === "DIV") {
+            document.execCommand("formatBlock", false, "p");
+            break;
+          }
+          node = node.parentNode;
+        }
+
+        // If at root of editor or bare text node, wrap in <p>
+        if (range.startContainer === editor || range.startContainer.parentNode === editor) {
+          document.execCommand("formatBlock", false, "p");
+        }
+      }
+
+      // Insert paragraph break
+      document.execCommand("insertParagraph", false);
+
+      if (editor) {
+        setContent(editor.innerHTML);
+        updateActiveStates();
+      }
     }
   };
 
@@ -419,16 +455,23 @@ export default function SubmitStoryPage() {
     result = result.replace(/<\/?ul[^>]*>/gi, "\n\n");
     result = result.replace(/<\/?ol[^>]*>/gi, "\n\n");
 
-    // Empty paragraphs (produced by pressing Enter in an empty line) -> \n
-    result = result.replace(/<p[^>]*><br\s*\/?>\s*<\/p>/gi, "\n");
-    result = result.replace(/<p[^>]*>\s*<\/p>/gi, "\n");
+    // ── Step 1: Mark empty paragraphs with a placeholder BEFORE boundary processing.
+    // This prevents the </p>\s*<p> regex from swallowing the gap on step 3.
+    result = result.replace(/<p[^>]*><br\s*\/?>\s*<\/p>/gi, "§BLANK§");
+    result = result.replace(/<div[^>]*aria-hidden[^>]*><\/div>/gi, "§BLANK§");
+    result = result.replace(/<p[^>]*>\s*<\/p>/gi, "§BLANK§");
 
-    // Normal paragraph boundaries -> \n\n
+    // ── Step 2: Normal paragraph boundary → \n\n (single Enter gap)
     result = result.replace(/<\/p>\s*<p[^>]*>/gi, "\n\n");
     result = result.replace(/<p[^>]*>/gi, "");
     result = result.replace(/<\/p>/gi, "\n\n");
     result = result.replace(/<br\s*\/?>/gi, "\n");
     result = result.replace(/<div[^>]*>/gi, "\n\n").replace(/<\/div>/gi, "");
+
+    // ── Step 3: Restore placeholder → \n (1 newline each).
+    // Each §BLANK§ is already sandwiched between \n\n from </p> stripping,
+    // so 1 extra Enter adds exactly 1 more \n to the gap (linear scaling).
+    result = result.replace(/§BLANK§/g, "\n");
 
     // Strip unhandled HTML tags except <u>
     result = result.replace(/<(?!u|\/u)[^>]+>/gi, "");
@@ -439,6 +482,9 @@ export default function SubmitStoryPage() {
 
     // Normalize Windows newlines
     result = result.replace(/\r\n/g, "\n");
+
+    // Allow up to 8 consecutive newlines (prevents accidental 100-Enter spam)
+    result = result.replace(/\n{9,}/g, "\n\n\n\n\n\n\n\n");
 
     return result.trim();
   };
@@ -623,7 +669,7 @@ export default function SubmitStoryPage() {
               return (
                 <div
                   key={index}
-                  className="prose prose-lg max-w-none text-gray-900 leading-relaxed font-normal [&_p]:mb-4 [&_p]:mt-0 [&_p]:text-[#1A1A1A] [&_b]:font-bold [&_strong]:font-bold [&_i]:italic [&_em]:italic [&_a]:text-emerald-700 [&_a]:underline [&_a]:font-medium [&_a]:hover:text-emerald-900 [&_ul]:list-disc [&_ul]:pl-6 [&_ul]:mb-4 [&_ol]:list-decimal [&_ol]:pl-6 [&_ol]:mb-4 [&_h2]:text-2xl [&_h2]:font-bold [&_h2]:mt-6 [&_h2]:mb-3 [&_h2]:text-gray-950 [&_h3]:text-xl [&_h3]:font-bold [&_h3]:mt-5 [&_h3]:mb-2 [&_h3]:text-gray-900 [&_blockquote]:border-l-4 [&_blockquote]:border-emerald-500 [&_blockquote]:pl-4 [&_blockquote]:py-2 [&_blockquote]:italic [&_blockquote]:my-4 [&_blockquote]:bg-gray-50/70 [&_blockquote]:rounded-r-xl"
+                  className="prose prose-lg max-w-none text-gray-900 leading-[1.9] font-normal [&_p]:mb-6 [&_p]:mt-0 [&_p]:leading-[1.9] [&_p]:text-[#1A1A1A] [&_div]:mb-10 [&_b]:font-bold [&_strong]:font-bold [&_i]:italic [&_em]:italic [&_a]:text-emerald-700 [&_a]:underline [&_a]:font-medium [&_a]:hover:text-emerald-900 [&_ul]:list-disc [&_ul]:pl-6 [&_ul]:mb-4 [&_ol]:list-decimal [&_ol]:pl-6 [&_ol]:mb-4 [&_h2]:text-2xl [&_h2]:font-bold [&_h2]:mt-6 [&_h2]:mb-3 [&_h2]:text-gray-950 [&_h3]:text-xl [&_h3]:font-bold [&_h3]:mt-5 [&_h3]:mb-2 [&_h3]:text-gray-900 [&_blockquote]:border-l-4 [&_blockquote]:border-emerald-500 [&_blockquote]:pl-4 [&_blockquote]:py-2 [&_blockquote]:italic [&_blockquote]:my-4 [&_blockquote]:bg-gray-50/70 [&_blockquote]:rounded-r-xl"
                   dangerouslySetInnerHTML={{ __html: renderedChunkHtml }}
                 />
               );

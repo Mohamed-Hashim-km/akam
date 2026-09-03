@@ -15,11 +15,14 @@ export interface EventItem {
   monthYear: string | null;
   eventDate: Date | null;
   imageSrc: string | null;
+  videoUrl: string | null;
   registerHref: string | null;
   isPublished: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
+
+const SELECT_FIELDS = `id, type, title, description, location, time, day, "monthYear", "imageSrc", "videoUrl", "registerHref", "isPublished", "createdAt", "updatedAt"`;
 
 @Injectable()
 export class EventsService {
@@ -29,7 +32,7 @@ export class EventsService {
   async findAllPublished(type?: EventType): Promise<EventItem[]> {
     if (type) {
       return this.prisma.query<EventItem>(
-        `SELECT id, type, title, description, location, time, day, "monthYear", "imageSrc", "registerHref", "isPublished", "createdAt", "updatedAt"
+        `SELECT ${SELECT_FIELDS}
          FROM "event"
          WHERE "isPublished" = true AND type::text = $1
          ORDER BY "createdAt" DESC`,
@@ -37,7 +40,7 @@ export class EventsService {
       );
     }
     return this.prisma.query<EventItem>(
-      `SELECT id, type, title, description, location, time, day, "monthYear", "imageSrc", "registerHref", "isPublished", "createdAt", "updatedAt"
+      `SELECT ${SELECT_FIELDS}
        FROM "event"
        WHERE "isPublished" = true
        ORDER BY "createdAt" DESC`
@@ -46,7 +49,7 @@ export class EventsService {
 
   async findOne(id: string): Promise<EventItem> {
     const row = await this.prisma.queryOne<EventItem>(
-      `SELECT id, type, title, description, location, time, day, "monthYear", "imageSrc", "registerHref", "isPublished", "createdAt", "updatedAt"
+      `SELECT ${SELECT_FIELDS}
        FROM "event"
        WHERE id = $1`,
       [id]
@@ -59,7 +62,7 @@ export class EventsService {
   async findAllEditorial(type?: EventType): Promise<EventItem[]> {
     if (type) {
       return this.prisma.query<EventItem>(
-        `SELECT id, type, title, description, location, time, day, "monthYear", "imageSrc", "registerHref", "isPublished", "createdAt", "updatedAt"
+        `SELECT ${SELECT_FIELDS}
          FROM "event"
          WHERE type::text = $1
          ORDER BY "createdAt" DESC`,
@@ -67,7 +70,7 @@ export class EventsService {
       );
     }
     return this.prisma.query<EventItem>(
-      `SELECT id, type, title, description, location, time, day, "monthYear", "imageSrc", "registerHref", "isPublished", "createdAt", "updatedAt"
+      `SELECT ${SELECT_FIELDS}
        FROM "event"
        ORDER BY "createdAt" DESC`
     );
@@ -105,7 +108,7 @@ export class EventsService {
 
     const dataSql = `
       SELECT 
-        e.id, e.type, e.title, e.description, e.location, e.time, e.day, e."monthYear", e."imageSrc", e."registerHref", e."isPublished", e."createdAt", e."updatedAt",
+        e.id, e.type, e.title, e.description, e.location, e.time, e.day, e."monthYear", e."imageSrc", e."videoUrl", e."registerHref", e."isPublished", e."createdAt", e."updatedAt",
         COALESCE((SELECT COUNT(*)::int FROM "event_registration" er WHERE er."eventId" = e.id), 0) AS "registrationCount"
       FROM "event" e
       ${whereClause}
@@ -167,9 +170,9 @@ export class EventsService {
     const isPublished = dto.isPublished ?? true;
 
     const row = await this.prisma.queryOne<EventItem>(
-      `INSERT INTO "event" (id, type, title, description, location, time, day, "monthYear", "imageSrc", "registerHref", "isPublished")
-       VALUES ($1, $2::"EventType", $3, $4, $5, $6, $7, $8, $9, $10, $11)
-       RETURNING id, type, title, description, location, time, day, "monthYear", "imageSrc", "registerHref", "isPublished", "createdAt", "updatedAt"`,
+      `INSERT INTO "event" (id, type, title, description, location, time, day, "monthYear", "imageSrc", "videoUrl", "registerHref", "isPublished")
+       VALUES ($1, $2::"EventType", $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+       RETURNING ${SELECT_FIELDS}`,
       [
         id,
         dto.type,
@@ -180,6 +183,7 @@ export class EventsService {
         dto.day ?? null,
         dto.monthYear ?? null,
         dto.imageSrc ?? null,
+        dto.videoUrl ?? null,
         dto.registerHref ?? null,
         isPublished,
       ]
@@ -199,6 +203,7 @@ export class EventsService {
     const day = dto.day !== undefined ? dto.day : existing.day;
     const monthYear = dto.monthYear !== undefined ? dto.monthYear : existing.monthYear;
     const imageSrc = dto.imageSrc !== undefined ? dto.imageSrc : existing.imageSrc;
+    const videoUrl = dto.videoUrl !== undefined ? dto.videoUrl : existing.videoUrl;
     const registerHref = dto.registerHref !== undefined ? dto.registerHref : existing.registerHref;
     const isPublished = dto.isPublished !== undefined ? dto.isPublished : existing.isPublished;
 
@@ -213,12 +218,13 @@ export class EventsService {
          day = $6,
          "monthYear" = $7,
          "imageSrc" = $8,
-         "registerHref" = $9,
-         "isPublished" = $10,
+         "videoUrl" = $9,
+         "registerHref" = $10,
+         "isPublished" = $11,
          "updatedAt" = CURRENT_TIMESTAMP
-       WHERE id = $11
-       RETURNING id, type, title, description, location, time, day, "monthYear", "imageSrc", "registerHref", "isPublished", "createdAt", "updatedAt"`,
-      [type, title, description, location, time, day, monthYear, imageSrc, registerHref, isPublished, id]
+       WHERE id = $12
+       RETURNING ${SELECT_FIELDS}`,
+      [type, title, description, location, time, day, monthYear, imageSrc, videoUrl, registerHref, isPublished, id]
     );
 
     return row!;
@@ -238,7 +244,7 @@ export class EventsService {
       `UPDATE "event"
        SET "isPublished" = $1, "updatedAt" = CURRENT_TIMESTAMP
        WHERE id = $2
-       RETURNING id, type, title, description, location, time, day, "monthYear", "imageSrc", "registerHref", "isPublished", "createdAt", "updatedAt"`,
+       RETURNING ${SELECT_FIELDS}`,
       [updatedStatus, id]
     );
 
