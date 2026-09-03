@@ -72,20 +72,7 @@ export const MasikaHero: React.FC<MasikaHeroProps> = ({
         </div>
       </div>
 
-      {/* Mobile Image Fallback */}
-      <div className="lg:hidden container px-4 mx-auto mt-8 relative z-10 flex justify-center pb-8">
-        <div className="relative w-full max-w-md overflow-hidden rounded-2xl">
-          <Image
-            src={imageSrc}
-            alt={imageAlt}
-            width={800}
-            height={600}
-            priority
-            sizes="100vw"
-            className="w-full h-auto object-contain"
-          />
-        </div>
-      </div>
+   
 
     </section>
   );

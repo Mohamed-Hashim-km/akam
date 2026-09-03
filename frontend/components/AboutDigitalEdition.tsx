@@ -101,7 +101,7 @@ export const AboutDigitalEdition: React.FC<AboutDigitalEditionProps> = ({
                       : "text-gray-500 hover:text-gray-900"
                   }`}
                 >
-                  Annual Billing <span className="text-[#22B573] font-bold ml-1">(Save 30%)</span>
+                  Annual Billing <span className="text-[#22B573] font-bold ml-1"><br className="md:hidden"/>(Save 30%)</span>
                 </button>
               </div>
             </div>

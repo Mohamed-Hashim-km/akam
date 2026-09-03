@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs';
 import * as path from 'path';
 
-type StorageBucket = 'avatars' | 'covers' | 'inline-images';
+type StorageBucket = 'avatars' | 'covers' | 'inline-images' | 'pdfs';
 
 @Injectable()
 export class UploadsService {
@@ -29,6 +29,46 @@ export class UploadsService {
     const maxSize = 10 * 1024 * 1024; // 10MB
     if (file.size > maxSize) {
       throw new BadRequestException('File too large. Maximum size is 10MB.');
+    }
+  }
+
+  private validatePdfFile(file: Express.Multer.File): void {
+    if (!file) throw new BadRequestException('No file provided');
+    if (file.mimetype !== 'application/pdf') {
+      throw new BadRequestException('Only PDF files are allowed.');
+    }
+    const maxSize = 50 * 1024 * 1024; // 50MB
+    if (file.size > maxSize) {
+      throw new BadRequestException('PDF too large. Maximum size is 50MB.');
+    }
+  }
+
+  async uploadPdf(
+    file: Express.Multer.File,
+    prefix: string,
+  ): Promise<string> {
+    this.validatePdfFile(file);
+
+    const ext = '.pdf';
+    const cleanPrefix = prefix.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const fileName = `${cleanPrefix}_${Date.now()}${ext}`;
+
+    const targetFolder = path.join(this.uploadDir, 'pdfs');
+    if (!fs.existsSync(targetFolder)) {
+      fs.mkdirSync(targetFolder, { recursive: true });
+    }
+
+    const filePath = path.join(targetFolder, fileName);
+
+    try {
+      await fs.promises.writeFile(filePath, file.buffer);
+      this.logger.log(`PDF saved locally to ${filePath}`);
+
+      const backendUrl = this.configService.get<string>('BACKEND_URL') ?? 'http://localhost:3000';
+      return `${backendUrl}/uploads/pdfs/${fileName}`;
+    } catch (error) {
+      this.logger.error('Failed to save PDF locally:', error);
+      throw new BadRequestException('PDF upload failed');
     }
   }
 

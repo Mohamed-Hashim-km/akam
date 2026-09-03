@@ -37,6 +37,7 @@ model User {
   bio         String?
   avatarUrl   String?
   role        Role     @default(READER)
+  isFeatured  Boolean  @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -392,6 +393,22 @@ model BookRelease {
 
   @@index([isPublished])
   @@map("book_release")
+}
+
+// ─── PREVIOUS EDITIONS PLATFORM ───────────────────────────────────────────────
+
+model Edition {
+  id          String   @id @default(uuid())
+  title       String
+  pdfUrl      String
+  coverImage  String?
+  isPublished Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([isPublished])
+  @@map("edition")
 }
 
 // ─── MEDIA SHOWCASE PLATFORM ──────────────────────────────────────────────────

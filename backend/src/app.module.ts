@@ -21,6 +21,7 @@ import { VotesModule } from './votes/votes.module.js';
 import { EventsModule } from './events/events.module.js';
 import { BooksModule } from './books/books.module.js';
 import { MediaModule } from './media/media.module.js';
+import { EditionsModule } from './editions/editions.module.js';
 
 @Module({
   imports: [
@@ -47,6 +48,7 @@ import { MediaModule } from './media/media.module.js';
     EventsModule,
     BooksModule,
     MediaModule,
+    EditionsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

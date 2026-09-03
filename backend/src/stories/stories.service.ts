@@ -213,6 +213,9 @@ export class StoriesService {
     if (!['DRAFT', 'REJECTED'].includes(story.status)) {
       throw new BadRequestException('Only DRAFT or REJECTED stories can be submitted');
     }
+    if (!story.coverImageUrl) {
+      throw new BadRequestException('A cover image is required before submitting your story for editorial review');
+    }
 
     await this.prisma.execute(
       `UPDATE story SET status = 'PENDING'::"StoryStatus", "rejectionNote" = null, "updatedAt" = now()

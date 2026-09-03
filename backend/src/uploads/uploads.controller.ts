@@ -10,6 +10,9 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiConsumes, ApiBearerAuth } from '@nestjs/swagger';
 import { OptionalJwtAuthGuard } from '../auth/guards/optional-jwt-auth.guard.js';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
+import { RolesGuard } from '../auth/guards/roles.guard.js';
+import { Roles } from '../auth/decorators/roles.decorator.js';
 import { UploadsService } from './uploads.service.js';
 
 @ApiTags('Uploads')
@@ -29,6 +32,19 @@ export class UploadsController {
       'inline-images',
       `post-${Date.now()}`,
     );
+    return { url };
+  }
+
+  @Post('pdf')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('EDITOR', 'ADMIN')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Upload a PDF for a magazine edition (Editor/Admin only)' })
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadPdf(@UploadedFile() file: Express.Multer.File) {
+    const url = await this.uploadsService.uploadPdf(file, `edition`);
     return { url };
   }
 }

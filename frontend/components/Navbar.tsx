@@ -217,7 +217,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   const isEventsPage = pathname === "/events" || pathname?.startsWith("/events");
   const isMediaPage = pathname === "/media" || pathname?.startsWith("/media");
   const isAboutPage = pathname === "/about" || pathname?.startsWith("/about");
-  const isEditorialPage = pathname === "/editorial" || pathname?.startsWith("/editorial");
+  const isEditorialPage = pathname === "/editorial" || pathname?.startsWith("/editorial/");
 
   const isLibraryPage = pathname === "/library" || pathname?.startsWith("/library");
 

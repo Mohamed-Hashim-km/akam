@@ -162,10 +162,10 @@ export const ExploreByInterest: React.FC<ExploreByInterestProps> = ({
                 onSwiper={(swiper) => setSwiperInstance(swiper)}
                 spaceBetween={16}
                 slidesPerView={1.15}
-                className="w-full"
+                className="w-full [&_.swiper-wrapper]:!items-stretch [&_.swiper-slide]:!h-auto [&_.swiper-slide]:!flex [&_.swiper-slide]:!flex-col"
               >
                 {visibleCategories.map((cat) => (
-                  <SwiperSlide key={cat.id} className="h-auto">
+                  <SwiperSlide key={cat.id} className="!h-auto !flex !flex-col">
                     {renderCard(cat)}
                   </SwiperSlide>
                 ))}
