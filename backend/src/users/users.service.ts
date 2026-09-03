@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service.js';
+import { UploadsService } from '../uploads/uploads.service.js';
 import { UpdateProfileDto } from './dto/update-profile.dto.js';
 
 export type UserRow = {
@@ -16,7 +17,10 @@ export type UserRow = {
 
 @Injectable()
 export class UsersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private uploadsService: UploadsService,
+  ) {}
 
   async findAll(pageVal?: number, limitVal?: number, search?: string) {
     const page = pageVal && pageVal > 0 ? pageVal : 1;
@@ -190,6 +194,11 @@ export class UsersService {
   }
 
   async updateAvatar(id: string, avatarUrl: string): Promise<UserRow> {
+    const existing = await this.findById(id);
+    if (existing.avatarUrl && existing.avatarUrl !== avatarUrl) {
+      this.uploadsService.deleteFileByUrl(existing.avatarUrl);
+    }
+
     const user = await this.prisma.queryOne<UserRow>(
       `UPDATE "user" SET "avatarUrl" = $1, "updatedAt" = now()
        WHERE id = $2
@@ -222,12 +231,16 @@ export class UsersService {
 
   async createAuthorByAdmin(dto: any): Promise<UserRow> {
     const emailVal = dto.email.toLowerCase().trim();
-    const existing = await this.prisma.queryOne<{ id: string }>(
-      `SELECT id FROM "user" WHERE LOWER(email) = LOWER($1) LIMIT 1`,
+    const existing = await this.prisma.queryOne<UserRow>(
+      `SELECT id, "avatarUrl" FROM "user" WHERE LOWER(email) = LOWER($1) LIMIT 1`,
       [emailVal],
     );
 
     if (existing) {
+      if (dto.avatarUrl && existing.avatarUrl && existing.avatarUrl !== dto.avatarUrl) {
+        this.uploadsService.deleteFileByUrl(existing.avatarUrl);
+      }
+
       const updated = await this.prisma.queryOne<UserRow>(
         `UPDATE "user"
          SET role = 'AUTHOR'::"Role",
@@ -258,6 +271,15 @@ export class UsersService {
     );
 
     return user!;
+  }
+
+  async deleteUser(id: string) {
+    const user = await this.findById(id);
+    if (user.avatarUrl) {
+      this.uploadsService.deleteFileByUrl(user.avatarUrl);
+    }
+    await this.prisma.execute(`DELETE FROM "user" WHERE id = $1`, [id]);
+    return { success: true, message: 'User deleted successfully' };
   }
 }
 

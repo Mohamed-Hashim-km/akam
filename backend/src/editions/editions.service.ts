@@ -1,12 +1,16 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service.js';
+import { UploadsService } from '../uploads/uploads.service.js';
 import { CreateEditionDto } from './dto/create-edition.dto.js';
 import { UpdateEditionDto } from './dto/update-edition.dto.js';
 import { randomUUID } from 'crypto';
 
 @Injectable()
 export class EditionsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly uploadsService: UploadsService,
+  ) {}
 
   /** Public: only published editions, ordered by sortOrder ASC, createdAt DESC */
   async findAllPublished() {
@@ -111,6 +115,14 @@ export class EditionsService {
     const isPublished = dto.isPublished !== undefined ? dto.isPublished : existing.isPublished;
     const sortOrder = dto.sortOrder !== undefined ? dto.sortOrder : existing.sortOrder;
 
+    if (dto.pdfUrl !== undefined && dto.pdfUrl !== existing.pdfUrl && existing.pdfUrl) {
+      this.uploadsService.deleteFileByUrl(existing.pdfUrl);
+    }
+
+    if (dto.coverImage !== undefined && dto.coverImage !== existing.coverImage && existing.coverImage) {
+      this.uploadsService.deleteFileByUrl(existing.coverImage);
+    }
+
     const sql = `
       UPDATE "edition"
       SET "title" = $2, "pdfUrl" = $3, "coverImage" = $4, "isPublished" = $5, "sortOrder" = $6, "updatedAt" = NOW()
@@ -132,7 +144,13 @@ export class EditionsService {
   }
 
   async remove(id: string) {
-    await this.findOne(id);
+    const existing = await this.findOne(id);
+    if (existing.pdfUrl) {
+      this.uploadsService.deleteFileByUrl(existing.pdfUrl);
+    }
+    if (existing.coverImage) {
+      this.uploadsService.deleteFileByUrl(existing.coverImage);
+    }
     await this.prisma.execute(`DELETE FROM "edition" WHERE "id" = $1`, [id]);
     return { message: 'Edition deleted successfully', id };
   }

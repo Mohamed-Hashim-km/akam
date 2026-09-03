@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
+import { UploadsService } from '../uploads/uploads.service.js';
 import { CreateStoryDto } from './dto/create-story.dto.js';
 import { UpdateStoryDto } from './dto/update-story.dto.js';
 import { ReviewStoryDto } from './dto/review-story.dto.js';
@@ -42,6 +43,7 @@ export class StoriesService {
   constructor(
     private prisma: PrismaService,
     private notificationsService: NotificationsService,
+    private uploadsService: UploadsService,
   ) {}
 
   async findAll(
@@ -248,6 +250,10 @@ export class StoriesService {
     const isEditorOrAdmin = userRow && ['EDITOR', 'ADMIN'].includes(userRow.role);
     if (story.authorId !== userId && !isEditorOrAdmin) throw new ForbiddenException('Not authorized');
 
+    if (story.coverImageUrl && story.coverImageUrl !== coverImageUrl) {
+      this.uploadsService.deleteFileByUrl(story.coverImageUrl);
+    }
+
     return this.prisma.queryOne(
       `UPDATE story SET "coverImageUrl" = $1, "updatedAt" = now()
        WHERE id = $2 RETURNING id, "coverImageUrl"`,
@@ -349,6 +355,12 @@ export class StoriesService {
     const story = await this.findOne(id);
     if (story.authorId !== userId && !['EDITOR', 'ADMIN'].includes(userRole)) {
       throw new ForbiddenException('Not authorized to delete this story');
+    }
+    if (story.coverImageUrl) {
+      this.uploadsService.deleteFileByUrl(story.coverImageUrl);
+    }
+    if (story.content) {
+      this.uploadsService.deleteFilesFromContent(story.content);
     }
     await this.prisma.execute(`DELETE FROM story WHERE id = $1`, [id]);
     return { success: true };
