@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service.js';
+import { UploadsService } from '../uploads/uploads.service.js';
 import { CreateEventDto } from './dto/create-event.dto.js';
 import { UpdateEventDto } from './dto/update-event.dto.js';
 import { EventType } from './events.types.js';
@@ -26,7 +27,10 @@ const SELECT_FIELDS = `id, type, title, description, location, time, day, "month
 
 @Injectable()
 export class EventsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly uploadsService: UploadsService,
+  ) {}
 
   // ── Public Endpoints ─────────────────────────────────────────────────────
   async findAllPublished(type?: EventType): Promise<EventItem[]> {
@@ -207,6 +211,10 @@ export class EventsService {
     const registerHref = dto.registerHref !== undefined ? dto.registerHref : existing.registerHref;
     const isPublished = dto.isPublished !== undefined ? dto.isPublished : existing.isPublished;
 
+    if (dto.imageSrc !== undefined && dto.imageSrc !== existing.imageSrc && existing.imageSrc) {
+      this.uploadsService.deleteFileByUrl(existing.imageSrc);
+    }
+
     const row = await this.prisma.queryOne<EventItem>(
       `UPDATE "event"
        SET
@@ -231,7 +239,10 @@ export class EventsService {
   }
 
   async remove(id: string) {
-    await this.findOne(id);
+    const existing = await this.findOne(id);
+    if (existing.imageSrc) {
+      this.uploadsService.deleteFileByUrl(existing.imageSrc);
+    }
     await this.prisma.execute(`DELETE FROM "event" WHERE id = $1`, [id]);
     return { success: true, message: 'Event deleted successfully' };
   }

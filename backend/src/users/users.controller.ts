@@ -3,6 +3,7 @@ import {
   Get,
   Patch,
   Post,
+  Delete,
   Body,
   Param,
   Query,
@@ -147,6 +148,14 @@ export class UsersController {
   @ApiOperation({ summary: '[Editor/Admin] Create or elevate user as Author' })
   async createAuthor(@Body() dto: CreateAuthorDto) {
     return this.usersService.createAuthorByAdmin(dto);
+  }
+
+  @Delete(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('EDITOR', 'ADMIN')
+  @ApiOperation({ summary: '[Editor/Admin] Delete user or author account and cleanup files' })
+  async deleteUser(@Param('id') id: string) {
+    return this.usersService.deleteUser(id);
   }
 }
 

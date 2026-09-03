@@ -17,6 +17,50 @@ export class UploadsService {
     }
   }
 
+  deleteFileByUrl(fileUrl: string | null | undefined): void {
+    if (!fileUrl || typeof fileUrl !== 'string') return;
+
+    try {
+      const uploadIdx = fileUrl.indexOf('/uploads/');
+      if (uploadIdx === -1) return;
+
+      const relativePath = fileUrl.substring(uploadIdx + '/uploads/'.length);
+      if (!relativePath) return;
+
+      const fullPath = path.normalize(path.join(this.uploadDir, relativePath));
+
+      // Security check: prevent path traversal outside uploadDir
+      if (!fullPath.startsWith(this.uploadDir)) {
+        this.logger.warn(`Path traversal attempt blocked for ${fileUrl}`);
+        return;
+      }
+
+      if (fs.existsSync(fullPath)) {
+        fs.unlinkSync(fullPath);
+        this.logger.log(`🗑️ Deleted local upload file from disk: ${fullPath}`);
+      }
+    } catch (err) {
+      this.logger.error(`Failed to delete upload file for URL: ${fileUrl}`, err);
+    }
+  }
+
+  deleteFilesFromContent(content: string | null | undefined): void {
+    if (!content || typeof content !== 'string') return;
+
+    try {
+      const regex = /\/uploads\/[^\s\)"']+/g;
+      const matches = content.match(regex);
+      if (matches && matches.length > 0) {
+        const uniqueUrls = Array.from(new Set(matches));
+        for (const url of uniqueUrls) {
+          this.deleteFileByUrl(url);
+        }
+      }
+    } catch (err) {
+      this.logger.error('Failed to clean up inline files from content', err);
+    }
+  }
+
   private getAllowedMimeTypes(): string[] {
     return ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
   }
