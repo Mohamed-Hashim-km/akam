@@ -242,15 +242,41 @@ function StoryCatalogContent() {
               return (
                 <div
                   key={idx}
-                  className="prose max-w-none text-gray-900 text-base leading-relaxed font-normal whitespace-pre-wrap [&_p]:mb-4"
+                  className="prose max-w-none text-gray-900 text-base leading-relaxed font-normal [&_p]:mb-4 [&_a]:text-emerald-700 [&_a]:underline [&_a]:font-medium [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:list-decimal [&_ol]:pl-6 [&_h2]:text-xl [&_h2]:font-bold [&_h2]:my-3 [&_h3]:text-lg [&_h3]:font-bold [&_h3]:my-2 [&_blockquote]:border-l-4 [&_blockquote]:border-emerald-500 [&_blockquote]:pl-4 [&_blockquote]:italic"
                   dangerouslySetInnerHTML={{ __html: part.value }}
                 />
               );
             }
+
+            let formattedText = part.value;
+            formattedText = formattedText.replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-emerald-700 underline font-medium hover:text-emerald-900">$1</a>');
+            formattedText = formattedText.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
+            formattedText = formattedText.replace(/\*(.*?)\*/g, '<i>$1</i>');
+
+            const paragraphs = formattedText.replace(/\r\n/g, "\n").split("\n\n");
             return (
-              <p key={idx} className="text-gray-900 text-base leading-relaxed font-normal whitespace-pre-wrap">
-                {part.value}
-              </p>
+              <div key={idx} className="space-y-4">
+                {paragraphs.map((pText, pIdx) => {
+                  if (!pText.trim()) {
+                    return <p key={pIdx} className="h-6 mb-6"><br /></p>;
+                  }
+                  const containsInlineHtml = /<[a-z][\s\S]*>/i.test(pText);
+                  if (containsInlineHtml) {
+                    return (
+                      <div
+                        key={pIdx}
+                        className="text-gray-900 text-base leading-relaxed font-normal mb-6 [&_a]:text-emerald-700 [&_a]:underline [&_a]:font-medium"
+                        dangerouslySetInnerHTML={{ __html: pText }}
+                      />
+                    );
+                  }
+                  return (
+                    <p key={pIdx} className="text-gray-900 text-base leading-relaxed font-normal whitespace-pre-wrap mb-6">
+                      {pText}
+                    </p>
+                  );
+                })}
+              </div>
             );
           } else {
             return (

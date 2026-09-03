@@ -443,24 +443,80 @@ export default function StoryDetailPage() {
               return (
                 <div
                   key={idx}
-                  className="prose prose-lg max-w-none text-gray-900 leading-relaxed font-normal whitespace-pre-wrap [&_p]:mb-4 [&_p]:text-[#1A1A1A]"
+                  className="prose prose-lg max-w-none text-gray-900 leading-relaxed font-normal [&_p]:mb-4 [&_p]:text-[#1A1A1A] [&_a]:text-emerald-700 [&_a]:underline [&_a]:font-medium [&_a]:hover:text-emerald-900 [&_ul]:list-disc [&_ul]:pl-6 [&_ul]:mb-4 [&_ol]:list-decimal [&_ol]:pl-6 [&_ol]:mb-4 [&_h2]:text-2xl [&_h2]:font-bold [&_h2]:my-4 [&_h2]:text-gray-950 [&_h3]:text-xl [&_h3]:font-bold [&_h3]:my-3 [&_h3]:text-gray-900 [&_blockquote]:border-l-4 [&_blockquote]:border-emerald-500 [&_blockquote]:pl-4 [&_blockquote]:py-2 [&_blockquote]:italic [&_blockquote]:my-4 [&_blockquote]:bg-gray-50/70 [&_blockquote]:rounded-r-xl"
                   dangerouslySetInnerHTML={{ __html: part.value }}
                 />
               );
             }
-            const paragraphs = part.value.split(/\n\n+/);
-            return (
-              <div key={idx} className="space-y-4">
-                {paragraphs.map((pText, pIdx) => (
-                  <p
-                    key={pIdx}
-                    className="text-gray-900 text-base sm:text-lg leading-relaxed font-normal whitespace-pre-wrap tracking-normal mb-4"
-                  >
-                    {pText}
-                  </p>
-                ))}
-              </div>
-            );
+
+            let formattedText = part.value.replace(/&nbsp;/gi, " ");
+            formattedText = formattedText.replace(/^###\s+(.*)$/gm, '<h3 class="text-xl font-bold my-3 text-gray-900">$1</h3>');
+            formattedText = formattedText.replace(/^##\s+(.*)$/gm, '<h2 class="text-2xl font-bold my-4 text-gray-950">$1</h2>');
+            formattedText = formattedText.replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-emerald-700 underline font-medium hover:text-emerald-900">$1</a>');
+            formattedText = formattedText.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
+            formattedText = formattedText.replace(/\*(.*?)\*/g, '<i>$1</i>');
+            formattedText = formattedText.replace(/^>\s+(.*)$/gm, '<blockquote class="border-l-4 border-emerald-500 pl-4 py-2 italic my-4 text-gray-800 bg-gray-50/70 rounded-r-xl">$1</blockquote>');
+            formattedText = formattedText.replace(/\*\*/g, "");
+
+            const lines = formattedText.replace(/\r\n/g, "\n").split("\n");
+            const renderedElements: React.ReactNode[] = [];
+            let currentLines: string[] = [];
+
+            const flush = (key: string) => {
+              if (currentLines.length > 0) {
+                const text = currentLines.join("<br>");
+                if (text.trim()) {
+                  const containsInlineHtml = /<[a-z][\s\S]*>/i.test(text);
+                  if (containsInlineHtml) {
+                    renderedElements.push(
+                      <div
+                        key={key}
+                        className="text-gray-900 text-base sm:text-lg leading-relaxed font-normal mb-4 [&_a]:text-emerald-700 [&_a]:underline [&_a]:font-medium [&_a]:hover:text-emerald-900 [&_b]:font-bold [&_strong]:font-bold [&_h2]:text-2xl [&_h2]:font-bold [&_h2]:my-4 [&_h3]:text-xl [&_h3]:font-bold [&_h3]:my-3 [&_blockquote]:border-l-4 [&_blockquote]:border-emerald-500 [&_blockquote]:pl-4 [&_blockquote]:italic"
+                        dangerouslySetInnerHTML={{ __html: text }}
+                      />
+                    );
+                  } else {
+                    renderedElements.push(
+                      <p
+                        key={key}
+                        className="text-gray-900 text-base sm:text-lg leading-relaxed font-normal whitespace-pre-wrap tracking-normal mb-4"
+                      >
+                        {text}
+                      </p>
+                    );
+                  }
+                }
+                currentLines = [];
+              }
+            };
+
+            for (let i = 0; i < lines.length; i++) {
+              const line = lines[i];
+              const trimmed = line.trim();
+              if (!trimmed) {
+                flush(`flush-${i}`);
+                renderedElements.push(<p key={`empty-${i}`} className="mb-4"><br /></p>);
+                continue;
+              }
+              if (
+                trimmed.startsWith("<h2") ||
+                trimmed.startsWith("<h3") ||
+                trimmed.startsWith("<blockquote") ||
+                trimmed.startsWith("<ul") ||
+                trimmed.startsWith("<ol") ||
+                trimmed.startsWith("<div")
+              ) {
+                flush(`flush-${i}`);
+                renderedElements.push(
+                  <div key={`block-${i}`} dangerouslySetInnerHTML={{ __html: trimmed }} />
+                );
+                continue;
+              }
+              currentLines.push(trimmed);
+            }
+            flush("flush-end");
+
+            return <div key={idx} className="space-y-4">{renderedElements}</div>;
           } else {
             return (
               <div key={idx} className="my-6 sm:my-8 flex justify-center">

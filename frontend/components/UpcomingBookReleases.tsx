@@ -102,13 +102,13 @@ export const UpcomingBookReleases: React.FC<UpcomingBookReleasesProps> = ({
   const renderBookCard = (item: BookReleaseItem) => (
     <div
       key={item.id}
-      className="bg-white rounded-3xl p-7 sm:p-8 flex flex-col justify-between w-full h-full shadow-xs hover:shadow-lg transition-all duration-300 group border border-purple-100/80 "
+      className="bg-white rounded-3xl p-7 sm:p-8 flex flex-col justify-between w-full h-full shadow-xs hover:shadow-lg transition-all duration-300 group border border-purple-100/80"
     >
       <div className="flex-1 flex flex-col justify-between">
         <div>
           {/* Header: Title + Tag */}
           <div className="flex items-start justify-between gap-3 mb-1">
-            <h3 className="text-xl sm:text-2xl font-semibold text-dark-bg tracking-tight leading-tight">
+            <h3 className="text-xl sm:text-2xl font-semibold text-dark-bg tracking-tight leading-tight break-words">
               {item.title}
             </h3>
             {item.editionTag && (
@@ -119,12 +119,12 @@ export const UpcomingBookReleases: React.FC<UpcomingBookReleasesProps> = ({
           </div>
 
           {/* Author Name */}
-          <p className="text-sm font-medium text-dark-bg/60 mb-4">
+          <p className="text-sm font-medium text-dark-bg/60 mb-4 break-words">
             {item.author}
           </p>
 
           {/* Description */}
-          <p className="text-sm sm:text-base text-dark-bg/75 leading-relaxed font-normal mb-4">
+          <p className="text-sm sm:text-base text-dark-bg/75 leading-relaxed font-normal mb-4 break-words">
             {item.description}
           </p>
         </div>
@@ -191,10 +191,10 @@ export const UpcomingBookReleases: React.FC<UpcomingBookReleasesProps> = ({
                 onSwiper={(swiper) => setSwiperInstance(swiper)}
                 spaceBetween={16}
                 slidesPerView={1.15}
-                className="w-full"
+                className="w-full [&_.swiper-wrapper]:!items-stretch [&_.swiper-slide]:!h-auto [&_.swiper-slide]:!flex [&_.swiper-slide]:!flex-col"
               >
                 {displayList.map((item) => (
-                  <SwiperSlide key={item.id} className="h-auto">
+                  <SwiperSlide key={item.id} className="!h-auto !flex !flex-col">
                     {renderBookCard(item)}
                   </SwiperSlide>
                 ))}

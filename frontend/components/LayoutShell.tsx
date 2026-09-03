@@ -7,7 +7,7 @@ import Footer from "@/components/Footer";
 
 export default function LayoutShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const isEditorialDashboard = pathname?.startsWith("/editorial");
+  const isEditorialDashboard = pathname === "/editorial" || pathname?.startsWith("/editorial/");
 
   if (isEditorialDashboard) {
     return <div className="min-h-screen flex flex-col bg-gray-50">{children}</div>;

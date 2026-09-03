@@ -83,4 +83,44 @@ export class ModerationController {
   ) {
     return this.moderationService.updateReportStatus(reportId, dto);
   }
+
+  @Post('contact-inquiries')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Submit a contact form inquiry' })
+  async createContactInquiry(
+    @Body() dto: { name: string; email: string; phone?: string; subject: string; message: string },
+  ) {
+    return this.moderationService.createContactInquiry(dto);
+  }
+
+  @Get('editorial/contact-inquiries')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('EDITOR', 'ADMIN')
+  @ApiOperation({ summary: '[Editor] List contact form inquiries' })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({ name: 'status', required: false, description: 'Status filter' })
+  @ApiQuery({ name: 'search', required: false, description: 'Search term' })
+  async getContactInquiries(
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+    @Query('status') status?: string,
+    @Query('search') search?: string,
+  ) {
+    return this.moderationService.getContactInquiries({ page, limit, status, search });
+  }
+
+  @Patch('editorial/contact-inquiries/:id')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('EDITOR', 'ADMIN')
+  @ApiOperation({ summary: '[Editor] Update status of contact inquiry' })
+  async updateContactInquiryStatus(
+    @Param('id') id: string,
+    @Body('status') status: string,
+  ) {
+    return this.moderationService.updateContactInquiryStatus(id, status);
+  }
 }

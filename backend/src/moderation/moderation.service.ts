@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service.js';
 import { CreateReportDto } from './dto/create-report.dto.js';
 import { UpdateReportStatusDto } from './dto/update-report-status.dto.js';
@@ -21,8 +21,28 @@ export interface ReportRow {
 }
 
 @Injectable()
-export class ModerationService {
+export class ModerationService implements OnModuleInit {
   constructor(private prisma: PrismaService) {}
+
+  async onModuleInit() {
+    try {
+      await this.prisma.execute(`
+        CREATE TABLE IF NOT EXISTS contact_inquiry (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          email TEXT NOT NULL,
+          phone TEXT,
+          subject TEXT NOT NULL,
+          message TEXT NOT NULL,
+          status TEXT DEFAULT 'PENDING',
+          "createdAt" TIMESTAMP WITH TIME ZONE DEFAULT now(),
+          "updatedAt" TIMESTAMP WITH TIME ZONE DEFAULT now()
+        );
+      `);
+    } catch (e) {
+      console.error('Failed to initialize contact_inquiry table', e);
+    }
+  }
 
   async createReport(reporterId: string, targetStoryId: string, dto: CreateReportDto) {
     const story = await this.prisma.queryOne<{ id: string }>(
@@ -150,5 +170,79 @@ export class ModerationService {
     );
 
     return { id: reportId, status: dto.status };
+  }
+
+  async createContactInquiry(dto: { name: string; email: string; phone?: string; subject: string; message: string }) {
+    await this.onModuleInit();
+    const result = await this.prisma.queryOne(
+      `INSERT INTO contact_inquiry (id, name, email, phone, subject, message, status, "createdAt", "updatedAt")
+       VALUES (gen_random_uuid()::text, $1, $2, $3, $4, $5, 'PENDING', now(), now())
+       RETURNING id, name, email, phone, subject, message, status, "createdAt"`,
+      [dto.name, dto.email, dto.phone ?? null, dto.subject || 'General Inquiry', dto.message],
+    );
+    return result!;
+  }
+
+  async getContactInquiries(options: { page?: number; limit?: number; search?: string; status?: string } = {}) {
+    await this.onModuleInit();
+    const page = Math.max(1, Number(options.page) || 1);
+    const limit = Math.min(100, Math.max(1, Number(options.limit) || 10));
+    const offset = (page - 1) * limit;
+
+    const conditions: string[] = [];
+    const params: any[] = [];
+
+    if (options.status && options.status.trim() && options.status.toUpperCase() !== 'ALL') {
+      params.push(options.status.trim().toUpperCase());
+      conditions.push(`status = $${params.length}`);
+    }
+
+    if (options.search && options.search.trim()) {
+      params.push(`%${options.search.trim()}%`);
+      const pIdx = params.length;
+      conditions.push(`(name ILIKE $${pIdx} OR email ILIKE $${pIdx} OR subject ILIKE $${pIdx} OR message ILIKE $${pIdx})`);
+    }
+
+    const whereSql = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    const countRow = await this.prisma.queryOne<{ count: string }>(
+      `SELECT COUNT(*) AS count FROM contact_inquiry ${whereSql}`,
+      params,
+    );
+
+    const total = parseInt(countRow?.count ?? '0', 10);
+    const totalPages = Math.ceil(total / limit) || 1;
+
+    const limitIdx = params.length + 1;
+    const offsetIdx = params.length + 2;
+    const queryParams = [...params, limit, offset];
+
+    const data = await this.prisma.query(
+      `SELECT id, name, email, phone, subject, message, status, "createdAt", "updatedAt"
+       FROM contact_inquiry
+       ${whereSql}
+       ORDER BY "createdAt" DESC
+       LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
+      queryParams,
+    );
+
+    return {
+      data,
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages,
+      },
+    };
+  }
+
+  async updateContactInquiryStatus(id: string, status: string) {
+    await this.onModuleInit();
+    await this.prisma.execute(
+      `UPDATE contact_inquiry SET status = $1, "updatedAt" = now() WHERE id = $2`,
+      [status, id],
+    );
+    return { id, status };
   }
 }

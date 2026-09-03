@@ -12,11 +12,32 @@ async function bootstrap() {
 
   app.use(cookieParser());
 
-  // Serve local static uploaded files
+  // Serve local static uploaded files — with CORS headers so frontend can fetch PDFs/images
   const uploadsPath = path.join(process.cwd(), 'uploads');
+  const allowedOrigins = [
+    process.env.FRONTEND_URL ?? 'http://localhost:3001',
+    'http://localhost:3001',
+    'http://localhost:3000',
+  ];
   app.useStaticAssets(uploadsPath, {
     prefix: '/uploads/',
+    setHeaders: (res: any, _filePath: string) => {
+      const req = (res as any).req;
+      const origin = req?.headers?.origin as string | undefined;
+      if (origin && allowedOrigins.includes(origin)) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+      } else {
+        // Fallback: allow the primary frontend
+        res.setHeader('Access-Control-Allow-Origin', allowedOrigins[0]);
+      }
+      res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Range');
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+      // Allow range requests for PDFs (needed by pdf.js)
+      res.setHeader('Accept-Ranges', 'bytes');
+    },
   });
+
 
   // Global prefix
   app.setGlobalPrefix('api');

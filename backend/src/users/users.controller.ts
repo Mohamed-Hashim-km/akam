@@ -25,7 +25,6 @@ import { UploadsService } from '../uploads/uploads.service.js';
 
 @ApiTags('Users')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
 @Controller('users')
 export class UsersController {
   constructor(
@@ -34,7 +33,7 @@ export class UsersController {
   ) {}
 
   @Get()
-  @UseGuards(RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('EDITOR', 'ADMIN')
   @ApiOperation({ summary: '[Editor/Admin] Get all registered users' })
   async findAll(
@@ -47,19 +46,55 @@ export class UsersController {
     return this.usersService.findAll(pageNum, limitNum, search);
   }
 
+  @Get('featured')
+  @ApiOperation({ summary: 'Get all featured authors for Masika journal with pagination' })
+  async getFeaturedAuthors(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const pageNum = page ? parseInt(page, 10) : undefined;
+    const limitNum = limit ? parseInt(limit, 10) : undefined;
+    return this.usersService.findFeaturedAuthors(pageNum, limitNum);
+  }
+
+  @Get('featured-authors')
+  @ApiOperation({ summary: 'Get all featured authors for Masika journal with pagination' })
+  async getFeaturedAuthorsAlias(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const pageNum = page ? parseInt(page, 10) : undefined;
+    const limitNum = limit ? parseInt(limit, 10) : undefined;
+    return this.usersService.findFeaturedAuthors(pageNum, limitNum);
+  }
+
+  @Get('public-authors')
+  @ApiOperation({ summary: 'Get all platform authors with pagination' })
+  async getPublicAuthors(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const pageNum = page ? parseInt(page, 10) : undefined;
+    const limitNum = limit ? parseInt(limit, 10) : undefined;
+    return this.usersService.findPublicAuthors(pageNum, limitNum);
+  }
+
   @Get('me')
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Get current user profile' })
   async getMe(@CurrentUser() user: AuthUser) {
     return this.usersService.findById(user.id);
   }
 
   @Patch('me')
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Update display name and bio' })
   async updateProfile(@CurrentUser() user: AuthUser, @Body() dto: UpdateProfileDto) {
     return this.usersService.updateProfile(user.id, dto);
   }
 
   @Post('me/avatar')
+  @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Upload profile picture' })
   @ApiConsumes('multipart/form-data')
@@ -73,6 +108,7 @@ export class UsersController {
   }
 
   @Post('me/become-author')
+  @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Upgrade account to AUTHOR role to enable story creation' })
   async becomeAuthor(@CurrentUser() user: AuthUser) {
@@ -80,10 +116,18 @@ export class UsersController {
   }
 
   @Patch(':id/role')
-  @UseGuards(RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('EDITOR', 'ADMIN')
   @ApiOperation({ summary: '[Editor/Admin] Update user role' })
   async updateRole(@Param('id') id: string, @Body('role') role: string) {
     return this.usersService.updateRole(id, role);
+  }
+
+  @Patch(':id/toggle-featured')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('EDITOR', 'ADMIN')
+  @ApiOperation({ summary: '[Editor/Admin] Toggle user Masika featured author status' })
+  async toggleFeatured(@Param('id') id: string) {
+    return this.usersService.toggleFeatured(id);
   }
 }
