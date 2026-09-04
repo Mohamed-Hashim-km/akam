@@ -1,31 +1,87 @@
-generator client {
-  provider = "prisma-client-js"
-}
+// use prisma-next
+// Contract inferred from the live database schema. Edit as needed, then run `prisma contract emit`.
 
-datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-}
+namespace public {
+  model User {
+    id            String         @id(map: "user_pkey")
+    createdAt     Timestamptz    @default(now())
+    email         String         @unique(map: "user_email_key")
+    name          String?
+    updatedAt     Timestamptz
+    bio           String?
+    avatarUrl     String?
+    role          pg.enum(Role)  @default("READER")
+    notifications Notification[]
+    stories       Story[]
 
-model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  name      String?
-  role      String   @default("user")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+    @@map("user")
+  }
 
-  articles  Article[]
-}
+  model Story {
+    id            String               @id(map: "Story_pkey") @default(dbgenerated("(gen_random_uuid())::text"))
+    title         String
+    slug          String
+    content       String
+    coverImageUrl String?
+    status        pg.enum(StoryStatus) @default("DRAFT")
+    rejectionNote String?
+    authorId      String
+    createdAt     Timestamptz          @default(now())
+    updatedAt     Timestamptz          @default(now())
+    notifications Notification[]
+    author        User                 @relation(fields: [authorId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "Story_authorId_fkey")
 
-model Article {
-  id          String   @id @default(uuid())
-  title       String
-  slug        String   @unique
-  content     String
-  published   Boolean  @default(false)
-  authorId    String
-  author      User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+    @@index([authorId], map: "Story_authorId_idx")
+    @@index([slug], map: "Story_slug_key", unique: true)
+    @@index([status], map: "Story_status_idx")
+    @@map("story")
+  }
+
+  model Notification {
+    id             String                    @id(map: "Notification_pkey") @default(dbgenerated("(gen_random_uuid())::text"))
+    userId         String
+    _type          pg.enum(NotificationType) @map("type")
+    message        String
+    read           Boolean                   @default(false)
+    relatedStoryId String?
+    createdAt      Timestamptz               @default(now())
+    relatedStory   Story?                    @relation(fields: [relatedStoryId], references: [id], onDelete: SetNull, onUpdate: Cascade, map: "Notification_relatedStoryId_fkey", index: false)
+    user           User                      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "Notification_userId_fkey")
+
+    @@index([read], map: "Notification_read_idx")
+    @@index([userId], map: "Notification_userId_idx")
+    @@map("notification")
+  }
+
+  model OtpCode {
+    id        String      @id(map: "OtpCode_pkey") @default(dbgenerated("(gen_random_uuid())::text"))
+    email     String
+    code      String
+    expiresAt Timestamptz
+    used      Boolean     @default(false)
+    createdAt Timestamptz @default(now())
+
+    @@index([email], map: "OtpCode_email_idx")
+    @@map("otp_code")
+  }
+
+  native_enum NotificationType {
+    STORY_SUBMITTED = "STORY_SUBMITTED"
+    STORY_APPROVED = "STORY_APPROVED"
+    STORY_REJECTED = "STORY_REJECTED"
+  }
+
+  native_enum Role {
+    READER = "READER"
+    AUTHOR = "AUTHOR"
+    EDITOR = "EDITOR"
+    ADMIN = "ADMIN"
+  }
+
+  native_enum StoryStatus {
+    DRAFT = "DRAFT"
+    PENDING = "PENDING"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+  }
 }

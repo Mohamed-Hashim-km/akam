@@ -20,23 +20,22 @@ export const Button: React.FC<ButtonProps> = ({
   disabled,
   ...props
 }) => {
-  // Variant styles
+  // Base & Variant styles
   const baseStyles =
-    "inline-flex items-center justify-center font-medium rounded-full transition-all duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed active:scale-95";
+    "inline-flex items-center justify-center font-medium rounded-full transition-all duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 whitespace-nowrap";
 
   const variantStyles = {
-    primary: "bg-dark-bg text-white hover:bg-black/85 ",
-    secondary: "bg-white text-dark-bg hover:bg-slate-100 ",
-    green: "bg-primary-green text-dark-bg font-medium hover:bg-emerald-600 ",
+    primary: "bg-dark-bg text-white hover:bg-black/85",
+    secondary: "bg-white text-dark-bg hover:bg-slate-100 border border-gray-200",
+    green: "bg-primary-green text-white font-medium hover:bg-emerald-600 ",
     outline: "border-2 border-dark-bg text-dark-bg hover:bg-dark-bg hover:text-white",
     ghost: "text-dark-bg hover:bg-black/5",
   };
 
-
   const sizeStyles = {
-    sm: "px-4 py-1.5 text-xs md:text-sm gap-1.5",
+    sm: "px-4 py-2 text-xs md:text-sm gap-1.5",
     md: "px-5 py-2.5 text-sm md:text-base gap-2",
-    lg: "px-2 py-1 px-4 py-1 lg:text-lg gap-2.5",
+    lg: "px-6 py-3 text-sm md:text-base gap-2",
   };
 
   const widthStyle = fullWidth ? "w-full" : "";
