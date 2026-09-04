@@ -24,7 +24,7 @@ export class AuthService {
 
   private getTransporter(): nodemailer.Transporter {
     const host = this.configService.get<string>('SMTP_HOST') || 'smtp.gmail.com';
-    const port = parseInt(this.configService.get<string>('SMTP_PORT') || '465', 10);
+    const port = parseInt(this.configService.get<string>('SMTP_PORT') || '587', 10);
     const secureConfig = this.configService.get<string>('SMTP_SECURE');
     const secure = secureConfig !== undefined ? secureConfig === 'true' : port === 465;
     const user = this.configService.get<string>('SMTP_USER');
@@ -38,6 +38,9 @@ export class AuthService {
         user,
         pass,
       },
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 15000,
       family: 4, // Force IPv4 to prevent ENETUNREACH IPv6 errors on Render
     } as any);
   }
