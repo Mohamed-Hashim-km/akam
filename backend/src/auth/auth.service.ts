@@ -54,6 +54,8 @@ export class AuthService {
     const code = this.generateOtp();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
+    this.logger.log(`🔑 [OTP] Generated OTP for ${email}: ${code}`);
+
     // Invalidate previous unused OTPs
     await this.prisma.execute(
       `UPDATE otp_code SET used = true WHERE email = $1 AND used = false`,
