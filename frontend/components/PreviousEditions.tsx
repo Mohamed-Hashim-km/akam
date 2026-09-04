@@ -7,7 +7,7 @@ import dynamic from "next/dynamic";
 // Dynamically import flipbook to avoid SSR issues
 const EditionFlipbook = dynamic(() => import("./EditionFlipbook"), { ssr: false });
 
-import { API_BASE_URL } from "@/lib/config";
+import { API_BASE_URL, formatAssetUrl } from "@/lib/config";
 
 export interface EditionItem {
   id: string;
@@ -152,7 +152,7 @@ export const PreviousEditions: React.FC<PreviousEditionsProps> = ({
                       <div className="relative w-full aspect-[3/4] rounded-2xl overflow-hidden transition-all duration-300 bg-gray-100 shadow-md group-hover:shadow-xl group-hover:-translate-y-1">
                         {showCover ? (
                           <img
-                            src={edition.coverImage!}
+                            src={formatAssetUrl(edition.coverImage!)}
                             alt={edition.title}
                             onError={() => handleImgError(edition.id)}
                             className="w-full h-full object-cover object-center transition-transform duration-500 group-hover:scale-105"
