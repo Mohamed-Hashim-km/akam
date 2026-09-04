@@ -14,21 +14,32 @@ async function bootstrap() {
 
   // Serve local static uploaded files — with CORS headers so frontend can fetch PDFs/images
   const uploadsPath = path.join(process.cwd(), 'uploads');
-  const allowedOrigins = [
-    process.env.FRONTEND_URL ?? 'http://localhost:3001',
-    'http://localhost:3001',
-    'http://localhost:3000',
-  ];
+  const configuredOrigins = process.env.CORS_ORIGINS
+    ? process.env.CORS_ORIGINS.split(',').map((o) => o.trim())
+    : [];
+
+  const allowedOrigins = Array.from(
+    new Set([
+      'https://akamdigital.vercel.app',
+      'http://localhost:3000',
+      'http://localhost:3001',
+      process.env.FRONTEND_URL,
+      ...configuredOrigins,
+    ]),
+  ).filter(Boolean) as string[];
+
+  const isOriginAllowed = (origin?: string) => {
+    if (!origin) return true;
+    return allowedOrigins.includes(origin);
+  };
+
   app.useStaticAssets(uploadsPath, {
     prefix: '/uploads/',
     setHeaders: (res: any, _filePath: string) => {
       const req = (res as any).req;
       const origin = req?.headers?.origin as string | undefined;
-      if (origin && allowedOrigins.includes(origin)) {
+      if (origin && isOriginAllowed(origin)) {
         res.setHeader('Access-Control-Allow-Origin', origin);
-      } else {
-        // Fallback: allow the primary frontend
-        res.setHeader('Access-Control-Allow-Origin', allowedOrigins[0]);
       }
       res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
       res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Range');
@@ -38,19 +49,20 @@ async function bootstrap() {
     },
   });
 
-
   // Global prefix
   app.setGlobalPrefix('api');
 
   // CORS
   app.enableCors({
-    origin: [
-      process.env.FRONTEND_URL ?? 'http://localhost:3001',
-      'http://localhost:3001',
-      'http://localhost:3000',
-    ],
+    origin: (origin, callback) => {
+      if (isOriginAllowed(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
     methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Range'],
     credentials: true,
   });
 

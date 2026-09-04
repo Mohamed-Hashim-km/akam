@@ -2,6 +2,7 @@
 
 import React from "react";
 import Pdf3DFlipbook from "./Pdf3DFlipbook";
+import { formatAssetUrl } from "@/lib/config";
 
 interface EditionFlipbookProps {
   pdfUrl: string;
@@ -10,7 +11,7 @@ interface EditionFlipbookProps {
 }
 
 const EditionFlipbook: React.FC<EditionFlipbookProps> = ({ pdfUrl, onClose }) => {
-  return <Pdf3DFlipbook pdfUrl={pdfUrl} onClose={onClose} />;
+  return <Pdf3DFlipbook pdfUrl={formatAssetUrl(pdfUrl)} onClose={onClose} />;
 };
 
 export default EditionFlipbook;
