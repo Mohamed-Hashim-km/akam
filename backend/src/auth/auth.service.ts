@@ -38,7 +38,8 @@ export class AuthService {
         user,
         pass,
       },
-    });
+      family: 4, // Force IPv4 to prevent ENETUNREACH IPv6 errors on Render
+    } as any);
   }
 
   private generateOtp(): string {
