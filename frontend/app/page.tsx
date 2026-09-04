@@ -9,6 +9,8 @@ import UpcomingBookReleases from "@/components/UpcomingBookReleases";
 import ReaderReviews from "@/components/ReaderReviews";
 import { API_BASE_URL } from "@/lib/config";
 
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "Akam Digital — Storytelling, Literature & Cultural Platform",
   description:
@@ -40,13 +42,18 @@ const isUpcomingDate = (day?: string | null, monthYear?: string | null) => {
 
 async function getHomePageData() {
   try {
+    const fetchOptions: RequestInit = {
+      next: { revalidate: 60 },
+      signal: AbortSignal.timeout(3000),
+    };
+
     const [storiesRes, categoriesRes, eventsRes, booksRes, videosRes, commentsRes] = await Promise.allSettled([
-      fetch(`${API_BASE_URL}/stories/published?page=1&limit=10`, { next: { revalidate: 60 } }),
-      fetch(`${API_BASE_URL}/communities`, { next: { revalidate: 60 } }),
-      fetch(`${API_BASE_URL}/events`, { next: { revalidate: 60 } }),
-      fetch(`${API_BASE_URL}/books`, { next: { revalidate: 60 } }),
-      fetch(`${API_BASE_URL}/media?featured=true&limit=3`, { next: { revalidate: 60 } }),
-      fetch(`${API_BASE_URL}/stories/comments/recent?limit=10`, { next: { revalidate: 60 } }),
+      fetch(`${API_BASE_URL}/stories/published?page=1&limit=10`, fetchOptions),
+      fetch(`${API_BASE_URL}/communities`, fetchOptions),
+      fetch(`${API_BASE_URL}/events`, fetchOptions),
+      fetch(`${API_BASE_URL}/books`, fetchOptions),
+      fetch(`${API_BASE_URL}/media?featured=true&limit=3`, fetchOptions),
+      fetch(`${API_BASE_URL}/stories/comments/recent?limit=10`, fetchOptions),
     ]);
 
     const stories =
