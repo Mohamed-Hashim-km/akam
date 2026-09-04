@@ -170,7 +170,7 @@ export const LatestStories: React.FC<LatestStoriesProps> = ({
               }}
               className="w-full !pb-4 !overflow-visible"
             >
-              {stories.map((story) => (
+              {stories.map((story, index) => (
                 <SwiperSlide key={story.id} className="h-auto">
                   <Link href={story.href || `/stories/${story.id}`} className="flex flex-col h-full group/card cursor-pointer">
                     {/* Image Card Container */}
@@ -179,6 +179,7 @@ export const LatestStories: React.FC<LatestStoriesProps> = ({
                         src={story.imageSrc}
                         alt={story.title}
                         fill
+                        priority={index === 0}
                         unoptimized
                         sizes="(max-width: 640px) 80vw, (max-width: 1024px) 40vw, 30vw"
                         className="object-cover group-hover/card:scale-105 transition-transform duration-500"
