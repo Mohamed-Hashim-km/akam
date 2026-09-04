@@ -67,7 +67,88 @@ export class AuthService {
       [email, code, expiresAt.toISOString()],
     );
 
-    // Send OTP email
+    // Send OTP email — Try ZeptoMail HTTPS API first (Port 443 never blocked by Render)
+    const htmlTemplate = `
+      <div style="font-family: Arial, Helvetica, sans-serif; max-width: 480px; margin: 0 auto; padding: 24px 16px; background-color: #f9fafb;">
+        <div style="background-color: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 32px; text-align: left;">
+          <div style="margin-bottom: 20px;">
+            <span style="background-color: #21B573; color: #ffffff; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; padding: 4px 10px; border-radius: 4px; display: inline-block;">
+              AKAM DIGITAL
+            </span>
+          </div>
+          <h2 style="font-size: 20px; font-weight: 700; color: #040706; margin: 0 0 10px 0; line-height: 1.3;">
+            Verify Your Email Address
+          </h2>
+          <p style="font-size: 14px; color: #4B5563; margin: 0 0 24px 0; line-height: 1.5;">
+            Use the verification code below to sign in to your AKAM Digital account. This code is valid for <strong>10 minutes</strong>.
+          </p>
+          <div style="background-color: #040706; border-radius: 8px; padding: 20px; text-align: center; margin-bottom: 24px;">
+            <span style="font-size: 32px; font-weight: 700; color: #E4F953; letter-spacing: 8px; font-family: 'Courier New', Courier, monospace;">
+              ${code}
+            </span>
+          </div>
+          <p style="font-size: 12px; color: #6B7280; margin: 0 0 20px 0; line-height: 1.4;">
+            If you did not request this verification code, you can safely ignore this email.
+          </p>
+          <div style="border-top: 1px solid #e5e7eb; padding-top: 16px; text-align: center;">
+            <p style="font-size: 11px; color: #9CA3AF; margin: 0;">
+              © ${new Date().getFullYear()} AKAM Digital. All rights reserved.
+            </p>
+          </div>
+        </div>
+      </div>
+    `;
+
+    // 1. Try ZeptoMail HTTPS API (Port 443 — bypassing cloud provider SMTP socket blocks)
+    const zeptoToken = this.configService.get<string>('ZEPTO_MAIL_TOKEN');
+    if (zeptoToken) {
+      const zeptoUrl =
+        this.configService.get<string>('ZEPTO_MAIL_URL') ||
+        'https://api.zeptomail.in/v1.1/email';
+      try {
+        const response = await fetch(zeptoUrl, {
+          method: 'POST',
+          headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+            Authorization: zeptoToken,
+          },
+          body: JSON.stringify({
+            from: {
+              address:
+                this.configService.get<string>('ZEPTO_MAIL_FROM_EMAIL') ||
+                'no-reply@megamind.studio',
+              name:
+                this.configService.get<string>('ZEPTO_MAIL_FROM_NAME') ||
+                'AKAM Digital',
+            },
+            to: [
+              {
+                email_address: {
+                  address: email,
+                },
+              },
+            ],
+            subject: 'Your AKAM Digital verification code',
+            htmlbody: htmlTemplate,
+          }),
+        });
+
+        if (response.ok) {
+          this.logger.log(
+            `✅ OTP email sent successfully to ${email} via ZeptoMail HTTPS API (Port 443)`,
+          );
+          return { message: 'OTP sent to your email address' };
+        } else {
+          const errBody = await response.text();
+          this.logger.warn(`ZeptoMail HTTP failed (${response.status}): ${errBody}`);
+        }
+      } catch (e) {
+        this.logger.warn(`ZeptoMail HTTP send error: ${(e as Error).message}`);
+      }
+    }
+
+    // 2. Fallback to Nodemailer SMTP
     try {
       const transporter = this.getTransporter();
       const fromAddress =
@@ -78,36 +159,7 @@ export class AuthService {
         from: fromAddress,
         to: email,
         subject: 'Your AKAM Digital verification code',
-        html: `
-          <div style="font-family: Arial, Helvetica, sans-serif; max-width: 480px; margin: 0 auto; padding: 24px 16px; background-color: #f9fafb;">
-            <div style="background-color: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 32px; text-align: left;">
-              <div style="margin-bottom: 20px;">
-                <span style="background-color: #21B573; color: #ffffff; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; padding: 4px 10px; border-radius: 4px; display: inline-block;">
-                  AKAM DIGITAL
-                </span>
-              </div>
-              <h2 style="font-size: 20px; font-weight: 700; color: #040706; margin: 0 0 10px 0; line-height: 1.3;">
-                Verify Your Email Address
-              </h2>
-              <p style="font-size: 14px; color: #4B5563; margin: 0 0 24px 0; line-height: 1.5;">
-                Use the verification code below to sign in to your AKAM Digital account. This code is valid for <strong>10 minutes</strong>.
-              </p>
-              <div style="background-color: #040706; border-radius: 8px; padding: 20px; text-align: center; margin-bottom: 24px;">
-                <span style="font-size: 32px; font-weight: 700; color: #E4F953; letter-spacing: 8px; font-family: 'Courier New', Courier, monospace;">
-                  ${code}
-                </span>
-              </div>
-              <p style="font-size: 12px; color: #6B7280; margin: 0 0 20px 0; line-height: 1.4;">
-                If you did not request this verification code, you can safely ignore this email.
-              </p>
-              <div style="border-top: 1px solid #e5e7eb; padding-top: 16px; text-align: center;">
-                <p style="font-size: 11px; color: #9CA3AF; margin: 0;">
-                  © ${new Date().getFullYear()} AKAM Digital. All rights reserved.
-                </p>
-              </div>
-            </div>
-          </div>
-        `,
+        html: htmlTemplate,
       });
       this.logger.log(`✅ OTP email sent successfully to ${email}. MessageId: ${info.messageId}`);
     } catch (error) {
