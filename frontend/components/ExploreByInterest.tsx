@@ -38,12 +38,6 @@ const normalizeCategories = (raw: any[]): CategoryItem[] => {
   }));
 };
 
-const defaultCategories: CategoryItem[] = [
-  { id: "1", title: "Storytelling", description: "Engaging stories and narrative craft.", color: "#29ABE1", slug: "storytelling" },
-  { id: "2", title: "Poetry", description: "Verses and rhymes celebrating Malayalam heritage.", color: "#8122DB", slug: "poetry" },
-  { id: "3", title: "Culture & Heritage", description: "Exploring regional traditions and arts.", color: "#E58826", slug: "culture" },
-];
-
 export const ExploreByInterest: React.FC<ExploreByInterestProps> = ({
   title = "Explore By Interest",
   categories: initialPropCategories,
@@ -88,11 +82,14 @@ export const ExploreByInterest: React.FC<ExploreByInterestProps> = ({
     };
   }, [initialPropCategories]);
 
+  if (!loading && categoriesList.length === 0) {
+    return null;
+  }
+
   const getSlug = (cat: CategoryItem) =>
     cat.slug || (cat.title ? cat.title.toLowerCase().replace(/[^a-z0-9]+/g, "-") : "community");
 
-  const displayList = categoriesList.length > 0 ? categoriesList : defaultCategories;
-  const visibleCategories = showAll ? displayList : displayList.slice(0, 6);
+  const visibleCategories = showAll ? categoriesList : categoriesList.slice(0, 6);
 
   const renderCard = (cat: CategoryItem) => {
     const slug = getSlug(cat);
@@ -193,7 +190,7 @@ export const ExploreByInterest: React.FC<ExploreByInterestProps> = ({
         )}
 
         {/* Desktop View More / Show Less Button (Hidden on Mobile) */}
-        {displayList.length > 6 && (
+        {categoriesList.length > 6 && (
           <div className="hidden md:flex justify-center mt-12 sm:mt-16">
             <button
               onClick={() => setShowAll((prev) => !prev)}
