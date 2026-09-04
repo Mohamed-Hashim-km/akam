@@ -7,6 +7,8 @@ import dynamic from "next/dynamic";
 // Dynamically import flipbook to avoid SSR issues
 const EditionFlipbook = dynamic(() => import("./EditionFlipbook"), { ssr: false });
 
+import { API_BASE_URL } from "@/lib/config";
+
 export interface EditionItem {
   id: string;
   title: string;
@@ -20,12 +22,6 @@ export interface EditionItem {
 export interface PreviousEditionsProps {
   title?: string;
 }
-
-const API_URL =
-  process.env.NEXT_PUBLIC_API_URL ||
-  (process.env.NEXT_PUBLIC_SERVER_URL
-    ? `${process.env.NEXT_PUBLIC_SERVER_URL}/api`
-    : "http://localhost:3000/api");
 
 export const PreviousEditions: React.FC<PreviousEditionsProps> = ({
   title = "Previous Editions",
@@ -43,7 +39,7 @@ export const PreviousEditions: React.FC<PreviousEditionsProps> = ({
     const fetchInitial = async () => {
       setLoading(true);
       try {
-        const res = await fetch(`${API_URL}/editions?page=1&limit=3`);
+        const res = await fetch(`${API_BASE_URL}/editions?page=1&limit=3`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const json = await res.json();
 
@@ -81,7 +77,7 @@ export const PreviousEditions: React.FC<PreviousEditionsProps> = ({
     setLoadingMore(true);
     const nextPage = page + 1;
     try {
-      const res = await fetch(`${API_URL}/editions?page=${nextPage}&limit=3`);
+      const res = await fetch(`${API_BASE_URL}/editions?page=${nextPage}&limit=3`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
 
