@@ -14,6 +14,8 @@ export interface MasikaHeroProps {
   imageSrc?: string;
   imageAlt?: string;
   editionLabel?: string;
+  onReadLatest?: () => void;
+  latestEditionTitle?: string;
 }
 
 export const MasikaHero: React.FC<MasikaHeroProps> = ({
@@ -24,7 +26,11 @@ export const MasikaHero: React.FC<MasikaHeroProps> = ({
   imageSrc = "/images/masika/masika2.webp",
   imageAlt = "Akam Masika Digital Journal Cover",
   editionLabel = "Digital Journal Edition - 2026",
+  onReadLatest,
+  latestEditionTitle,
 }) => {
+  const finalImageSrc = "/images/masika/masika2.webp";
+
   return (
     <section className="relative w-full bg-[#FAF5ED] overflow-hidden -mt-[90px] min-h-[560px] lg:min-h-[90vh] flex items-stretch font-poppins">
       
@@ -41,17 +47,30 @@ export const MasikaHero: React.FC<MasikaHeroProps> = ({
             </p>
 
             <div className="pt-2">
-              <Link href={ctaHref}>
+              {onReadLatest ? (
                 <Button
                   variant="primary"
                   size="md"
                   icon={<ArrowRight className="w-4 h-4 ml-1 transition-transform group-hover:translate-x-1" />}
                   iconPosition="right"
-                  className="group px-6 py-3 text-sm font-medium shadow-xs"
+                  onClick={onReadLatest}
+                  className="group px-6 py-3 text-sm font-medium shadow-xs cursor-pointer"
                 >
                   {ctaText}
                 </Button>
-              </Link>
+              ) : (
+                <Link href={ctaHref}>
+                  <Button
+                    variant="primary"
+                    size="md"
+                    icon={<ArrowRight className="w-4 h-4 ml-1 transition-transform group-hover:translate-x-1" />}
+                    iconPosition="right"
+                    className="group px-6 py-3 text-sm font-medium shadow-xs"
+                  >
+                    {ctaText}
+                  </Button>
+                </Link>
+              )}
             </div>
           </div>
         </div>
@@ -61,13 +80,12 @@ export const MasikaHero: React.FC<MasikaHeroProps> = ({
       <div className="hidden lg:flex absolute top-0 right-0 bottom-0 items-center justify-end pointer-events-none z-0">
         <div className="relative w-full h-full flex items-center justify-end">
           <Image
-            src={imageSrc}
+            src={finalImageSrc}
             alt={imageAlt}
             width={1400}
             height={1050}
             priority
-         
-            className="w-full h-full object-contian object-right-top"
+            className="w-full h-full object-contain object-right-top"
           />
         </div>
       </div>

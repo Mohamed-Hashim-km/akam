@@ -64,7 +64,7 @@ import {
 } from "lucide-react";
 import Button from "@/components/ui/Button";
 import AuthModal from "@/components/AuthModal";
-import { API_BASE_URL, apiFetch } from "@/lib/config";
+import { API_BASE_URL, apiFetch, formatAssetUrl } from "@/lib/config";
 
 interface PendingStory {
   id: string;
@@ -4180,29 +4180,38 @@ function EditorialDashboardContent() {
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {editionsList.map((item) => (
-                  <div key={item.id} className="bg-white rounded-[24px] border border-gray-200/80 shadow-xs hover:shadow-md transition-shadow overflow-hidden flex flex-col">
-                    {/* Cover preview */}
-                    <div className="relative w-full aspect-[3/4] bg-gray-100">
-                      {item.coverImage ? (
-                        <img src={item.coverImage} alt={item.title} className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full flex flex-col items-center justify-center gap-2 text-gray-300">
-                          <Archive className="w-10 h-10" />
-                          <span className="text-xs font-medium text-gray-400">No cover</span>
+                {editionsList.map((item, index) => {
+                  const isLatestPublished = item.isPublished && editionsList.findIndex(e => e.isPublished) === index;
+                  return (
+                    <div key={item.id} className={`bg-white rounded-[24px] border ${isLatestPublished ? 'border-emerald-500 shadow-md ring-2 ring-emerald-500/20' : 'border-gray-200/80 shadow-xs'} hover:shadow-md transition-shadow overflow-hidden flex flex-col`}>
+                      {/* Cover preview */}
+                      <div className="relative w-full aspect-[3/4] bg-gray-100">
+                        {item.coverImage ? (
+                          <img src={formatAssetUrl(item.coverImage)} alt={item.title} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex flex-col items-center justify-center gap-2 text-gray-300">
+                            <Archive className="w-10 h-10" />
+                            <span className="text-xs font-medium text-gray-400">No cover</span>
+                          </div>
+                        )}
+                        {isLatestPublished && (
+                          <div className="absolute top-2 left-2">
+                            <span className="bg-emerald-600 text-white text-[10px] font-bold px-2.5 py-1 rounded-full shadow-sm flex items-center gap-1">
+                              <Sparkles className="w-3 h-3" /> Live Latest Edition
+                            </span>
+                          </div>
+                        )}
+                        <div className="absolute top-2 right-2">
+                          <button
+                            onClick={() => handleTogglePublishEdition(item.id)}
+                            className={`text-[10px] font-bold px-2.5 py-1 rounded-full transition cursor-pointer shadow-sm ${
+                              item.isPublished ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-200" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                            }`}
+                          >
+                            {item.isPublished ? "Published" : "Draft"}
+                          </button>
                         </div>
-                      )}
-                      <div className="absolute top-2 right-2">
-                        <button
-                          onClick={() => handleTogglePublishEdition(item.id)}
-                          className={`text-[10px] font-bold px-2.5 py-1 rounded-full transition cursor-pointer shadow-sm ${
-                            item.isPublished ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-200" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                          }`}
-                        >
-                          {item.isPublished ? "Published" : "Draft"}
-                        </button>
                       </div>
-                    </div>
 
                     {/* Info */}
                     <div className="p-4 flex flex-col gap-3 flex-1">
@@ -4246,9 +4255,10 @@ function EditorialDashboardContent() {
                       </div>
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
+                );
+              })}
+            </div>
+          )}
 
             <PaginationFooter
               meta={editionsMeta}
@@ -6240,7 +6250,7 @@ function EditorialDashboardContent() {
                     className="w-full p-6 bg-white border border-gray-200 rounded-[24px] text-base text-gray-900 outline-none focus:border-black transition-all leading-relaxed min-h-[300px] shadow-xs font-poppins overflow-y-auto [&_p]:mb-4 [&_p]:mt-0 [&_p]:leading-relaxed [&_ul]:list-disc [&_ul]:pl-6 [&_ul]:mb-4 [&_ol]:list-decimal [&_ol]:pl-6 [&_ol]:mb-4 [&_a]:text-emerald-700 [&_a]:underline [&_h2]:text-2xl [&_h2]:font-bold [&_h2]:mt-6 [&_h2]:mb-3 [&_h3]:text-xl [&_h3]:font-bold [&_h3]:mt-5 [&_h3]:mb-2 [&_blockquote]:border-l-4 [&_blockquote]:border-emerald-500 [&_blockquote]:pl-4 [&_blockquote]:py-2 [&_blockquote]:italic [&_blockquote]:my-4 [&_blockquote]:bg-gray-50/70"
                   />
                   <p className="text-[11px] text-gray-400 mt-1.5 px-2">
-                    Pressing <kbd className="bg-gray-100 px-1 py-0.5 rounded text-gray-700 font-mono text-[10px]">Enter</kbd> creates double-spaced paragraph breaks (<code className="font-mono text-[10px]">\n\n</code>).
+                    Pressing <kbd className="bg-gray-100 px-1 py-0.5 rounded text-gray-700 font-mono text-[10px]">Enter</kbd> starts a new paragraph. Use <kbd className="bg-gray-100 px-1 py-0.5 rounded text-gray-700 font-mono text-[10px]">Shift+Enter</kbd> for a single line break.
                   </p>
                 </div>
               ) : (

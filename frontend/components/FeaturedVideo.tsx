@@ -28,39 +28,12 @@ export interface FeaturedVideoProps {
   initialVideos?: VideoItem[];
 }
 
-const defaultVideos: VideoItem[] = [
-  {
-    id: "1",
-    title: "Sambhashanangal",
-    description: "Unraveling Malayalam literature, art, and heritage through candid dialogues with regional thinkers.",
-    category: "Interviews",
-    youtubeUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-    youtubeId: "dQw4w9WgXcQ",
-  },
-  {
-    id: "2",
-    title: "Vagmozhii",
-    description: "Deep dives into Kerala's rich literary traditions and contemporary cultural discourse.",
-    category: "Interviews",
-    youtubeUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-    youtubeId: "dQw4w9WgXcQ",
-  },
-  {
-    id: "3",
-    title: "Cultural Showcase",
-    description: "Celebrating traditional performing arts, folklore, and indigenous crafts.",
-    category: "Cultural",
-    youtubeUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-    youtubeId: "dQw4w9WgXcQ",
-  },
-];
-
 export const FeaturedVideo: React.FC<FeaturedVideoProps> = ({
   title = "Featured Video",
   initialVideos,
 }) => {
   const [videoList, setVideoList] = useState<VideoItem[]>(
-    initialVideos && initialVideos.length > 0 ? initialVideos : defaultVideos
+    initialVideos && initialVideos.length > 0 ? initialVideos : []
   );
   const [activeVideo, setActiveVideo] = useState<VideoItem | null>(null);
   const [swiperInstance, setSwiperInstance] = useState<SwiperClass | null>(null);
@@ -78,7 +51,7 @@ export const FeaturedVideo: React.FC<FeaturedVideoProps> = ({
         if (res.ok) {
           const json = await res.json();
           const fetchedData = json.data || (Array.isArray(json) ? json : []);
-          if (isMounted && fetchedData.length > 0) {
+          if (isMounted) {
             setVideoList(fetchedData.slice(0, 3));
           }
         }
@@ -92,6 +65,10 @@ export const FeaturedVideo: React.FC<FeaturedVideoProps> = ({
       isMounted = false;
     };
   }, [initialVideos]);
+
+  if (videoList.length === 0) {
+    return null;
+  }
 
   const renderVideoCard = (video: VideoItem) => {
     const thumbnailUrl = getYouTubeThumbnail(video.youtubeUrl || video.youtubeId || "");

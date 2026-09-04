@@ -107,7 +107,7 @@ export const PreviousEditions: React.FC<PreviousEditionsProps> = ({
 
   return (
     <>
-      <section className="relative w-full bg-white py-12 lg:py-20 font-poppins overflow-hidden">
+      <section id="latest-edition" className="relative w-full bg-white py-12 lg:py-20 font-poppins overflow-hidden">
         <div className="container px-4 mx-auto relative z-10">
           {/* Section Header */}
           <h2 className="text-3xl sm:text-4xl lg:text-5xl font-medium text-dark-text tracking-tight mb-8 sm:mb-10 lg:mb-12 text-left">
