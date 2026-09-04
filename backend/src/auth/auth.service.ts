@@ -20,14 +20,23 @@ export class AuthService {
     private prisma: PrismaService,
     private jwtService: JwtService,
     private configService: ConfigService,
-  ) {
-    this.transporter = nodemailer.createTransport({
-      host: this.configService.get('SMTP_HOST'),
-      port: parseInt(this.configService.get('SMTP_PORT') ?? '587'),
-      secure: false,
+  ) {}
+
+  private getTransporter(): nodemailer.Transporter {
+    const host = this.configService.get<string>('SMTP_HOST') || 'smtp.gmail.com';
+    const port = parseInt(this.configService.get<string>('SMTP_PORT') || '465', 10);
+    const secureConfig = this.configService.get<string>('SMTP_SECURE');
+    const secure = secureConfig !== undefined ? secureConfig === 'true' : port === 465;
+    const user = this.configService.get<string>('SMTP_USER');
+    const pass = this.configService.get<string>('SMTP_PASS');
+
+    return nodemailer.createTransport({
+      host,
+      port,
+      secure,
       auth: {
-        user: this.configService.get('SMTP_USER'),
-        pass: this.configService.get('SMTP_PASS'),
+        user,
+        pass,
       },
     });
   }
@@ -56,25 +65,54 @@ export class AuthService {
 
     // Send OTP email
     try {
-      await this.transporter.sendMail({
-        from: `"AKAM Digital" <${this.configService.get('SMTP_USER')}>`,
+      const transporter = this.getTransporter();
+      const fromAddress =
+        this.configService.get<string>('SMTP_FROM') ||
+        `"AKAM Digital" <${this.configService.get('SMTP_USER')}>`;
+
+      const info = await transporter.sendMail({
+        from: fromAddress,
         to: email,
         subject: 'Your AKAM Digital verification code',
         html: `
-          <div style="font-family: 'Poppins', sans-serif; max-width: 480px; margin: 0 auto; padding: 32px; background: #fff; border-radius: 16px; border: 1px solid #e5e7eb;">
-            <h2 style="font-size: 24px; font-weight: 600; color: #040706; margin-bottom: 8px;">Your verification code</h2>
-            <p style="color: #646464; font-size: 14px; margin-bottom: 24px;">Use this code to sign in to AKAM Digital. It expires in 10 minutes.</p>
-            <div style="background: #040706; color: #E4F953; font-size: 32px; font-weight: 700; letter-spacing: 8px; text-align: center; padding: 20px; border-radius: 12px; margin-bottom: 24px;">
-              ${code}
+          <div style="font-family: Arial, Helvetica, sans-serif; max-width: 480px; margin: 0 auto; padding: 24px 16px; background-color: #f9fafb;">
+            <div style="background-color: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 32px; text-align: left;">
+              <div style="margin-bottom: 20px;">
+                <span style="background-color: #21B573; color: #ffffff; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; padding: 4px 10px; border-radius: 4px; display: inline-block;">
+                  AKAM DIGITAL
+                </span>
+              </div>
+              <h2 style="font-size: 20px; font-weight: 700; color: #040706; margin: 0 0 10px 0; line-height: 1.3;">
+                Verify Your Email Address
+              </h2>
+              <p style="font-size: 14px; color: #4B5563; margin: 0 0 24px 0; line-height: 1.5;">
+                Use the verification code below to sign in to your AKAM Digital account. This code is valid for <strong>10 minutes</strong>.
+              </p>
+              <div style="background-color: #040706; border-radius: 8px; padding: 20px; text-align: center; margin-bottom: 24px;">
+                <span style="font-size: 32px; font-weight: 700; color: #E4F953; letter-spacing: 8px; font-family: 'Courier New', Courier, monospace;">
+                  ${code}
+                </span>
+              </div>
+              <p style="font-size: 12px; color: #6B7280; margin: 0 0 20px 0; line-height: 1.4;">
+                If you did not request this verification code, you can safely ignore this email.
+              </p>
+              <div style="border-top: 1px solid #e5e7eb; padding-top: 16px; text-align: center;">
+                <p style="font-size: 11px; color: #9CA3AF; margin: 0;">
+                  © ${new Date().getFullYear()} AKAM Digital. All rights reserved.
+                </p>
+              </div>
             </div>
-            <p style="color: #9ca3af; font-size: 12px;">If you did not request this code, you can safely ignore this email.</p>
           </div>
         `,
       });
+      this.logger.log(`✅ OTP email sent successfully to ${email}. MessageId: ${info.messageId}`);
     } catch (error) {
-      this.logger.warn(`Failed to send OTP email to ${email}: ${(error as Error).message}`);
+      this.logger.error(
+        `❌ Failed to send OTP email to ${email}: ${(error as Error).message}`,
+        (error as Error).stack,
+      );
       if (this.configService.get('NODE_ENV') !== 'production') {
-        this.logger.log(`[DEV] OTP for ${email}: ${code}`);
+        this.logger.log(`[DEV FALLBACK] OTP for ${email}: ${code}`);
       }
     }
 
