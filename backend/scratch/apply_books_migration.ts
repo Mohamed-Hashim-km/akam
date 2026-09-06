@@ -44,33 +44,33 @@ async function main() {
         INSERT INTO "book_release" ("id", "title", "author", "editionTag", "description", "coverImage", "preorderLink", "isPublished")
         VALUES
           (
-            'book-1',
-            'Voices from the Coast',
-            'By Rahul Varma',
+            'book-swargasthanaya-gandhiji',
+            'Swargasthanaya Gandhiji',
+            'Dr. K.T. Jaleel',
             'Print Edition',
-            'The novel published on Akam is now available as a book.',
-            '/images/books/book-1.jpg',
-            'https://amazon.com',
+            'ഗ്രന്ഥകാരനും പ്രഭാഷകനും രാഷ്ട്രീയ നിരീക്ഷകനുമായ ഡോ.കെ ടി ജലീലിന്റെ ദാർശനികമാനങ്ങളുള്ള പ്രബന്ധങ്ങളുടെ സമാഹാരം. മഹാത്മാഗാന്ധിയുടെ ജീവിതത്തെയും ദർശനത്തെയും മുൻനിർത്തിയുള്ള അസാധാരണ വിചാരങ്ങൾ ഈ കൃതിയെ ശ്രദ്ധേയമാക്കുന്നു.',
+            NULL,
+            'https://kairalibooks.com/product/swargasthanaya-gandhiji/',
             true
           ),
           (
-            'book-2',
-            'The Silent Canopy',
-            'By Anjali Menon',
-            'Hardcover',
-            'The novel published on Akam is now available as a book.',
-            '/images/books/book-2.jpg',
-            'https://amazon.com',
+            'book-peythozhinja-varshangal',
+            'Peythozhinja Varshangal',
+            'Mahalakshmi Manoj',
+            'Print Edition',
+            'ലാളിത്യത്തിന്റെ ഭംഗിയാണ് മഹാലക്ഷ്മി മനോജിന്റെ കഥകളെ ശ്രദ്ധേയമാക്കുന്നത്. പ്രവാസിയായി ജീവിക്കുമ്പോഴും നാട്ടോർമ്മകളിലൂടെ സഞ്ചരിക്കാൻ കൊതിക്കുന്നു ഈ എഴുത്തുകാരി. ഗൃഹാതുരത്വത്തിന്റെ അടയാളങ്ങൾ ഈ കഥകളിൽ നിറഞ്ഞു നിൽക്കുന്നു.',
+            NULL,
+            'https://kairalibooks.com/product/peythozhinja-varshangal/',
             true
           ),
           (
-            'book-3',
-            'Before Darkness Falls',
-            'By Priyanka Menon',
+            'book-cheruvallikkattile-chengayimar',
+            'Cheruvallikkattile Chengayimar',
+            'P. I. Mini',
             'Print Edition',
-            'The novel published on Akam is now available as a book.',
-            '/images/books/book-3.jpg',
-            'https://amazon.com',
+            'സുന്ദരമായ ചെറുവള്ളിക്കാട്ടിന്റെ പശ്ചാത്തലത്തിൽ കുട്ടികൾക്ക് വേണ്ടി രചിക്കപ്പെട്ട മനോഹരമായ നോവൽ. കുട്ടികളിൽ ഒരാളായി കഥ പറഞ്ഞു പോകുന്ന കഥന രീതിയിലൂടെ വളരെ ലളിതമായ ഭാഷയിൽ കാടിനെയും കാട്ടിലെ നമ്മുടെ സഹജീവികളുടെയും കഥ ആവിഷ്കരിച്ചിരിക്കുന്നു.',
+            NULL,
+            'https://kairalibooks.com/product/cheruvallikkattile-chengayimar/',
             true
           );
       `);

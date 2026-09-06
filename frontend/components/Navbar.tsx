@@ -474,7 +474,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   className="flex items-center gap-2 text-sm font-medium text-gray-900 bg-white border border-gray-200 px-4 py-2 rounded-full hover:bg-gray-50 transition-colors shadow-xs"
                 >
                   <User className="w-4 h-4 text-gray-600" />
-                  <span>{getUserDisplayName(user)}</span>
+                  {/* <span>{getUserDisplayName(user)}</span> */}
                 </Link>
                 <button
                   onClick={handleLogout}

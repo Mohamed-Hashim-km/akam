@@ -443,14 +443,17 @@ export default function PostDetailPage() {
       setAuthModalOpen(true);
       return;
     }
+    if (!reportReason) return;
     setSubmittingReport(true);
     try {
-      const res = await apiFetch(`${API_BASE_URL}/editorial/community/reports`, {
+      const endpoint = reportingCommentId
+        ? `${API_BASE_URL}/comments/${reportingCommentId}/report`
+        : `${API_BASE_URL}/posts/${post?.id}/report`;
+
+      const res = await apiFetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          targetType: reportingCommentId ? "COMMENT" : "POST",
-          targetId: reportingCommentId || post?.id,
           reason: reportReason,
           details: reportDetails.trim() || undefined,
         }),
@@ -463,9 +466,13 @@ export default function PostDetailPage() {
           setReportingCommentId(null);
           setReportDetails("");
         }, 1500);
+      } else {
+        const errJson = await res.json().catch(() => ({}));
+        alert(errJson.message || "Failed to submit report. Please try again.");
       }
     } catch (e) {
-      console.error(e);
+      console.error("Failed to submit report:", e);
+      alert("Failed to submit report. Please check your connection and try again.");
     } finally {
       setSubmittingReport(false);
     }
@@ -661,11 +668,23 @@ export default function PostDetailPage() {
               )}
 
               {/* Footer */}
-              <div className="flex items-center gap-4 text-xs font-semibold text-gray-500 pt-4 border-t border-gray-100">
+              <div className="flex items-center justify-between text-xs font-semibold text-gray-500 pt-4 border-t border-gray-100">
                 <div className="flex items-center gap-1.5 text-gray-700">
                   <MessageSquare className="w-4 h-4 text-gray-400" />
                   <span>{countTotalComments(comments)} Comments</span>
                 </div>
+
+                <button
+                  onClick={() => {
+                    setReportingCommentId(null);
+                    setReportModalOpen(true);
+                  }}
+                  className="flex items-center gap-1.5 text-gray-400 hover:text-rose-600 transition-colors p-1.5 rounded-lg hover:bg-rose-50 cursor-pointer"
+                  title="Report this post"
+                >
+                  <Flag className="w-3.5 h-3.5" />
+                  <span>Report</span>
+                </button>
               </div>
             </div>
           </div>

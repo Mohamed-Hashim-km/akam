@@ -311,8 +311,8 @@ export class StoriesService {
 
   async reviewStory(id: string, reviewerId: string, dto: ReviewStoryDto) {
     const story = await this.findOne(id);
-    if (story.status !== 'PENDING') {
-      throw new BadRequestException('Only PENDING stories can be reviewed');
+    if (story.status === 'DRAFT') {
+      throw new BadRequestException('Draft stories cannot be reviewed until submitted');
     }
 
     const reviewer = await this.prisma.queryOne<{ role: string }>(
@@ -362,6 +362,11 @@ export class StoriesService {
     if (story.content) {
       this.uploadsService.deleteFilesFromContent(story.content);
     }
+    // Clean up dependent child records if present
+    await this.prisma.execute(`DELETE FROM story_report WHERE "storyId" = $1`, [id]).catch(() => null);
+    await this.prisma.execute(`DELETE FROM story_comment WHERE "storyId" = $1`, [id]).catch(() => null);
+    await this.prisma.execute(`DELETE FROM story_bookmark WHERE "storyId" = $1`, [id]).catch(() => null);
+    await this.prisma.execute(`DELETE FROM story_like WHERE "storyId" = $1`, [id]).catch(() => null);
     await this.prisma.execute(`DELETE FROM story WHERE id = $1`, [id]);
     return { success: true };
   }

@@ -23,6 +23,7 @@ import type { AuthUser } from '../auth/decorators/current-user.decorator.js';
 import { UsersService } from './users.service.js';
 import { UpdateProfileDto } from './dto/update-profile.dto.js';
 import { CreateAuthorDto } from './dto/create-author.dto.js';
+import { UpdateUserDto } from './dto/update-user.dto.js';
 import { UploadsService } from '../uploads/uploads.service.js';
 
 @ApiTags('Users')
@@ -148,6 +149,14 @@ export class UsersController {
   @ApiOperation({ summary: '[Editor/Admin] Create or elevate user as Author' })
   async createAuthor(@Body() dto: CreateAuthorDto) {
     return this.usersService.createAuthorByAdmin(dto);
+  }
+
+  @Patch(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('EDITOR', 'ADMIN')
+  @ApiOperation({ summary: '[Editor/Admin] Update user or author details' })
+  async updateUser(@Param('id') id: string, @Body() dto: UpdateUserDto) {
+    return this.usersService.updateUser(id, dto);
   }
 
   @Delete(':id')

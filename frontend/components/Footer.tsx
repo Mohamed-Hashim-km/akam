@@ -1,8 +1,10 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ArrowRight, PenTool } from "lucide-react";
+import AuthModal from "./AuthModal";
 
 export interface FooterProps {
   headline?: string;
@@ -35,6 +37,36 @@ export const Footer: React.FC<FooterProps> = ({
   instagramHref = "#",
   youtubeHref = "#",
 }) => {
+  const router = useRouter();
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [user, setUser] = useState<any>(null);
+
+  useEffect(() => {
+    const loadUser = () => {
+      const savedUser = localStorage.getItem("akam_user");
+      if (savedUser) {
+        try {
+          setUser(JSON.parse(savedUser));
+        } catch {
+          setUser(null);
+        }
+      } else {
+        setUser(null);
+      }
+    };
+    loadUser();
+    window.addEventListener("akam_user_updated", loadUser);
+    return () => window.removeEventListener("akam_user_updated", loadUser);
+  }, []);
+
+  const handleStartWriting = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (user || (typeof window !== "undefined" && localStorage.getItem("akam_user"))) {
+      router.push(startWritingHref);
+    } else {
+      setAuthModalOpen(true);
+    }
+  };
   return (
     <footer className="w-full bg-[#22B573] py-12 lg:py-16 px-4 sm:px-6 lg:px-12 font-poppins text-white">
       <div className="container px-4 mx-auto">
@@ -106,16 +138,17 @@ export const Footer: React.FC<FooterProps> = ({
 
           {/* Right Action Buttons */}
           <div className="flex flex-wrap items-center gap-4 shrink-0">
-            <Link href={startWritingHref}>
-              <button className="bg-white text-dark-bg hover:bg-slate-100 font-medium px-6 py-3 rounded-full text-sm sm:text-base inline-flex items-center gap-2 transition-all shadow-sm hover:shadow-md group">
-                <PenTool className="w-4 h-4 text-dark-bg" />
-                <span>Start Writing Now</span>
-                <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
-              </button>
-            </Link>
+            <button
+              onClick={handleStartWriting}
+              className="bg-white text-dark-bg hover:bg-slate-100 font-medium px-6 py-3 rounded-full text-sm sm:text-base inline-flex items-center gap-2 transition-all shadow-sm hover:shadow-md group cursor-pointer"
+            >
+              <PenTool className="w-4 h-4 text-dark-bg" />
+              <span>Start Writing Now</span>
+              <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
+            </button>
 
             <Link href={editorialGuidelinesHref}>
-              <button className="border border-white/80 text-white hover:bg-white/10 font-medium px-6 py-3 rounded-full text-sm sm:text-base transition-all">
+              <button className="border border-white/80 text-white hover:bg-white/10 font-medium px-6 py-3 rounded-full text-sm sm:text-base transition-all cursor-pointer">
                 Editorial Guidelines
               </button>
             </Link>
@@ -142,6 +175,15 @@ export const Footer: React.FC<FooterProps> = ({
           </div>
         </div>
       </div>
+
+      <AuthModal
+        isOpen={authModalOpen}
+        onClose={() => setAuthModalOpen(false)}
+        redirectTo={startWritingHref}
+        onSuccess={(u) => {
+          setUser(u);
+        }}
+      />
     </footer>
   );
 };
