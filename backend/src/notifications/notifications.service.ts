@@ -89,7 +89,12 @@ export class NotificationsService {
   }
 
   async notifyAuthorOfRejection(authorId: string, storyTitle: string, storyId: string, note?: string): Promise<void> {
-    const msg = note ? `Your story "${storyTitle}" was rejected with note: "${note}"` : `Your story "${storyTitle}" was rejected by editorial.`;
+    const isUnpublish = note?.toLowerCase().includes('unpublish');
+    const msg = isUnpublish
+      ? `Your story "${storyTitle}" was unpublished from the public catalog: "${note}"`
+      : note
+        ? `Your story "${storyTitle}" was rejected with note: "${note}"`
+        : `Your story "${storyTitle}" was rejected by editorial.`;
     await this.createNotification(
       authorId,
       'STORY_REJECTED',

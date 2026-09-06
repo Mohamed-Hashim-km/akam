@@ -10,7 +10,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
   const isEditorialDashboard = pathname === "/editorial" || pathname?.startsWith("/editorial/");
 
   if (isEditorialDashboard) {
-    return <div className="min-h-screen flex flex-col bg-gray-50">{children}</div>;
+    return <div className="h-screen w-full flex flex-col bg-gray-50 overflow-hidden">{children}</div>;
   }
 
   return (

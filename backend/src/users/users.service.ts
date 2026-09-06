@@ -1,7 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service.js';
 import { UploadsService } from '../uploads/uploads.service.js';
 import { UpdateProfileDto } from './dto/update-profile.dto.js';
+import { UpdateUserDto } from './dto/update-user.dto.js';
 
 export type UserRow = {
   id: string;
@@ -219,6 +220,10 @@ export class UsersService {
   }
 
   async updateRole(id: string, newRole: string): Promise<UserRow> {
+    const validRoles = ['READER', 'AUTHOR', 'EDITOR'];
+    if (!validRoles.includes(newRole)) {
+      throw new BadRequestException(`Invalid role: ${newRole}`);
+    }
     const user = await this.prisma.queryOne<UserRow>(
       `UPDATE "user" SET role = $1::"Role", "updatedAt" = now()
        WHERE id = $2
@@ -273,11 +278,114 @@ export class UsersService {
     return user!;
   }
 
+  async updateUser(id: string, dto: UpdateUserDto): Promise<UserRow> {
+    const existing = await this.findById(id);
+
+    if (dto.email && dto.email.toLowerCase().trim() !== existing.email.toLowerCase().trim()) {
+      const emailConflict = await this.prisma.queryOne<UserRow>(
+        `SELECT id FROM "user" WHERE LOWER(email) = LOWER($1) AND id != $2 LIMIT 1`,
+        [dto.email.trim(), id],
+      );
+      if (emailConflict) {
+        throw new BadRequestException('Email address is already in use by another account');
+      }
+    }
+
+    if (dto.avatarUrl !== undefined && existing.avatarUrl && existing.avatarUrl !== dto.avatarUrl) {
+      this.uploadsService.deleteFileByUrl(existing.avatarUrl);
+    }
+
+    const updates: string[] = ['"updatedAt" = now()'];
+    const params: any[] = [];
+
+    if (dto.name !== undefined) {
+      params.push(dto.name.trim());
+      updates.push(`name = $${params.length}`);
+    }
+
+    if (dto.email !== undefined) {
+      params.push(dto.email.toLowerCase().trim());
+      updates.push(`email = $${params.length}`);
+    }
+
+    if (dto.bio !== undefined) {
+      params.push(dto.bio ? dto.bio.trim() : null);
+      updates.push(`bio = $${params.length}`);
+    }
+
+    if (dto.avatarUrl !== undefined) {
+      params.push(dto.avatarUrl ? dto.avatarUrl.trim() : null);
+      updates.push(`"avatarUrl" = $${params.length}`);
+    }
+
+    if (dto.role !== undefined) {
+      const validRoles = ['READER', 'AUTHOR', 'EDITOR'];
+      if (!validRoles.includes(dto.role)) {
+        throw new BadRequestException(`Invalid role: ${dto.role}`);
+      }
+      params.push(dto.role);
+      updates.push(`role = $${params.length}::"Role"`);
+    }
+
+    if (dto.isFeatured !== undefined) {
+      params.push(dto.isFeatured);
+      updates.push(`"isFeatured" = $${params.length}`);
+    }
+
+    if (dto.sortOrder !== undefined) {
+      const sortVal = typeof dto.sortOrder === 'number' ? dto.sortOrder : parseInt(String(dto.sortOrder), 10);
+      params.push(isNaN(sortVal) ? 0 : sortVal);
+      updates.push(`"sortOrder" = $${params.length}`);
+    }
+
+    params.push(id);
+    const user = await this.prisma.queryOne<UserRow>(
+      `UPDATE "user"
+       SET ${updates.join(', ')}
+       WHERE id = $${params.length}
+       RETURNING id, email, name, bio, "avatarUrl", role, "isFeatured", "sortOrder", "createdAt"`,
+      params,
+    );
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    return user;
+  }
+
   async deleteUser(id: string) {
     const user = await this.findById(id);
     if (user.avatarUrl) {
       this.uploadsService.deleteFileByUrl(user.avatarUrl);
     }
+
+    // Clean up author's stories cover images and inline media if any
+    try {
+      const stories = await this.prisma.query<{ coverImageUrl: string | null; content: string }>(
+        `SELECT "coverImageUrl", content FROM "Story" WHERE "authorId" = $1`,
+        [id],
+      ).catch(async () => {
+        return await this.prisma.query<{ coverImageUrl: string | null; content: string }>(
+          `SELECT "coverImageUrl", content FROM story WHERE "authorId" = $1`,
+          [id],
+        );
+      });
+      for (const s of stories) {
+        if (s.coverImageUrl) this.uploadsService.deleteFileByUrl(s.coverImageUrl);
+        if (s.content) this.uploadsService.deleteFilesFromContent(s.content);
+      }
+    } catch {
+      // Safe fallback if story table is empty
+    }
+
+    // Unlink any optional author/user references
+    try {
+      await this.prisma.execute(`UPDATE community_post SET "lockedById" = NULL WHERE "lockedById" = $1`, [id]);
+      await this.prisma.execute(`UPDATE community_comment SET "removedById" = NULL WHERE "removedById" = $1`, [id]);
+      await this.prisma.execute(`UPDATE community_report SET "reviewedById" = NULL WHERE "reviewedById" = $1`, [id]);
+    } catch {}
+
     await this.prisma.execute(`DELETE FROM "user" WHERE id = $1`, [id]);
     return { success: true, message: 'User deleted successfully' };
   }

@@ -11,8 +11,6 @@ import {
   ArrowLeft,
   CheckCircle2,
   AlertCircle,
-  Sparkles,
-  LogIn,
   Eye,
   Edit3,
   Calendar,
@@ -33,9 +31,9 @@ import {
   RemoveFormatting,
   X,
   Globe,
+  Loader2,
 } from "lucide-react";
 import Button from "@/components/ui/Button";
-import AuthModal from "@/components/AuthModal";
 import { API_BASE_URL, apiFetch } from "@/lib/config";
 
 export default function SubmitStoryPage() {
@@ -53,13 +51,14 @@ export default function SubmitStoryPage() {
 
   const [activeTab, setActiveTab] = useState<"write" | "preview">("write");
 
-  const [loading, setLoading] = useState(false);
+  const [savingDraft, setSavingDraft] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [uploadingInlineImage, setUploadingInlineImage] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [user, setUser] = useState<any>(null);
-  const [authModalOpen, setAuthModalOpen] = useState(false);
   const [categories, setCategories] = useState<any[]>([]);
 
   // Link Insertion Modal State
@@ -101,6 +100,12 @@ export default function SubmitStoryPage() {
   }, []);
 
   useEffect(() => {
+    const cachedUser = typeof window !== "undefined" ? localStorage.getItem("akam_user") : null;
+    if (!cachedUser) {
+      router.replace("/");
+      return;
+    }
+
     const checkAuth = async () => {
       try {
         const res = await apiFetch(`${API_BASE_URL}/users/me`);
@@ -110,16 +115,18 @@ export default function SubmitStoryPage() {
           localStorage.setItem("akam_user", JSON.stringify(userData));
           setIsAuthenticated(true);
         } else {
+          localStorage.removeItem("akam_user");
           setIsAuthenticated(false);
-          setAuthModalOpen(true);
+          router.replace("/");
         }
       } catch (e) {
+        localStorage.removeItem("akam_user");
         setIsAuthenticated(false);
-        setAuthModalOpen(true);
+        router.replace("/");
       }
     };
     checkAuth();
-  }, []);
+  }, [router]);
 
   const convertMarkdownToHtml = (mdStr: string): string => {
     if (!mdStr) return "";
@@ -132,7 +139,7 @@ export default function SubmitStoryPage() {
     // Convert markdown images ![alt](url)
     html = html.replace(
       /!\[(.*?)\]\((.*?)\)/g,
-      '<div contenteditable="false" class="my-6 text-center select-none"><img src="$2" alt="$1" class="max-h-[420px] w-auto mx-auto rounded-2xl border border-gray-200 shadow-md object-cover inline-block" /></div><p><br></p>'
+      '<div contenteditable="false" class="my-6 text-center select-none"><img src="$2" alt="$1" class="max-h-[420px] w-auto mx-auto rounded-2xl border border-gray-200 shadow-md object-cover inline-block" /></div><p><br></p>',
     );
 
     // Headings ## or ### (convert before bold/italic tags)
@@ -149,13 +156,13 @@ export default function SubmitStoryPage() {
     // Links [text](url)
     html = html.replace(
       /\[(.*?)\]\((.*?)\)/g,
-      '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-emerald-700 underline font-medium hover:text-emerald-900">$1</a>'
+      '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-emerald-700 underline font-medium hover:text-emerald-900">$1</a>',
     );
 
     // Blockquotes > quote
     html = html.replace(
       /^>\s+(.*)$/gm,
-      '<blockquote class="border-l-4 border-emerald-500 pl-4 py-2 italic my-4 text-gray-800 bg-gray-50/70 rounded-r-xl">$1</blockquote>'
+      '<blockquote class="border-l-4 border-emerald-500 pl-4 py-2 italic my-4 text-gray-800 bg-gray-50/70 rounded-r-xl">$1</blockquote>',
     );
 
     // Bullet points
@@ -345,6 +352,7 @@ export default function SubmitStoryPage() {
     const formData = new FormData();
     formData.append("file", file);
 
+    setUploadingInlineImage(true);
     try {
       const res = await apiFetch(`${API_BASE_URL}/uploads/image`, {
         method: "POST",
@@ -369,6 +377,11 @@ export default function SubmitStoryPage() {
     } catch (err) {
       console.error(err);
       alert("Error uploading image");
+    } finally {
+      setUploadingInlineImage(false);
+      if (inlineInputRef.current) {
+        inlineInputRef.current.value = "";
+      }
     }
   };
 
@@ -476,9 +489,11 @@ export default function SubmitStoryPage() {
     // Strip unhandled HTML tags except <u>
     result = result.replace(/<(?!u|\/u)[^>]+>/gi, "");
 
-    // Clean up spaces adjacent to markdown formatting
-    result = result.replace(/\*\*\s+/g, "**");
-    result = result.replace(/\s+\*\*/g, "**");
+    // Clean up spaces INSIDE bold/italic tags without stripping preceding or following newlines
+    result = result.replace(/\*\*([^\S\r\n]+)(.*?)\*\*/g, "**$2**");
+    result = result.replace(/\*\*(.*?)([^\S\r\n]+)\*\*/g, "**$1**");
+    result = result.replace(/\*([^\S\r\n]+)(.*?)\*/g, "*$2*");
+    result = result.replace(/\*(.*?)([^\S\r\n]+)\*/g, "*$1*");
 
     // Normalize Windows newlines
     result = result.replace(/\r\n/g, "\n");
@@ -503,7 +518,11 @@ export default function SubmitStoryPage() {
       return;
     }
 
-    setLoading(true);
+    if (isSubmitForReview) {
+      setSubmitting(true);
+    } else {
+      setSavingDraft(true);
+    }
     setError(null);
 
     try {
@@ -565,7 +584,8 @@ export default function SubmitStoryPage() {
     } catch (err: any) {
       setError(err.message || "Something went wrong saving your story");
     } finally {
-      setLoading(false);
+      setSavingDraft(false);
+      setSubmitting(false);
     }
   };
 
@@ -608,8 +628,7 @@ export default function SubmitStoryPage() {
       year: "numeric",
     });
 
-    const authorDisplayName =
-      user?.name && user.name.trim().length > 0 ? user.name : user?.email || "AKAM Author";
+    const authorDisplayName = user?.name && user.name.trim().length > 0 ? user.name : user?.email || "AKAM Author";
 
     return (
       <article className="bg-white rounded-[32px] p-6 sm:p-10 border border-gray-200 shadow-sm max-w-3xl mx-auto font-poppins space-y-6">
@@ -622,9 +641,7 @@ export default function SubmitStoryPage() {
           </span>
         </div>
 
-        <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-gray-950 tracking-tight leading-tight">
-          {title || "Untitled Story"}
-        </h1>
+        <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-gray-950 tracking-tight leading-tight">{title || "Untitled Story"}</h1>
 
         <div className="flex items-center justify-between py-4 border-y border-gray-100 my-4">
           <div className="flex items-center gap-3">
@@ -647,20 +664,14 @@ export default function SubmitStoryPage() {
         </div>
 
         {parts.length === 0 ? (
-          <div className="py-12 text-center text-gray-400 italic text-sm">
-            Story content preview will render here as you write...
-          </div>
+          <div className="py-12 text-center text-gray-400 italic text-sm">Story content preview will render here as you write...</div>
         ) : (
           <div className="space-y-4 pt-2 text-gray-900 font-normal text-base sm:text-lg">
             {parts.map((part, index) => {
               if (part.type === "image") {
                 return (
                   <div key={index} className="my-6 sm:my-8 flex justify-center">
-                    <img
-                      src={part.src}
-                      alt={part.alt}
-                      className="w-full max-w-3xl h-auto max-h-[500px] object-cover rounded-2xl"
-                    />
+                    <img src={part.src} alt={part.alt} className="w-full max-w-3xl h-auto max-h-[500px] object-cover rounded-2xl" />
                   </div>
                 );
               }
@@ -680,49 +691,10 @@ export default function SubmitStoryPage() {
     );
   };
 
-  if (isAuthenticated === null) {
+  if (isAuthenticated === null || !isAuthenticated) {
     return (
       <div className="min-h-screen bg-white font-poppins flex items-center justify-center">
         <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-black"></div>
-      </div>
-    );
-  }
-
-  if (!isAuthenticated) {
-    return (
-      <div className="min-h-screen bg-white font-poppins flex flex-col items-center justify-center p-6 text-center">
-        <div className="w-16 h-16 bg-[#E4F953] text-[#040706] rounded-full flex items-center justify-center mb-6 shadow-md">
-          <Sparkles className="w-8 h-8" />
-        </div>
-        <h2 className="text-3xl font-bold text-gray-900 mb-3">Sign in to Start Writing</h2>
-        <p className="text-sm text-gray-500 max-w-md mb-8 leading-relaxed">
-          Create stories, upload custom cover art, and publish to the AKAM Digital platform.
-        </p>
-        <div className="flex flex-wrap gap-4 justify-center">
-          <Button
-            variant="primary"
-            size="md"
-            onClick={() => setAuthModalOpen(true)}
-            className="flex items-center gap-2 px-6 py-3 text-sm cursor-pointer"
-          >
-            <LogIn className="w-4 h-4" /> Sign In / Register
-          </Button>
-          <Link href="/">
-            <Button variant="secondary" size="md" className="px-6 py-3 text-sm cursor-pointer">
-              Back to Home
-            </Button>
-          </Link>
-        </div>
-
-        <AuthModal
-          isOpen={authModalOpen}
-          onClose={() => setAuthModalOpen(false)}
-          redirectTo="/submit"
-          onSuccess={(u) => {
-            setUser(u);
-            setIsAuthenticated(true);
-          }}
-        />
       </div>
     );
   }
@@ -734,10 +706,7 @@ export default function SubmitStoryPage() {
           {/* Header */}
           <div className="flex items-center justify-between mb-8 pb-6 border-b border-gray-200">
             <div>
-              <Link
-                href="/"
-                className="inline-flex items-center gap-2 text-xs text-gray-500 hover:text-black mb-2 transition-colors"
-              >
+              <Link href="/" className="inline-flex items-center gap-2 text-xs text-gray-500 hover:text-black mb-2 transition-colors">
                 <ArrowLeft className="w-3.5 h-3.5" /> Back to AKAM Digital
               </Link>
               <h1 className="text-3xl lg:text-4xl font-bold text-gray-900 tracking-tight">
@@ -811,13 +780,7 @@ export default function SubmitStoryPage() {
                     >
                       Upload Cover Image
                     </Button>
-                    <input
-                      ref={coverInputRef}
-                      type="file"
-                      accept="image/*"
-                      onChange={handleCoverSelect}
-                      className="hidden"
-                    />
+                    <input ref={coverInputRef} type="file" accept="image/*" onChange={handleCoverSelect} className="hidden" />
                   </div>
                 )}
               </div>
@@ -872,54 +835,40 @@ export default function SubmitStoryPage() {
 
             {/* Editor Workspace & Editorial Formatting Toolbar */}
             <div>
-              <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+              <div className="flex items-center gap-2 mb-3">
                 {/* Mode Tabs using custom Button */}
-                <div className="flex items-center gap-2">
-                  <Button
-                    type="button"
-                    variant={activeTab === "write" ? "primary" : "secondary"}
-                    size="sm"
-                    icon={<Edit3 className="w-3.5 h-3.5" />}
-                    iconPosition="left"
-                    onClick={() => setActiveTab("write")}
-                    className="shadow-xs cursor-pointer"
-                  >
-                    Write Story
-                  </Button>
-                  <Button
-                    type="button"
-                    variant={activeTab === "preview" ? "primary" : "secondary"}
-                    size="sm"
-                    icon={<Eye className="w-3.5 h-3.5" />}
-                    iconPosition="left"
-                    onClick={() => setActiveTab("preview")}
-                    className="shadow-xs cursor-pointer"
-                  >
-                    Reader Preview
-                  </Button>
-                </div>
-
-                {/* Inline Image Action */}
-                <div>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    icon={<ImageIcon className="w-3.5 h-3.5 text-gray-700" />}
-                    iconPosition="left"
-                    onClick={() => inlineInputRef.current?.click()}
-                    className="shadow-xs cursor-pointer border border-gray-300 bg-white hover:bg-gray-50 text-gray-800"
-                  >
-                    Insert Inline Image
-                  </Button>
-                  <input
-                    ref={inlineInputRef}
-                    type="file"
-                    accept="image/*"
-                    onChange={handleInsertImage}
-                    className="hidden"
-                  />
-                </div>
+                <Button
+                  type="button"
+                  variant={activeTab === "write" ? "primary" : "secondary"}
+                  size="sm"
+                  icon={<Edit3 className="w-3.5 h-3.5" />}
+                  iconPosition="left"
+                  onClick={() => {
+                    if (editorRef.current && content && !editorRef.current.innerHTML.trim()) {
+                      editorRef.current.innerHTML = content;
+                    }
+                    setActiveTab("write");
+                  }}
+                  className="shadow-xs cursor-pointer"
+                >
+                  Write Story
+                </Button>
+                <Button
+                  type="button"
+                  variant={activeTab === "preview" ? "primary" : "secondary"}
+                  size="sm"
+                  icon={<Eye className="w-3.5 h-3.5" />}
+                  iconPosition="left"
+                  onClick={() => {
+                    if (editorRef.current) {
+                      setContent(editorRef.current.innerHTML);
+                    }
+                    setActiveTab("preview");
+                  }}
+                  className="shadow-xs cursor-pointer"
+                >
+                  Reader Preview
+                </Button>
               </div>
 
               {/* Editorial Formatting Toolbar */}
@@ -932,9 +881,7 @@ export default function SubmitStoryPage() {
                       title="Bold (Ctrl+B)"
                       onClick={() => executeCommand("bold")}
                       className={`p-2 rounded-xl transition-all ${
-                        activeFormats.bold
-                          ? "bg-black text-white shadow-xs"
-                          : "text-gray-600 hover:bg-gray-100 hover:text-black"
+                        activeFormats.bold ? "bg-black text-white shadow-xs" : "text-gray-600 hover:bg-gray-100 hover:text-black"
                       }`}
                     >
                       <Bold className="w-4 h-4" />
@@ -944,9 +891,7 @@ export default function SubmitStoryPage() {
                       title="Italic (Ctrl+I)"
                       onClick={() => executeCommand("italic")}
                       className={`p-2 rounded-xl transition-all ${
-                        activeFormats.italic
-                          ? "bg-black text-white shadow-xs"
-                          : "text-gray-600 hover:bg-gray-100 hover:text-black"
+                        activeFormats.italic ? "bg-black text-white shadow-xs" : "text-gray-600 hover:bg-gray-100 hover:text-black"
                       }`}
                     >
                       <Italic className="w-4 h-4" />
@@ -956,9 +901,7 @@ export default function SubmitStoryPage() {
                       title="Underline (Ctrl+U)"
                       onClick={() => executeCommand("underline")}
                       className={`p-2 rounded-xl transition-all ${
-                        activeFormats.underline
-                          ? "bg-black text-white shadow-xs"
-                          : "text-gray-600 hover:bg-gray-100 hover:text-black"
+                        activeFormats.underline ? "bg-black text-white shadow-xs" : "text-gray-600 hover:bg-gray-100 hover:text-black"
                       }`}
                     >
                       <Underline className="w-4 h-4" />
@@ -968,9 +911,7 @@ export default function SubmitStoryPage() {
                       title="Strikethrough"
                       onClick={() => executeCommand("strikeThrough")}
                       className={`p-2 rounded-xl transition-all ${
-                        activeFormats.strikethrough
-                          ? "bg-black text-white shadow-xs"
-                          : "text-gray-600 hover:bg-gray-100 hover:text-black"
+                        activeFormats.strikethrough ? "bg-black text-white shadow-xs" : "text-gray-600 hover:bg-gray-100 hover:text-black"
                       }`}
                     >
                       <Strikethrough className="w-4 h-4" />
@@ -982,13 +923,9 @@ export default function SubmitStoryPage() {
                     <button
                       type="button"
                       title="Section Heading (H2)"
-                      onClick={() =>
-                        executeCommand("formatBlock", activeFormats.h2 ? "<p>" : "<h2>")
-                      }
+                      onClick={() => executeCommand("formatBlock", activeFormats.h2 ? "<p>" : "<h2>")}
                       className={`px-2.5 py-1.5 rounded-xl font-bold text-xs transition-all flex items-center gap-1 ${
-                        activeFormats.h2
-                          ? "bg-black text-white shadow-xs"
-                          : "text-gray-600 hover:bg-gray-100 hover:text-black"
+                        activeFormats.h2 ? "bg-black text-white shadow-xs" : "text-gray-600 hover:bg-gray-100 hover:text-black"
                       }`}
                     >
                       <Heading2 className="w-4 h-4" /> H2
@@ -996,13 +933,9 @@ export default function SubmitStoryPage() {
                     <button
                       type="button"
                       title="Subheading (H3)"
-                      onClick={() =>
-                        executeCommand("formatBlock", activeFormats.h3 ? "<p>" : "<h3>")
-                      }
+                      onClick={() => executeCommand("formatBlock", activeFormats.h3 ? "<p>" : "<h3>")}
                       className={`px-2.5 py-1.5 rounded-xl font-bold text-xs transition-all flex items-center gap-1 ${
-                        activeFormats.h3
-                          ? "bg-black text-white shadow-xs"
-                          : "text-gray-600 hover:bg-gray-100 hover:text-black"
+                        activeFormats.h3 ? "bg-black text-white shadow-xs" : "text-gray-600 hover:bg-gray-100 hover:text-black"
                       }`}
                     >
                       <Heading3 className="w-4 h-4" /> H3
@@ -1016,9 +949,7 @@ export default function SubmitStoryPage() {
                       title="Bullet Points List"
                       onClick={() => executeCommand("insertUnorderedList")}
                       className={`p-2 rounded-xl transition-all ${
-                        activeFormats.bulletList
-                          ? "bg-black text-white shadow-xs"
-                          : "text-gray-600 hover:bg-gray-100 hover:text-black"
+                        activeFormats.bulletList ? "bg-black text-white shadow-xs" : "text-gray-600 hover:bg-gray-100 hover:text-black"
                       }`}
                     >
                       <List className="w-4 h-4" />
@@ -1028,22 +959,30 @@ export default function SubmitStoryPage() {
                       title="Numbered Points List"
                       onClick={() => executeCommand("insertOrderedList")}
                       className={`p-2 rounded-xl transition-all ${
-                        activeFormats.orderedList
-                          ? "bg-black text-white shadow-xs"
-                          : "text-gray-600 hover:bg-gray-100 hover:text-black"
+                        activeFormats.orderedList ? "bg-black text-white shadow-xs" : "text-gray-600 hover:bg-gray-100 hover:text-black"
                       }`}
                     >
                       <ListOrdered className="w-4 h-4" />
                     </button>
                   </div>
 
-                  {/* Hyperlink & Quotes Group */}
+                  {/* Media, Hyperlink & Quotes Group */}
                   <div className="flex items-center gap-1 pr-2 border-r border-gray-200">
+                    <button
+                      type="button"
+                      title="Insert Inline Image"
+                      disabled={uploadingInlineImage}
+                      onClick={() => inlineInputRef.current?.click()}
+                      className="p-2 rounded-xl text-gray-600 hover:bg-gray-100 hover:text-black transition-all cursor-pointer disabled:opacity-50"
+                    >
+                      {uploadingInlineImage ? <Loader2 className="w-4 h-4 animate-spin text-purple-600" /> : <ImageIcon className="w-4 h-4" />}
+                    </button>
+                    <input ref={inlineInputRef} type="file" accept="image/*" onChange={handleInsertImage} className="hidden" />
                     <button
                       type="button"
                       title="Add / Edit Hyperlink"
                       onClick={handleOpenLinkModal}
-                      className="p-2 rounded-xl text-gray-600 hover:bg-gray-100 hover:text-black transition-all"
+                      className="p-2 rounded-xl text-gray-600 hover:bg-gray-100 hover:text-black transition-all cursor-pointer"
                     >
                       <LinkIcon className="w-4 h-4" />
                     </button>
@@ -1051,20 +990,16 @@ export default function SubmitStoryPage() {
                       type="button"
                       title="Remove Hyperlink"
                       onClick={handleRemoveLink}
-                      className="p-2 rounded-xl text-gray-600 hover:bg-gray-100 hover:text-black transition-all"
+                      className="p-2 rounded-xl text-gray-600 hover:bg-gray-100 hover:text-black transition-all cursor-pointer"
                     >
                       <Unlink className="w-4 h-4" />
                     </button>
                     <button
                       type="button"
                       title="Blockquote"
-                      onClick={() =>
-                        executeCommand("formatBlock", activeFormats.blockquote ? "<p>" : "blockquote")
-                      }
-                      className={`p-2 rounded-xl transition-all ${
-                        activeFormats.blockquote
-                          ? "bg-black text-white shadow-xs"
-                          : "text-gray-600 hover:bg-gray-100 hover:text-black"
+                      onClick={() => executeCommand("formatBlock", activeFormats.blockquote ? "<p>" : "blockquote")}
+                      className={`p-2 rounded-xl transition-all cursor-pointer ${
+                        activeFormats.blockquote ? "bg-black text-white shadow-xs" : "text-gray-600 hover:bg-gray-100 hover:text-black"
                       }`}
                     >
                       <Quote className="w-4 h-4" />
@@ -1102,31 +1037,33 @@ export default function SubmitStoryPage() {
               )}
 
               {/* Rich Visual Document Canvas */}
-              {activeTab === "write" ? (
-                <div>
-                  <div
-                    ref={editorRef}
-                    contentEditable
-                    suppressContentEditableWarning
-                    onInput={handleEditorInput}
-                    onKeyDown={handleEditorKeyDown}
-                    onKeyUp={updateActiveStates}
-                    onMouseUp={updateActiveStates}
-                    onFocus={() => {
-                      if (typeof window !== "undefined") {
-                        document.execCommand("defaultParagraphSeparator", false, "p");
-                      }
-                    }}
-                    className="w-full p-6 sm:p-8 bg-white border border-gray-200 rounded-[28px] text-base text-gray-900 outline-none focus:border-black transition-all leading-relaxed min-h-[380px] shadow-xs font-poppins overflow-y-auto [&_p]:mb-4 [&_p]:mt-0 [&_p]:leading-relaxed [&_ul]:list-disc [&_ul]:pl-6 [&_ul]:mb-4 [&_ol]:list-decimal [&_ol]:pl-6 [&_ol]:mb-4 [&_a]:text-emerald-700 [&_a]:underline [&_a]:font-medium [&_h2]:text-2xl [&_h2]:font-bold [&_h2]:mt-6 [&_h2]:mb-3 [&_h2]:text-gray-950 [&_h3]:text-xl [&_h3]:font-bold [&_h3]:mt-5 [&_h3]:mb-2 [&_h3]:text-gray-900 [&_blockquote]:border-l-4 [&_blockquote]:border-emerald-500 [&_blockquote]:pl-4 [&_blockquote]:py-2 [&_blockquote]:italic [&_blockquote]:my-4 [&_blockquote]:bg-gray-50/70 [&_blockquote]:rounded-r-xl"
-                  />
-                  <p className="text-xs text-gray-400 mt-2 px-3">
-                    <span className="font-semibold text-gray-600">Tip:</span> Pressing <kbd className="bg-gray-100 px-1.5 py-0.5 rounded text-gray-700 border border-gray-200 font-mono text-[11px]">Enter</kbd> starts a new paragraph. Use <kbd className="bg-gray-100 px-1.5 py-0.5 rounded text-gray-700 border border-gray-200 font-mono text-[11px]">Shift+Enter</kbd> for a single line break.
-                  </p>
-                </div>
-              ) : (
-                /* Visual Reader View */
-                <div className="animate-in fade-in py-2">{renderVisualContent()}</div>
-              )}
+              <div className={activeTab === "write" ? "block" : "hidden"}>
+                <div
+                  ref={editorRef}
+                  contentEditable
+                  suppressContentEditableWarning
+                  onInput={handleEditorInput}
+                  onKeyDown={handleEditorKeyDown}
+                  onKeyUp={updateActiveStates}
+                  onMouseUp={updateActiveStates}
+                  onFocus={() => {
+                    if (typeof window !== "undefined") {
+                      document.execCommand("defaultParagraphSeparator", false, "p");
+                    }
+                  }}
+                  className="w-full p-6 sm:p-8 bg-white border border-gray-200 rounded-[28px] text-base text-gray-900 outline-none focus:border-black transition-all leading-relaxed min-h-[380px] shadow-xs font-poppins overflow-y-auto [&_p]:mb-4 [&_p]:mt-0 [&_p]:leading-relaxed [&_ul]:list-disc [&_ul]:pl-6 [&_ul]:mb-4 [&_ol]:list-decimal [&_ol]:pl-6 [&_ol]:mb-4 [&_a]:text-emerald-700 [&_a]:underline [&_a]:font-medium [&_h2]:text-2xl [&_h2]:font-bold [&_h2]:mt-6 [&_h2]:mb-3 [&_h2]:text-gray-950 [&_h3]:text-xl [&_h3]:font-bold [&_h3]:mt-5 [&_h3]:mb-2 [&_h3]:text-gray-900 [&_blockquote]:border-l-4 [&_blockquote]:border-emerald-500 [&_blockquote]:pl-4 [&_blockquote]:py-2 [&_blockquote]:italic [&_blockquote]:my-4 [&_blockquote]:bg-gray-50/70 [&_blockquote]:rounded-r-xl"
+                />
+                <p className="text-xs text-gray-400 mt-2 px-3">
+                  <span className="font-semibold text-gray-600">Tip:</span> Pressing{" "}
+                  <kbd className="bg-gray-100 px-1.5 py-0.5 rounded text-gray-700 border border-gray-200 font-mono text-[11px]">Enter</kbd> starts a
+                  new paragraph. Use{" "}
+                  <kbd className="bg-gray-100 px-1.5 py-0.5 rounded text-gray-700 border border-gray-200 font-mono text-[11px]">Shift+Enter</kbd> for
+                  a single line break.
+                </p>
+              </div>
+
+              {/* Visual Reader View */}
+              {activeTab === "preview" && <div className="animate-in fade-in py-2">{renderVisualContent()}</div>}
             </div>
 
             {/* Action Bar */}
@@ -1147,25 +1084,25 @@ export default function SubmitStoryPage() {
                   type="button"
                   variant="secondary"
                   size="md"
-                  icon={<Save className="w-4 h-4" />}
+                  icon={savingDraft ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                   iconPosition="left"
-                  disabled={loading}
+                  disabled={savingDraft || submitting}
                   onClick={() => handleSaveStory(false)}
-                  className="w-full sm:w-auto px-5 py-2.5 font-medium text-xs sm:text-sm border border-gray-300 shadow-xs cursor-pointer justify-center whitespace-nowrap"
+                  className="w-full sm:w-auto px-5 py-2.5 font-medium text-xs sm:text-sm border border-gray-300 shadow-xs cursor-pointer justify-center whitespace-nowrap disabled:opacity-50"
                 >
-                  {editingStoryId ? "Update Draft" : "Save Draft"}
+                  {savingDraft ? (editingStoryId ? "Updating..." : "Saving...") : editingStoryId ? "Update Draft" : "Save Draft"}
                 </Button>
                 <Button
                   type="button"
                   variant="primary"
                   size="md"
-                  icon={<Send className="w-4 h-4" />}
+                  icon={submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                   iconPosition="left"
-                  disabled={loading}
+                  disabled={savingDraft || submitting}
                   onClick={() => handleSaveStory(true)}
-                  className="w-full sm:w-auto px-5 py-2.5 font-medium text-xs sm:text-sm cursor-pointer shadow-xs justify-center whitespace-nowrap"
+                  className="w-full sm:w-auto px-5 py-2.5 font-medium text-xs sm:text-sm cursor-pointer shadow-xs justify-center whitespace-nowrap disabled:opacity-50"
                 >
-                  {loading ? "Submitting..." : "Submit to Queue"}
+                  {submitting ? "Submitting..." : "Submit to Queue"}
                 </Button>
               </div>
             </div>
@@ -1236,13 +1173,7 @@ export default function SubmitStoryPage() {
               >
                 Cancel
               </Button>
-              <Button
-                type="button"
-                variant="primary"
-                size="sm"
-                onClick={handleApplyLink}
-                className="px-5 py-2 text-xs"
-              >
+              <Button type="button" variant="primary" size="sm" onClick={handleApplyLink} className="px-5 py-2 text-xs">
                 Apply Hyperlink
               </Button>
             </div>

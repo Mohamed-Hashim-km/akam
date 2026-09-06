@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { User, Edit2, Upload, BookOpen, Clock, FileCheck, Shield, ChevronRight, LogOut, Send, FileText, CheckCircle2, Filter } from "lucide-react";
+import { User, Edit2, Upload, BookOpen, Clock, FileCheck, Shield, ChevronRight, LogOut, Send, FileText, CheckCircle2, Filter, Trash2, X } from "lucide-react";
 import Button from "@/components/ui/Button";
 import { API_BASE_URL, apiFetch } from "@/lib/config";
 
@@ -39,6 +39,22 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+  const [storyToDelete, setStoryToDelete] = useState<AuthorStory | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setStoryToDelete(null);
+      }
+    };
+    if (storyToDelete) {
+      window.addEventListener("keydown", handleKeyDown);
+    }
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [storyToDelete]);
 
   const fetchData = async () => {
     const savedUser = typeof window !== "undefined" ? localStorage.getItem("akam_user") : null;
@@ -135,6 +151,27 @@ export default function ProfilePage() {
       console.error(e);
     } finally {
       setActionLoadingId(null);
+    }
+  };
+
+  const handleDeleteDraft = async (storyId: string) => {
+    setDeletingId(storyId);
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/stories/${storyId}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        setStories((prev) => prev.filter((s) => s.id !== storyId));
+        setStoryToDelete(null);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(err.message || "Failed to delete draft");
+      }
+    } catch (e) {
+      console.error("Failed to delete draft", e);
+      alert("An error occurred while deleting the draft.");
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -434,6 +471,15 @@ export default function ProfilePage() {
                           {story.status === "DRAFT" ? "Saved Draft" : "Revision Required"}
                         </span>
                         <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setStoryToDelete(story)}
+                            className="text-xs px-3 py-1.5 rounded-xl border border-rose-200 text-rose-600 hover:bg-rose-50 hover:border-rose-300 transition-colors inline-flex items-center gap-1 cursor-pointer font-medium shadow-2xs active:scale-95"
+                            title="Delete Draft"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Delete Draft</span>
+                          </button>
                           <Link href={`/submit?id=${story.id}`}>
                             <Button
                               variant="secondary"
@@ -468,6 +514,68 @@ export default function ProfilePage() {
           </div>
         </div>
       </main>
+
+      {/* Delete Draft Confirmation Modal */}
+      {storyToDelete && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in font-poppins"
+          onClick={() => setStoryToDelete(null)}
+        >
+          <div
+            className="relative w-full max-w-md bg-white rounded-3xl p-6 sm:p-7 shadow-2xl space-y-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-3.5">
+                <div className="w-11 h-11 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+                  <Trash2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-gray-950 leading-snug">
+                    Delete Draft?
+                  </h3>
+                  <p className="text-xs text-gray-500 mt-1 leading-relaxed">
+                    Are you sure you want to permanently delete{" "}
+                    <span className="font-semibold text-gray-800">
+                      "{storyToDelete.title || "Untitled Draft"}"
+                    </span>
+                    ? This action cannot be undone.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setStoryToDelete(null)}
+                className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors cursor-pointer shrink-0"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-gray-100">
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                disabled={deletingId === storyToDelete.id}
+                onClick={() => setStoryToDelete(null)}
+                className="border border-gray-200 text-xs px-4 py-2 cursor-pointer"
+              >
+                Cancel
+              </Button>
+              <button
+                type="button"
+                disabled={deletingId === storyToDelete.id}
+                onClick={() => handleDeleteDraft(storyToDelete.id)}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-semibold shadow-xs transition-colors inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50 active:scale-95"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>{deletingId === storyToDelete.id ? "Deleting..." : "Delete Draft"}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
