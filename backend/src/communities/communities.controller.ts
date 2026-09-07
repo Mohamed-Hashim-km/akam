@@ -26,14 +26,12 @@ export class CommunitiesController {
   constructor(private readonly communitiesService: CommunitiesService) {}
 
   @Get()
-  @Header('Cache-Control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=120')
   @ApiOperation({ summary: 'List all communities (query ?all=true to include inactive)' })
   findAll(@Query('all') all?: string) {
     return this.communitiesService.findAll(all === 'true');
   }
 
   @Get(':slug')
-  @Header('Cache-Control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=120')
   @UseGuards(OptionalJwtAuthGuard)
   @ApiOperation({ summary: 'Get community detail by slug' })
   findOne(@Param('slug') slug: string, @Request() req: any) {

@@ -216,33 +216,84 @@ function EditorialDashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const tabFromUrl = (searchParams.get("tab") as TabType) || "queue";
-  const pageFromUrl = parseInt(searchParams.get("page") || "1", 10);
+  const [activeTab, setActiveTab] = useState<TabType>(() => {
+    if (typeof window !== "undefined") {
+      const urlTab = searchParams.get("tab") as TabType;
+      if (urlTab) return urlTab;
+      const savedTab = sessionStorage.getItem("akam_editorial_active_tab") as TabType;
+      if (savedTab) return savedTab;
+    }
+    return "queue";
+  });
 
-  const [activeTab, setActiveTab] = useState<TabType>(tabFromUrl);
-  const [currentPage, setCurrentPage] = useState<number>(pageFromUrl);
+  const [currentPage, setCurrentPage] = useState<number>(() => {
+    if (typeof window !== "undefined") {
+      const urlPage = searchParams.get("page");
+      if (urlPage) return parseInt(urlPage, 10) || 1;
+      const urlTab = searchParams.get("tab") || sessionStorage.getItem("akam_editorial_active_tab") || "queue";
+      const savedPage = sessionStorage.getItem(`akam_editorial_page_${urlTab}`);
+      if (savedPage) return parseInt(savedPage, 10) || 1;
+    }
+    return 1;
+  });
+
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const mainRef = React.useRef<HTMLElement>(null);
 
   useEffect(() => {
-    const currentTab = (searchParams.get("tab") as TabType) || "queue";
-    const pageNum = parseInt(searchParams.get("page") || "1", 10);
+    const tabFromUrl = searchParams.get("tab") as TabType;
+    const pageFromUrlStr = searchParams.get("page");
+
+    let currentTab = tabFromUrl;
+    if (!currentTab && typeof window !== "undefined") {
+      const savedTab = sessionStorage.getItem("akam_editorial_active_tab") as TabType;
+      if (savedTab) currentTab = savedTab;
+    }
+    if (!currentTab) currentTab = "queue";
+
+    let pageNum = pageFromUrlStr ? parseInt(pageFromUrlStr, 10) : 0;
+    if (!pageNum && typeof window !== "undefined") {
+      const savedPage = sessionStorage.getItem(`akam_editorial_page_${currentTab}`);
+      if (savedPage) pageNum = parseInt(savedPage, 10);
+    }
+    if (!pageNum || isNaN(pageNum)) pageNum = 1;
+
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem("akam_editorial_active_tab", currentTab);
+      sessionStorage.setItem(`akam_editorial_page_${currentTab}`, String(pageNum));
+    }
+
     setActiveTab(currentTab);
     setCurrentPage(pageNum);
     mainRef.current?.scrollTo({ top: 0, behavior: "smooth" });
   }, [searchParams]);
 
   const handleTabChange = (tab: TabType) => {
+    let savedPage = 1;
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem("akam_editorial_active_tab", tab);
+      const sp = sessionStorage.getItem(`akam_editorial_page_${tab}`);
+      if (sp) {
+        const parsed = parseInt(sp, 10);
+        if (!isNaN(parsed) && parsed > 0) savedPage = parsed;
+      } else {
+        sessionStorage.setItem(`akam_editorial_page_${tab}`, "1");
+      }
+    }
     setActiveTab(tab);
-    setCurrentPage(1);
+    setCurrentPage(savedPage);
     setSearchQuery("");
     setMobileSidebarOpen(false);
     mainRef.current?.scrollTo({ top: 0, behavior: "smooth" });
-    router.push(`/editorial?tab=${tab}&page=1`);
+    router.push(`/editorial?tab=${tab}&page=${savedPage}`);
   };
 
   const handlePageChange = (newPage: number) => {
     setCurrentPage(newPage);
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem("akam_editorial_active_tab", activeTab);
+      sessionStorage.setItem(`akam_editorial_page_${activeTab}`, String(newPage));
+    }
     mainRef.current?.scrollTo({ top: 0, behavior: "smooth" });
     router.push(`/editorial?tab=${activeTab}&page=${newPage}`);
   };
@@ -1085,6 +1136,11 @@ function EditorialDashboardContent() {
     e.preventDefault();
     if (!eventFormTitle.trim() || !eventFormDesc.trim()) return;
 
+    if (["WORKSHOP", "PAST_ARCHIVE"].includes(eventFormType) && !eventFormImage.trim()) {
+      alert("Cover image is required for Workshop and Past Archive events.");
+      return;
+    }
+
     setSubmittingEvent(true);
     try {
       const payload = {
@@ -1117,11 +1173,12 @@ function EditorialDashboardContent() {
         fetchDashboardData("events");
         setTimeout(() => setFeedbackMessage(null), 3000);
       } else {
-        alert("Failed to save event");
+        const errJson = await res.json().catch(() => ({}));
+        alert(`Failed to save event: ${errJson.message || res.statusText}`);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      alert("Error saving event");
+      alert(`Error saving event: ${err?.message || err}`);
     } finally {
       setSubmittingEvent(false);
     }
@@ -1196,6 +1253,11 @@ function EditorialDashboardContent() {
     e.preventDefault();
     if (!selectedEventForArchive) return;
 
+    if (!archiveImage || !archiveImage.trim()) {
+      alert("Cover image is required to move an event to Past Archive.");
+      return;
+    }
+
     setArchivingEvent(true);
     try {
       const res = await apiFetch(`${API_BASE_URL}/editorial/events/${selectedEventForArchive.id}`, {
@@ -1203,7 +1265,7 @@ function EditorialDashboardContent() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           type: "PAST_ARCHIVE",
-          imageSrc: archiveImage.trim() || undefined,
+          imageSrc: archiveImage.trim(),
           videoUrl: archiveVideoUrl.trim() || undefined,
         }),
       });
@@ -1217,11 +1279,12 @@ function EditorialDashboardContent() {
         fetchDashboardData("events", currentPage, searchQuery);
         setTimeout(() => setFeedbackMessage(null), 3000);
       } else {
-        alert("Failed to archive event");
+        const errJson = await res.json().catch(() => ({}));
+        alert(`Failed to archive event: ${errJson.message || res.statusText}`);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      alert("Error moving event to archive");
+      alert(`Error moving event to archive: ${err?.message || err}`);
     } finally {
       setArchivingEvent(false);
     }
@@ -1942,6 +2005,7 @@ function EditorialDashboardContent() {
       });
       if (res.ok) {
         setFeedbackMessage("Story deleted successfully.");
+        fetch("/api/revalidate?path=/&tag=stories").catch(() => {});
         fetchDashboardData();
       }
     } catch (err) {
@@ -1959,6 +2023,7 @@ function EditorialDashboardContent() {
       });
       if (res.ok) {
         setFeedbackMessage("Story unpublished successfully.");
+        fetch("/api/revalidate?path=/&tag=stories").catch(() => {});
         fetchDashboardData(activeTab, currentPage, searchQuery);
         setTimeout(() => setFeedbackMessage(null), 3000);
       } else {
@@ -4017,7 +4082,7 @@ function EditorialDashboardContent() {
               </div>
 
               {/* Server-Side Pagination Footer */}
-              <PaginationFooter meta={eventsMeta} onPageChange={(p) => fetchDashboardData("events", p, searchQuery)} />
+              <PaginationFooter meta={eventsMeta} onPageChange={handlePageChange} />
             </div>
           )}
 
@@ -4151,7 +4216,7 @@ function EditorialDashboardContent() {
               )}
 
               {/* Server-Side Pagination Footer */}
-              <PaginationFooter meta={booksMeta} onPageChange={(p) => fetchDashboardData("books", p, searchQuery)} />
+              <PaginationFooter meta={booksMeta} onPageChange={handlePageChange} />
             </div>
           )}
 
@@ -4205,7 +4270,7 @@ function EditorialDashboardContent() {
                   {mediaList.map((item) => (
                     <div
                       key={item.id}
-                      className="bg-white rounded-[24px] p-5 border border-gray-200/80 shadow-xs flex flex-col justify-between space-y-4 hover:shadow-md transition-shadow"
+                      className="bg-white rounded-[24px] p-5 border border-gray-200/80 shadow-xs flex flex-col justify-between space-y-4 hover:shadow-md transition-shadow overflow-hidden"
                     >
                       <div>
                         {/* Thumbnail Preview */}
@@ -4215,20 +4280,17 @@ function EditorialDashboardContent() {
                             alt={item.title}
                             className="w-full h-full object-cover"
                           />
-                          <div className="absolute top-2 left-2 bg-black/70 text-white text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider backdrop-blur-xs">
+                          <div className="absolute top-2 left-2 bg-black/75 text-white text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider backdrop-blur-xs">
                             {item.category}
                           </div>
-                        </div>
 
-                        <div className="flex items-start justify-between gap-2 mb-1">
-                          <h3 className="text-base font-bold text-gray-950 tracking-tight leading-snug">{item.title}</h3>
-                          <div className="flex items-center gap-1.5 shrink-0">
+                          <div className="absolute top-2 right-2 flex items-center gap-1.5">
                             <button
                               onClick={() => handleToggleFeaturedMedia(item.id)}
-                              className={`text-[10px] font-bold px-2 py-0.5 rounded-full transition cursor-pointer ${
+                              className={`text-[10px] font-bold px-2.5 py-1 rounded-full transition cursor-pointer shadow-xs ${
                                 item.isFeatured
-                                  ? "bg-amber-100 text-amber-900 border border-amber-300"
-                                  : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                                  ? "bg-amber-500 text-white shadow-amber-500/20"
+                                  : "bg-black/60 text-white/90 hover:bg-black/80 backdrop-blur-xs"
                               }`}
                               title={item.isFeatured ? "Currently featured on Homepage" : "Click to feature on Homepage"}
                             >
@@ -4236,10 +4298,10 @@ function EditorialDashboardContent() {
                             </button>
                             <button
                               onClick={() => handleTogglePublishMedia(item.id)}
-                              className={`text-[10px] font-bold px-2.5 py-1 rounded-full transition cursor-pointer ${
+                              className={`text-[10px] font-bold px-2.5 py-1 rounded-full transition cursor-pointer shadow-xs ${
                                 item.isPublished
-                                  ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-200"
-                                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                                  ? "bg-emerald-600 text-white"
+                                  : "bg-gray-800 text-white/90 hover:bg-black"
                               }`}
                             >
                               {item.isPublished ? "Published" : "Draft"}
@@ -4247,7 +4309,13 @@ function EditorialDashboardContent() {
                           </div>
                         </div>
 
-                        <p className="text-xs text-gray-600 line-clamp-3 leading-relaxed font-normal">{item.description}</p>
+                        <h3 className="text-base font-bold text-gray-950 tracking-tight leading-snug break-words mb-2">
+                          {item.title}
+                        </h3>
+
+                        <p className="text-xs text-gray-600 line-clamp-3 leading-relaxed font-normal break-words">
+                          {item.description}
+                        </p>
                       </div>
 
                       <div className="pt-3 border-t border-gray-100 flex items-center justify-between gap-2">
@@ -4291,7 +4359,7 @@ function EditorialDashboardContent() {
               )}
 
               {/* Server-Side Pagination Footer */}
-              <PaginationFooter meta={mediaMeta} onPageChange={(p) => fetchDashboardData("media", p, searchQuery)} />
+              <PaginationFooter meta={mediaMeta} onPageChange={handlePageChange} />
             </div>
           )}
 
@@ -4425,7 +4493,7 @@ function EditorialDashboardContent() {
                 </div>
               )}
 
-              <PaginationFooter meta={editionsMeta} onPageChange={(p) => fetchDashboardData("editions", p, searchQuery)} />
+              <PaginationFooter meta={editionsMeta} onPageChange={handlePageChange} />
             </div>
           )}
 
@@ -5276,7 +5344,7 @@ function EditorialDashboardContent() {
               {["WORKSHOP", "PAST_ARCHIVE"].includes(eventFormType) && (
                 <div>
                   <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider">
-                    Workshop Cover Image <span className="text-rose-500">*</span>
+                    {eventFormType === "PAST_ARCHIVE" ? "Archive Cover Image" : "Workshop Cover Image"} <span className="text-rose-500">*</span>
                   </label>
                   {eventFormImage ? (
                     <div className="relative rounded-2xl overflow-hidden border border-gray-200 h-40 bg-gray-50 flex items-center justify-center group">
@@ -5474,12 +5542,14 @@ function EditorialDashboardContent() {
 
             <form onSubmit={handleConfirmArchive} className="space-y-4">
               <p className="text-xs text-gray-600 leading-relaxed">
-                Upload or confirm a cover image for this event to be displayed in the <strong>Past Event Archive</strong>.
+                Upload or confirm a cover image for this event to be displayed in the <strong>Past Event Archive</strong>. <strong className="text-rose-600">Cover image is required.</strong>
               </p>
 
               {/* Archive Cover Image Upload */}
               <div>
-                <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider">Archive Cover Image (Recommended)</label>
+                <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider">
+                  Archive Cover Image <span className="text-rose-500">*</span>
+                </label>
                 {archiveImage ? (
                   <div className="relative rounded-2xl overflow-hidden border border-gray-200 h-40 bg-gray-50 flex items-center justify-center group">
                     <img
@@ -5501,11 +5571,16 @@ function EditorialDashboardContent() {
                     <input type="file" accept="image/*" onChange={handleArchiveImageUpload} disabled={uploadingArchiveImage} className="hidden" />
                     <div className="text-center">
                       <span className="text-xs font-bold text-gray-900">
-                        {uploadingArchiveImage ? "Uploading Image..." : "📁 Select Cover Image for Archive"}
+                        {uploadingArchiveImage ? "Uploading Image..." : "📁 Select Cover Image for Archive (Required)"}
                       </span>
                       <p className="text-[10px] text-gray-500 mt-1">PNG, JPG, WEBP up to 5MB</p>
                     </div>
                   </label>
+                )}
+                {!archiveImage && (
+                  <p className="text-[11px] text-rose-500 mt-1 font-medium">
+                    * A cover image is required to move an event to Past Archive.
+                  </p>
                 )}
               </div>
 
@@ -5547,8 +5622,8 @@ function EditorialDashboardContent() {
                   type="submit"
                   variant="primary"
                   size="sm"
-                  disabled={archivingEvent || uploadingArchiveImage}
-                  className="px-6 py-2 bg-amber-600 hover:bg-amber-700 text-white border-none cursor-pointer"
+                  disabled={archivingEvent || uploadingArchiveImage || !archiveImage.trim()}
+                  className="px-6 py-2 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white border-none cursor-pointer"
                 >
                   {archivingEvent ? "Archiving..." : "Confirm & Move to Archive"}
                 </Button>

@@ -12,6 +12,7 @@ export const apiFetch = async (url: string, options: RequestInit = {}) => {
   }
 
   const res = await fetch(url, {
+    cache: "no-store",
     ...options,
     headers,
     credentials: "include",
