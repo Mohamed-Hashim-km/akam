@@ -19,12 +19,27 @@ export interface FeaturedArtistProps {
   artists?: ArtistItem[];
 }
 
+// Module-level in-memory cache for 0ms instant client rendering
+let inMemoryFeaturedAuthorsCache: ArtistItem[] | null = null;
+
 export const FeaturedArtist: React.FC<FeaturedArtistProps> = ({
   title = "Featured Authors",
   artists: propArtists,
 }) => {
-  const [displayArtists, setDisplayArtists] = useState<ArtistItem[]>(propArtists || []);
-  const [loading, setLoading] = useState(!propArtists || propArtists.length === 0);
+  const [displayArtists, setDisplayArtists] = useState<ArtistItem[]>(() => {
+    if (propArtists && propArtists.length > 0) return propArtists;
+    if (inMemoryFeaturedAuthorsCache && inMemoryFeaturedAuthorsCache.length > 0) {
+      return inMemoryFeaturedAuthorsCache;
+    }
+    return [];
+  });
+
+  const [loading, setLoading] = useState<boolean>(() => {
+    if (propArtists && propArtists.length > 0) return false;
+    if (inMemoryFeaturedAuthorsCache && inMemoryFeaturedAuthorsCache.length > 0) return false;
+    return true;
+  });
+
   const [loadingMore, setLoadingMore] = useState(false);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
@@ -45,14 +60,18 @@ export const FeaturedArtist: React.FC<FeaturedArtistProps> = ({
   useEffect(() => {
     if (propArtists && propArtists.length > 0) {
       setDisplayArtists(propArtists);
+      inMemoryFeaturedAuthorsCache = propArtists;
       setLoading(false);
-      return;
     }
 
     const fetchInitialFeaturedAuthors = async () => {
-      setLoading(true);
+      if (!displayArtists || displayArtists.length === 0) {
+        setLoading(true);
+      }
       try {
-        const res = await apiFetch(`${API_BASE_URL}/users/featured?page=1&limit=4`);
+        const res = await apiFetch(`${API_BASE_URL}/users/featured?page=1&limit=4`, {
+          cache: "no-store",
+        });
         if (res.ok) {
           const json = await res.json();
           const authors = json.data ? json.data : (Array.isArray(json) ? json : []);
@@ -60,20 +79,16 @@ export const FeaturedArtist: React.FC<FeaturedArtistProps> = ({
 
           if (authors.length > 0) {
             const mapped = mapAuthorsToArtistItems(authors);
+            inMemoryFeaturedAuthorsCache = mapped;
             setDisplayArtists(mapped);
             setHasMore(meta.hasMore ?? false);
           } else {
-            setDisplayArtists([]);
+            if (!propArtists) setDisplayArtists([]);
             setHasMore(false);
           }
-        } else {
-          setDisplayArtists([]);
-          setHasMore(false);
         }
       } catch (err) {
         console.error("Failed to fetch initial featured authors", err);
-        setDisplayArtists([]);
-        setHasMore(false);
       } finally {
         setLoading(false);
       }
@@ -87,7 +102,9 @@ export const FeaturedArtist: React.FC<FeaturedArtistProps> = ({
     setLoadingMore(true);
     const nextPage = page + 1;
     try {
-      const res = await apiFetch(`${API_BASE_URL}/users/featured?page=${nextPage}&limit=4`);
+      const res = await apiFetch(`${API_BASE_URL}/users/featured?page=${nextPage}&limit=4`, {
+        cache: "no-store",
+      });
       if (res.ok) {
         const json = await res.json();
         const authors = json.data ? json.data : (Array.isArray(json) ? json : []);
@@ -114,8 +131,28 @@ export const FeaturedArtist: React.FC<FeaturedArtistProps> = ({
     }
   };
 
-  // If loading initial state or no featured authors exist, return null
-  if (loading) return null;
+  // Render Skeleton Loading layout reserved in exact DOM position to prevent PreviousEditions from jumping
+  if (loading) {
+    return (
+      <section className="relative w-full bg-white py-16 lg:py-24 font-poppins overflow-hidden">
+        <div className="container px-4 mx-auto">
+          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-medium text-dark-text tracking-tight mb-10 lg:mb-14 text-left">
+            {title}
+          </h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-8 sm:gap-8 lg:gap-12 items-start justify-items-center">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="flex flex-col items-center text-center w-full max-w-[180px] sm:max-w-none animate-pulse">
+                <div className="w-28 h-28 xs:w-32 xs:h-32 sm:w-44 sm:h-44 lg:w-48 lg:h-48 rounded-full bg-gray-200 shrink-0" />
+                <div className="h-5 bg-gray-200 rounded-md w-28 mt-4" />
+                <div className="h-3.5 bg-gray-100 rounded-md w-36 mt-2" />
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+    );
+  }
+
   if (!displayArtists || displayArtists.length === 0) return null;
 
   return (
