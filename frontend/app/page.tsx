@@ -19,9 +19,24 @@ export const metadata: Metadata = {
     title: "Akam Digital — Storytelling, Literature & Cultural Platform",
     description:
       "Discover authentic Malayalam stories, essay collections, poetry, regional events, and literary discourse on Akam Digital.",
-    url: "https://akam.digital",
+    url: "https://akamdigital.vercel.app",
     siteName: "Akam Digital",
+    images: [
+      {
+        url: "https://akamdigital.vercel.app/images/ogImage/ogImage.png",
+        width: 1200,
+        height: 630,
+        alt: "Akam Digital",
+      },
+    ],
     type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Akam Digital — Storytelling, Literature & Cultural Platform",
+    description:
+      "Discover authentic Malayalam stories, essay collections, poetry, regional events, and literary discourse on Akam Digital.",
+    images: ["https://akamdigital.vercel.app/images/ogImage/ogImage.png"],
   },
 };
 
@@ -134,7 +149,7 @@ async function getHomePageData() {
         if (json && json.title && json.note) {
           editorsNote = { title: json.title, note: json.note };
         }
-      } catch (e) {}
+      } catch (e) { }
     }
 
     return { stories, categories, events, books, videos, comments, editorsNote };

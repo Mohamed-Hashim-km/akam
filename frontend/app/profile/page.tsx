@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { User, Edit2, Upload, BookOpen, Clock, FileCheck, Shield, ChevronRight, LogOut, Send, FileText, CheckCircle2, Filter, Trash2, X } from "lucide-react";
 import Button from "@/components/ui/Button";
-import { API_BASE_URL, apiFetch } from "@/lib/config";
+import { API_BASE_URL, apiFetch, formatAssetUrl } from "@/lib/config";
 
 interface UserProfile {
   id: string;
@@ -225,9 +225,9 @@ export default function ProfilePage() {
             <div className="flex flex-col sm:flex-row items-center gap-6 sm:gap-8">
               {/* Avatar Upload */}
               <div className="relative group shrink-0">
-                <div className="relative w-24 h-24 sm:w-28 sm:h-28 rounded-full overflow-hidden bg-gray-200 border-2 border-white shadow-md">
+                <div className="relative w-24 h-24 sm:w-28 sm:h-28 rounded-full overflow-hidden bg-gray-200 border-2 border-white shadow-md flex items-center justify-center">
                   {profile.avatarUrl ? (
-                    <Image src={profile.avatarUrl} alt="Avatar" fill className="object-cover" unoptimized />
+                    <img src={formatAssetUrl(profile.avatarUrl)} alt="Avatar" className="w-full h-full object-cover rounded-full" />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center bg-black text-white text-2xl font-bold">
                       {(profile.name || profile.email)[0].toUpperCase()}

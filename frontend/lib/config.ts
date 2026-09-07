@@ -20,6 +20,12 @@ export const apiFetch = (url: string, options: RequestInit = {}) => {
 
 export const formatAssetUrl = (url?: string | null): string => {
   if (!url) return "";
+  if (url.startsWith("/")) {
+    return `${SERVER_URL}${url}`;
+  }
+  if (url.startsWith("uploads/")) {
+    return `${SERVER_URL}/${url}`;
+  }
   if (url.startsWith("http://localhost:3000")) {
     return url.replace("http://localhost:3000", SERVER_URL);
   }

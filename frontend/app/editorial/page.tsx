@@ -278,7 +278,7 @@ function EditorialDashboardContent() {
   // Reader Reviews State
   const [reviewsList, setReviewsList] = useState<any[]>([]);
   const [reviewsMeta, setReviewsMeta] = useState({ total: 0, page: 1, limit: 10, totalPages: 1 });
-  const [reviewFeaturedFilter, setReviewFeaturedFilter] = useState<"ALL" | "FEATURED" | "HIDDEN">("HIDDEN");
+  const [reviewFeaturedFilter, setReviewFeaturedFilter] = useState<"ALL" | "FEATURED" | "HIDDEN">("ALL");
   const [selectedReview, setSelectedReview] = useState<any | null>(null);
 
   // Editorial Notifications State
@@ -630,16 +630,16 @@ function EditorialDashboardContent() {
 
   const handleSaveEdition = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editionFormTitle.trim() || !editionFormPdfUrl.trim()) return;
+    if (!editionFormTitle.trim() || !editionFormPdfUrl.trim() || !editionFormCoverImage.trim()) return;
     setSubmittingEdition(true);
     try {
       const payload: any = {
         title: editionFormTitle.trim(),
         pdfUrl: editionFormPdfUrl.trim(),
+        coverImage: editionFormCoverImage.trim(),
         isPublished: editionFormPublished,
         sortOrder: editionFormSortOrder,
       };
-      if (editionFormCoverImage.trim()) payload.coverImage = editionFormCoverImage.trim();
 
       const url = editingEditionId ? `${API_BASE_URL}/editorial/editions/${editingEditionId}` : `${API_BASE_URL}/editorial/editions`;
       const method = editingEditionId ? "PATCH" : "POST";
@@ -2383,13 +2383,21 @@ function EditorialDashboardContent() {
         {/* User Info & Footer */}
         <div className="pt-4 border-t border-gray-100">
           <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-full bg-gray-900 text-white flex items-center justify-center font-bold text-xs shadow-xs shrink-0">
-                {(user.name || user.email)[0].toUpperCase()}
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="relative w-9 h-9 rounded-full bg-gray-900 text-white flex items-center justify-center font-bold text-xs shadow-xs shrink-0 overflow-hidden border border-gray-200">
+                {user?.avatarUrl ? (
+                  <img
+                    src={formatAssetUrl(user.avatarUrl)}
+                    alt={user?.name || "User avatar"}
+                    className="w-full h-full object-cover rounded-full"
+                  />
+                ) : (
+                  <span>{(user?.name || user?.email || "A")[0].toUpperCase()}</span>
+                )}
               </div>
               <div className="min-w-0">
-                <p className="text-xs font-bold text-gray-900 truncate">{user.name || user.email.split("@")[0]}</p>
-                <span className="text-[10px] text-gray-500 font-semibold uppercase">{user.role}</span>
+                <p className="text-xs font-bold text-gray-900 truncate">{user?.name || user?.email?.split("@")[0] || "User"}</p>
+                <span className="text-[10px] text-gray-500 font-semibold uppercase">{user?.role || "GUEST"}</span>
               </div>
             </div>
           </div>
@@ -4337,12 +4345,12 @@ function EditorialDashboardContent() {
                     return (
                       <div
                         key={item.id}
-                        className={`bg-white rounded-[24px] border ${isLatestPublished ? "border-emerald-500 shadow-md ring-2 ring-emerald-500/20" : "border-gray-200/80 shadow-xs"} hover:shadow-md transition-shadow overflow-hidden flex flex-col`}
+                        className={`bg-white rounded-[24px] border ${isLatestPublished ? "border-emerald-500 shadow-md ring-2 ring-emerald-500/20" : "border-gray-200/80 shadow-xs"} hover:shadow-md transition-shadow overflow-hidden flex flex-col h-full`}
                       >
                         {/* Cover preview */}
                         <div className="relative w-full aspect-[3/4] bg-gray-100">
                           {item.coverImage ? (
-                            <img src={formatAssetUrl(item.coverImage)} alt={item.title} className="w-full h-full object-cover" />
+                            <img src={formatAssetUrl(item.coverImage)} alt={item.title} className="w-full h-full object-fill" />
                           ) : (
                             <div className="w-full h-full flex flex-col items-center justify-center gap-2 text-gray-300">
                               <Archive className="w-10 h-10" />
@@ -4377,7 +4385,7 @@ function EditorialDashboardContent() {
                             <p className="text-xs text-gray-400 mt-0.5">Sort order: {item.sortOrder}</p>
                           </div>
 
-                          <div className="flex flex-wrap items-center gap-2 pt-1">
+                          <div className="flex flex-wrap items-center gap-2 pt-1 mt-auto">
                             {item.pdfUrl && (
                               <button
                                 type="button"
@@ -4514,7 +4522,7 @@ function EditorialDashboardContent() {
                   {/* Cover Image Upload */}
                   <div>
                     <label className="block text-xs font-semibold text-gray-700 mb-1.5">
-                      Cover Image <span className="font-normal text-gray-400">(optional)</span>
+                      Cover Image *
                     </label>
                     <div className="border-2 border-dashed border-gray-200 rounded-xl p-4">
                       {editionFormCoverImage ? (
@@ -4622,7 +4630,7 @@ function EditorialDashboardContent() {
                       type="submit"
                       variant="primary"
                       size="md"
-                      disabled={submittingEdition || !editionFormTitle.trim() || !editionFormPdfUrl.trim()}
+                      disabled={submittingEdition || !editionFormTitle.trim() || !editionFormPdfUrl.trim() || !editionFormCoverImage.trim()}
                       className="flex-1 bg-black hover:bg-gray-800 text-white"
                     >
                       {submittingEdition ? "Saving…" : editingEditionId ? "Update Edition" : "Save Edition"}

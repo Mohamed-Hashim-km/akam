@@ -13,10 +13,10 @@ export class CreateEditionDto {
   @IsNotEmpty()
   pdfUrl: string;
 
-  @ApiPropertyOptional({ description: 'URL to cover image (uploaded separately)' })
-  @IsOptional()
+  @ApiProperty({ description: 'URL to cover image (uploaded separately)' })
   @IsString()
-  coverImage?: string;
+  @IsNotEmpty()
+  coverImage: string;
 
   @ApiPropertyOptional({ description: 'Whether the edition is published', default: true })
   @IsOptional()

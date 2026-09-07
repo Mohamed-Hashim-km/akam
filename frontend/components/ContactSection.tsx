@@ -15,7 +15,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
   title = "Get in Touch",
   email = "contact@akam.in",
   address = "Kairali Books Building, Kannur, Kerala",
-  phone = "+91 9383748193",
+  phone = "+91 81298 11311",
   mapEmbedSrc = "https://maps.google.com/maps?q=11.874128087481653,75.36285108465643+(Kairali%20Books)&t=&z=17&ie=UTF8&iwloc=&output=embed",
   mapUrl = "https://maps.app.goo.gl/ABjSw3ZFVQc2bW2J7",
 }) => {
