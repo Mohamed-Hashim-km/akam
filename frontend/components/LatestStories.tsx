@@ -74,7 +74,7 @@ export const LatestStories: React.FC<LatestStoriesProps> = ({
 
   // Synchronously initialize state from module cache or props for instant 0ms rendering
   const [stories, setStories] = useState<Story[]>(() => {
-    if (propStories && propStories.length > 0) {
+    if (propStories !== undefined) {
       const normalized = propStories.map(normalizeStory);
       inMemoryLatestStoriesCache = normalized;
       return normalized;
@@ -88,7 +88,7 @@ export const LatestStories: React.FC<LatestStoriesProps> = ({
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (propStories && propStories.length > 0) {
+    if (propStories !== undefined) {
       const normalized = propStories.map(normalizeStory);
       inMemoryLatestStoriesCache = normalized;
       setStories(normalized);
