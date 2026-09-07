@@ -35,7 +35,7 @@ export const Footer: React.FC<FooterProps> = ({
   whatsappHref = "https://wa.me/918129811311",
   facebookHref = "https://www.facebook.com/people/AKAM/61577932417864",
   instagramHref = "https://www.instagram.com/akam_digital?stkn=c3JxNmhyZXkwenlr",
-  youtubeHref = "#",
+  youtubeHref = "https://www.youtube.com/@akamvideo2025",
 }) => {
   const router = useRouter();
   const [authModalOpen, setAuthModalOpen] = useState(false);

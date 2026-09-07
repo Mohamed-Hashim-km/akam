@@ -10,24 +10,32 @@ interface AuthHeroWrapperProps {
 
 export default function AuthHeroWrapper({ initialIsLoggedIn = false }: AuthHeroWrapperProps) {
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
-    if (initialIsLoggedIn) return true;
     if (typeof window !== "undefined") {
       return !!localStorage.getItem("akam_user");
     }
-    return false;
+    return initialIsLoggedIn;
   });
 
   useEffect(() => {
-    const cachedUser = localStorage.getItem("akam_user");
-    if (cachedUser) {
-      setIsLoggedIn(true);
-      document.cookie = "akam_logged_in=true; path=/; max-age=604800; SameSite=Lax";
-    } else {
-      setIsLoggedIn(false);
-      document.cookie = "akam_logged_in=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/";
-    }
+    const updateAuthState = () => {
+      const cachedUser = localStorage.getItem("akam_user");
+      const userExists = !!cachedUser;
+      setIsLoggedIn(userExists);
+      if (userExists) {
+        document.cookie = "akam_logged_in=true; path=/; max-age=604800; SameSite=Lax";
+      } else {
+        document.cookie = "akam_logged_in=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; max-age=0";
+      }
+    };
+
+    updateAuthState();
 
     const checkAuth = async () => {
+      const cachedUser = localStorage.getItem("akam_user");
+      if (!cachedUser) {
+        setIsLoggedIn(false);
+        return;
+      }
       try {
         const res = await apiFetch(`${API_BASE_URL}/users/me`);
         if (res.ok) {
@@ -35,8 +43,9 @@ export default function AuthHeroWrapper({ initialIsLoggedIn = false }: AuthHeroW
           document.cookie = "akam_logged_in=true; path=/; max-age=604800; SameSite=Lax";
         } else {
           setIsLoggedIn(false);
-          document.cookie = "akam_logged_in=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/";
+          document.cookie = "akam_logged_in=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; max-age=0";
           localStorage.removeItem("akam_user");
+          localStorage.removeItem("akam_token");
         }
       } catch (e) {
         // Keep current state if offline
@@ -44,17 +53,12 @@ export default function AuthHeroWrapper({ initialIsLoggedIn = false }: AuthHeroW
     };
     checkAuth();
 
-    const handleAuthUpdate = () => {
-      const user = localStorage.getItem("akam_user");
-      setIsLoggedIn(!!user);
-      if (user) {
-        document.cookie = "akam_logged_in=true; path=/; max-age=604800; SameSite=Lax";
-      } else {
-        document.cookie = "akam_logged_in=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/";
-      }
+    window.addEventListener("akam_user_updated", updateAuthState);
+    window.addEventListener("storage", updateAuthState);
+    return () => {
+      window.removeEventListener("akam_user_updated", updateAuthState);
+      window.removeEventListener("storage", updateAuthState);
     };
-    window.addEventListener("akam_user_updated", handleAuthUpdate);
-    return () => window.removeEventListener("akam_user_updated", handleAuthUpdate);
   }, []);
 
   if (isLoggedIn) return null;
