@@ -59,6 +59,25 @@ export class StoriesController {
     return this.storiesService.findAll(status, pageNum, limitNum, search, category, authorId);
   }
 
+  @Get('published')
+  @ApiOperation({ summary: 'List published stories (publicly accessible alias)' })
+  @ApiQuery({ name: 'page', required: false, description: 'Page number' })
+  @ApiQuery({ name: 'limit', required: false, description: 'Items per page' })
+  @ApiQuery({ name: 'search', required: false, description: 'Search term' })
+  @ApiQuery({ name: 'category', required: false, description: 'Category filter' })
+  @ApiQuery({ name: 'authorId', required: false, description: 'Filter by authorId' })
+  async findPublished(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('search') search?: string,
+    @Query('category') category?: string,
+    @Query('authorId') authorId?: string,
+  ) {
+    const pageNum = page ? parseInt(page, 10) : undefined;
+    const limitNum = limit ? parseInt(limit, 10) : undefined;
+    return this.storiesService.findAll('APPROVED', pageNum, limitNum, search, category, authorId);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get a single story by id or slug' })
   async findOne(@Param('id') id: string) {

@@ -47,6 +47,21 @@ function getCategoryColor(cat?: string) {
   return CATEGORY_COLORS[key] || "text-[#D97706]";
 }
 
+function normalizeStory(s: any): Story {
+  const cat = (s.category || "Fiction").toUpperCase();
+  const rawAuthor = s.authorName || s.authorEmail || s.author || "Unknown Author";
+  const author = typeof s.author === "string" && s.author.startsWith("By ") ? s.author : `By ${rawAuthor}`;
+  return {
+    id: s.id,
+    category: cat,
+    badgeTextColor: s.badgeTextColor || getCategoryColor(cat),
+    title: s.title,
+    author: author,
+    imageSrc: s.imageSrc || s.coverImageUrl || "/images/stories/ramachi.jpg",
+    href: s.href || `/stories/${s.slug || s.id}`,
+  };
+}
+
 // Module-level in-memory cache for 0ms instant client rendering
 let inMemoryLatestStoriesCache: Story[] | null = null;
 
@@ -59,7 +74,11 @@ export const LatestStories: React.FC<LatestStoriesProps> = ({
 
   // Synchronously initialize state from module cache or props for instant 0ms rendering
   const [stories, setStories] = useState<Story[]>(() => {
-    if (propStories && propStories.length > 0) return propStories;
+    if (propStories && propStories.length > 0) {
+      const normalized = propStories.map(normalizeStory);
+      inMemoryLatestStoriesCache = normalized;
+      return normalized;
+    }
     if (inMemoryLatestStoriesCache && inMemoryLatestStoriesCache.length > 0) {
       return inMemoryLatestStoriesCache;
     }
@@ -70,7 +89,10 @@ export const LatestStories: React.FC<LatestStoriesProps> = ({
 
   useEffect(() => {
     if (propStories && propStories.length > 0) {
-      setStories(propStories);
+      const normalized = propStories.map(normalizeStory);
+      inMemoryLatestStoriesCache = normalized;
+      setStories(normalized);
+      setLoading(false);
       return;
     }
 
@@ -88,15 +110,7 @@ export const LatestStories: React.FC<LatestStoriesProps> = ({
           const json = await res.json();
           const items = json.data || json;
           if (Array.isArray(items)) {
-            const mapped = items.map((s: any) => ({
-              id: s.id,
-              category: (s.category || "Fiction").toUpperCase(),
-              badgeTextColor: getCategoryColor(s.category),
-              title: s.title,
-              author: `By ${s.authorName || s.authorEmail || "Unknown Author"}`,
-              imageSrc: s.coverImageUrl || "/images/stories/ramachi.jpg",
-              href: `/stories/${s.slug || s.id}`,
-            }));
+            const mapped = items.map(normalizeStory);
 
             // Update module cache and state
             inMemoryLatestStoriesCache = mapped;
