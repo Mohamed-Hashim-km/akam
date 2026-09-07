@@ -155,7 +155,7 @@ export const PreviousEditions: React.FC<PreviousEditionsProps> = ({
                             src={formatAssetUrl(edition.coverImage!)}
                             alt={edition.title}
                             onError={() => handleImgError(edition.id)}
-                            className="w-full h-full object-cover object-center transition-transform duration-500 group-hover:scale-105"
+                            className="w-full h-full object-fill object-center transition-transform duration-500 group-hover:scale-105"
                           />
                         ) : (
                           <div className="w-full h-full flex flex-col items-center justify-center gap-3 bg-gradient-to-br from-gray-100 to-gray-200">

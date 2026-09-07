@@ -16,7 +16,22 @@ export const metadata: Metadata = {
     title: "Literary Events & Workshops | Akam Digital",
     description:
       "Explore upcoming reading sessions, author discussions, creative writing masterclasses, and past literary archives on Akam.",
+    images: [
+      {
+        url: "https://akamdigital.vercel.app/images/ogImage/ogImage.png",
+        width: 1200,
+        height: 630,
+        alt: "Akam Digital Events",
+      },
+    ],
     type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Literary Events & Workshops | Akam Digital",
+    description:
+      "Explore upcoming reading sessions, author discussions, creative writing masterclasses, and past literary archives on Akam.",
+    images: ["https://akamdigital.vercel.app/images/ogImage/ogImage.png"],
   },
 };
 

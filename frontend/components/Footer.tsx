@@ -32,9 +32,9 @@ export const Footer: React.FC<FooterProps> = ({
   mediaHref = "/media",
   aboutHref = "/about",
   contactHref = "/contact",
-  whatsappHref = "#",
+  whatsappHref = "https://wa.me/918129811311",
   facebookHref = "#",
-  instagramHref = "#",
+  instagramHref = "https://www.instagram.com/akam_digital?stkn=c3JxNmhyZXkwenlr",
   youtubeHref = "#",
 }) => {
   const router = useRouter();
@@ -158,14 +158,22 @@ export const Footer: React.FC<FooterProps> = ({
         {/* Divider Line */}
         <div className="border-b border-white/25 w-full my-4" />
 
-        {/* Bottom Bar: Copyright + Nav Links */}
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-6 text-xs sm:text-sm text-white/90">
-          <p className="font-normal text-center sm:text-left">
+        {/* Bottom Bar: Copyright + Center Credit Link + Nav Links */}
+        <div className="flex flex-col md:flex-row items-center justify-between gap-4 pt-6 text-xs sm:text-sm text-white/90">
+          <p className="font-normal text-center md:text-left text-white/80">
             &copy; {new Date().getFullYear()} Akam &middot; India&apos;s First Digital Literary Channel &mdash; every story here passed editorial review
           </p>
 
-          <div className="flex flex-wrap items-center justify-center sm:justify-end gap-5 sm:gap-6 font-medium">
-           
+          <a
+            href="https://megamind.studio/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:text-white hover:underline transition-colors text-center shrink-0 text-white/90 font-medium px-2"
+          >
+            Made with by Megamind Studio
+          </a>
+
+          <div className="flex flex-wrap items-center justify-center md:justify-end gap-5 sm:gap-6 font-medium shrink-0">
             <Link href={aboutHref} className="hover:text-white hover:underline transition-colors">
               About Akam
             </Link>
