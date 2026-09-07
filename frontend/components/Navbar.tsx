@@ -309,10 +309,11 @@ export const Navbar: React.FC<NavbarProps> = ({
     }
     localStorage.removeItem("akam_user");
     localStorage.removeItem("akam_token");
-    document.cookie = "akam_logged_in=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/";
+    document.cookie = "akam_logged_in=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; max-age=0";
     setUser(null);
     window.dispatchEvent(new Event("akam_user_updated"));
     router.push("/");
+    router.refresh();
   };
 
   return (
