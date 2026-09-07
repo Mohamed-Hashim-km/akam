@@ -56,11 +56,11 @@ export const UpcomingEvents: React.FC<UpcomingEventsProps> = ({
   const [swiperInstance, setSwiperInstance] = useState<SwiperClass | null>(null);
   const [activeIndex, setActiveIndex] = useState<number>(0);
   const [fetchedEvents, setFetchedEvents] = useState<EventItem[]>([]);
-  const [loading, setLoading] = useState<boolean>(!initialEvents);
+  const [loading, setLoading] = useState<boolean>(initialEvents === undefined);
   const [selectedEventForReg, setSelectedEventForReg] = useState<EventItem | null>(null);
 
   useEffect(() => {
-    if (!initialEvents || initialEvents.length === 0) {
+    if (initialEvents === undefined) {
       const fetchEvents = async () => {
         try {
           const res = await fetch(`${API_BASE_URL}/events`);
@@ -98,9 +98,7 @@ export const UpcomingEvents: React.FC<UpcomingEventsProps> = ({
     }
   }, [initialEvents]);
 
-  const displayEvents = initialEvents && initialEvents.length > 0
-    ? initialEvents
-    : fetchedEvents;
+  const displayEvents = initialEvents !== undefined ? initialEvents : fetchedEvents;
 
   if (loading) {
     return (

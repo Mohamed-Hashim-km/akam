@@ -119,7 +119,7 @@ export const UpcomingBookReleases: React.FC<UpcomingBookReleasesProps> = ({
   releases: initialReleases,
 }) => {
   const [releasesList, setReleasesList] = useState<BookReleaseItem[]>(
-    initialReleases && initialReleases.length > 0 ? initialReleases : []
+    initialReleases !== undefined ? initialReleases : []
   );
   const [swiperInstance, setSwiperInstance] = useState<SwiperClass | null>(null);
   const [selectedBookForModal, setSelectedBookForModal] = useState<BookReleaseItem | null>(null);
@@ -139,7 +139,7 @@ export const UpcomingBookReleases: React.FC<UpcomingBookReleasesProps> = ({
   }, [selectedBookForModal]);
 
   useEffect(() => {
-    if (initialReleases && initialReleases.length > 0) {
+    if (initialReleases !== undefined) {
       setReleasesList(initialReleases);
       return;
     }
@@ -151,7 +151,7 @@ export const UpcomingBookReleases: React.FC<UpcomingBookReleasesProps> = ({
         if (res.ok) {
           const data = await res.json();
           const items = Array.isArray(data) ? data : data?.data;
-          if (Array.isArray(items) && items.length > 0 && isMounted) {
+          if (Array.isArray(items) && isMounted) {
             setReleasesList(items);
           }
         }
