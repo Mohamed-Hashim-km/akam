@@ -33,7 +33,7 @@ export const Footer: React.FC<FooterProps> = ({
   aboutHref = "/about",
   contactHref = "/contact",
   whatsappHref = "https://wa.me/918129811311",
-  facebookHref = "#",
+  facebookHref = "https://www.facebook.com/people/AKAM/61577932417864",
   instagramHref = "https://www.instagram.com/akam_digital?stkn=c3JxNmhyZXkwenlr",
   youtubeHref = "#",
 }) => {

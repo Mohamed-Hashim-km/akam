@@ -81,6 +81,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       if (data.token) {
         localStorage.setItem("akam_token", data.token);
       }
+      document.cookie = "akam_logged_in=true; path=/; max-age=604800; SameSite=Lax";
       window.dispatchEvent(new Event("akam_user_updated"));
 
       setStep("success");

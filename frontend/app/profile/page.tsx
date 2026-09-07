@@ -183,6 +183,7 @@ export default function ProfilePage() {
     }
     localStorage.removeItem("akam_user");
     localStorage.removeItem("akam_token");
+    document.cookie = "akam_logged_in=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/";
     window.dispatchEvent(new Event("akam_user_updated"));
     router.push("/");
   };

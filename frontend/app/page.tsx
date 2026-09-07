@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import AuthHeroWrapper from "@/components/AuthHeroWrapper";
 import LatestStories from "@/components/LatestStories";
 import EditorsNote from "@/components/EditorsNote";
@@ -171,12 +172,14 @@ async function getHomePageData() {
 }
 
 export default async function Home() {
+  const cookieStore = await cookies();
+  const isLoggedInCookie = cookieStore.get("akam_logged_in")?.value === "true";
   const { stories, categories, events, books, videos, comments, editorsNote } = await getHomePageData();
 
   return (
     <main className="min-h-screen flex flex-col font-poppins">
       {/* Main Hero Section - Only shown for unauthenticated / guest users */}
-      <AuthHeroWrapper />
+      <AuthHeroWrapper initialIsLoggedIn={isLoggedInCookie} />
 
       {/* Latest Stories Section */}
       <LatestStories stories={stories} />
