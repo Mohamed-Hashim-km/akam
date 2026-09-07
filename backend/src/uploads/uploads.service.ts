@@ -62,13 +62,27 @@ export class UploadsService {
   }
 
   private getAllowedMimeTypes(): string[] {
-    return ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    return [
+      'image/jpeg',
+      'image/jpg',
+      'image/png',
+      'image/webp',
+      'image/gif',
+      'image/avif',
+      'image/svg+xml',
+      'image/heic',
+      'image/heif',
+      'image/bmp',
+      'image/tiff',
+    ];
   }
 
   private validateFile(file: Express.Multer.File): void {
     if (!file) throw new BadRequestException('No file provided');
     if (!this.getAllowedMimeTypes().includes(file.mimetype)) {
-      throw new BadRequestException('File type not allowed. Use JPEG, PNG, WebP, or GIF.');
+      throw new BadRequestException(
+        'File type not allowed. Use JPEG, PNG, WebP, GIF, AVIF, SVG, HEIC, BMP, or TIFF.',
+      );
     }
     const maxSize = 10 * 1024 * 1024; // 10MB
     if (file.size > maxSize) {

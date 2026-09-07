@@ -28,13 +28,15 @@ export class CommunitiesService {
   constructor(private readonly prisma: PrismaService) {}
 
   async findAll(includeInactive = false): Promise<CommunityRow[]> {
-    const whereSql = includeInactive ? '' : 'WHERE "isActive" = true';
+    const whereSql = includeInactive ? '' : 'WHERE c."isActive" = true';
     return this.prisma.query<CommunityRow>(
-      `SELECT id, slug, name, description, "bannerUrl", "iconUrl", color,
-              "isActive", "memberCount", "postCount", "createdAt", "updatedAt"
-       FROM community
+      `SELECT c.id, c.slug, c.name, c.description, c."bannerUrl", c."iconUrl", c.color,
+              c."isActive", c."createdAt", c."updatedAt",
+              (SELECT COUNT(*)::int FROM community_membership m WHERE m."communityId" = c.id) as "memberCount",
+              (SELECT COUNT(*)::int FROM community_post p WHERE p."communityId" = c.id) as "postCount"
+       FROM community c
        ${whereSql}
-       ORDER BY name ASC`,
+       ORDER BY c.name ASC`,
     );
   }
 
@@ -51,9 +53,11 @@ export class CommunitiesService {
 
   async findBySlug(slug: string, userId?: string): Promise<CommunityRow & { isMember: boolean }> {
     const community = await this.prisma.queryOne<CommunityRow>(
-      `SELECT id, slug, name, description, "bannerUrl", "iconUrl", color,
-              "isActive", "memberCount", "postCount", "createdAt", "updatedAt"
-       FROM community WHERE slug = $1`,
+      `SELECT c.id, c.slug, c.name, c.description, c."bannerUrl", c."iconUrl", c.color,
+              c."isActive", c."createdAt", c."updatedAt",
+              (SELECT COUNT(*)::int FROM community_membership m WHERE m."communityId" = c.id) as "memberCount",
+              (SELECT COUNT(*)::int FROM community_post p WHERE p."communityId" = c.id) as "postCount"
+       FROM community c WHERE c.slug = $1`,
       [slug],
     );
 
