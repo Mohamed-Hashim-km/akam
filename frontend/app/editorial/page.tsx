@@ -513,6 +513,7 @@ function EditorialDashboardContent() {
       });
       if (res.ok) {
         setFeedbackMessage(editingBookId ? "Book release updated successfully!" : "Book release created successfully!");
+        fetch("/api/revalidate?path=/").catch(() => {});
         setShowAddBookModal(false);
         resetBookForm();
         fetchDashboardData("books", currentPage, searchQuery);
@@ -1110,6 +1111,7 @@ function EditorialDashboardContent() {
 
       if (res.ok) {
         setFeedbackMessage(editingEventId ? "Event updated successfully!" : "Event created successfully!");
+        fetch("/api/revalidate?path=/").catch(() => {});
         setShowAddEventModal(false);
         resetEventForm();
         fetchDashboardData("events");
@@ -1597,6 +1599,7 @@ function EditorialDashboardContent() {
 
       if (publishDirectly) {
         setFeedbackMessage(`Story '${storyStudioTitle}' created & published for ${storyAuthorTarget.name || storyAuthorTarget.email}!`);
+        fetch("/api/revalidate?path=/").catch(() => {});
       } else {
         setFeedbackMessage(`Story draft created for ${storyAuthorTarget.name || storyAuthorTarget.email}!`);
       }
@@ -1631,6 +1634,7 @@ function EditorialDashboardContent() {
 
       if (res.ok) {
         setFeedbackMessage("Editor's Note title and message updated successfully!");
+        fetch("/api/revalidate?path=/").catch(() => {});
         setTimeout(() => setFeedbackMessage(null), 3500);
       } else {
         alert("Failed to update Editor's Note");
@@ -1676,6 +1680,9 @@ function EditorialDashboardContent() {
 
       if (res.ok) {
         setFeedbackMessage(decision === "APPROVED" ? "Story approved and published!" : "Story rejected with feedback sent to author.");
+        if (decision === "APPROVED") {
+          fetch("/api/revalidate?path=/").catch(() => {});
+        }
         setSelectedStory(null);
         setRejectingStory(null);
         setRejectionNote("");
