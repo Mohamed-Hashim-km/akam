@@ -62,9 +62,6 @@ function normalizeStory(s: any): Story {
   };
 }
 
-// Module-level in-memory cache for 0ms instant client rendering
-let inMemoryLatestStoriesCache: Story[] | null = null;
-
 export const LatestStories: React.FC<LatestStoriesProps> = ({
   title = "Latest Stories",
   viewAllHref = "/stories",
@@ -72,15 +69,10 @@ export const LatestStories: React.FC<LatestStoriesProps> = ({
 }) => {
   const [swiperInstance, setSwiperInstance] = useState<SwiperClass | null>(null);
 
-  // Synchronously initialize state from module cache or props for instant 0ms rendering
+  // Synchronously initialize state from props for fast initial rendering
   const [stories, setStories] = useState<Story[]>(() => {
-    if (propStories !== undefined) {
-      const normalized = propStories.map(normalizeStory);
-      inMemoryLatestStoriesCache = normalized;
-      return normalized;
-    }
-    if (inMemoryLatestStoriesCache && inMemoryLatestStoriesCache.length > 0) {
-      return inMemoryLatestStoriesCache;
+    if (propStories !== undefined && propStories.length > 0) {
+      return propStories.map(normalizeStory);
     }
     return [];
   });
@@ -89,21 +81,17 @@ export const LatestStories: React.FC<LatestStoriesProps> = ({
 
   useEffect(() => {
     if (propStories !== undefined) {
-      const normalized = propStories.map(normalizeStory);
-      inMemoryLatestStoriesCache = normalized;
-      setStories(normalized);
-      setLoading(false);
-      return;
+      setStories(propStories.map(normalizeStory));
     }
 
     const fetchLatestPublishedStories = async () => {
-      if (stories.length === 0) {
+      if (!stories || stories.length === 0) {
         setLoading(true);
       }
 
       try {
         const res = await apiFetch(`${API_BASE_URL}/stories?status=APPROVED&limit=10`, {
-          next: { revalidate: 60, tags: ["stories"] },
+          cache: "no-store",
         });
 
         if (res.ok) {
@@ -111,9 +99,6 @@ export const LatestStories: React.FC<LatestStoriesProps> = ({
           const items = json.data || json;
           if (Array.isArray(items)) {
             const mapped = items.map(normalizeStory);
-
-            // Update module cache and state
-            inMemoryLatestStoriesCache = mapped;
             setStories(mapped);
           }
         }

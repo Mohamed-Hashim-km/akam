@@ -107,7 +107,7 @@ export default function CommunityPage() {
   const fetchCommunity = useCallback(async () => {
     try {
       const res = await apiFetch(`${API_BASE_URL}/communities/${slug}`, {
-        next: { revalidate: 60 },
+        cache: "no-store",
       });
       if (!res.ok) { setError("Community not found"); return; }
       const data = await res.json();
@@ -124,7 +124,7 @@ export default function CommunityPage() {
       try {
         const res = await apiFetch(
           `${API_BASE_URL}/communities/${slug}/posts?sort=${sortMode}&page=${pageNum}&limit=15`,
-          { next: { revalidate: 60 } }
+          { cache: "no-store" }
         );
         if (!res.ok) throw new Error("Failed to load posts");
         const json = await res.json();
@@ -233,7 +233,7 @@ export default function CommunityPage() {
     }
   };
 
-  const communityColor = community?.color ?? "#29ABE1";
+  const communityColor = community?.color;
 
   // ── Render ───────────────────────────────────────────────────────────────
   if (error) {
@@ -251,8 +251,12 @@ export default function CommunityPage() {
     <div className="min-h-screen bg-[#f6f7f8] font-poppins">
       {/* ── Community Banner ─────────────────────────────────────────────── */}
       <div
-        className="w-full h-36 sm:h-48"
-        style={{ background: `linear-gradient(135deg, ${communityColor}cc, ${communityColor}66)` }}
+        className="w-full h-36 sm:h-48 transition-all duration-300"
+        style={
+          communityColor
+            ? { background: `linear-gradient(135deg, ${communityColor}cc, ${communityColor}66)` }
+            : { backgroundColor: "#e5e7eb" }
+        }
       />
 
       <div className="max-w-5xl mx-auto px-4 pb-16">
@@ -260,21 +264,21 @@ export default function CommunityPage() {
         <div className="bg-white rounded-2xl shadow-sm -mt-10 mb-6 p-5 sm:p-7 flex flex-col sm:flex-row sm:items-center gap-4">
           {/* Community avatar */}
           <div
-            className="w-16 h-16 rounded-2xl flex-shrink-0 flex items-center justify-center text-white text-2xl font-bold shadow-md"
-            style={{ backgroundColor: communityColor }}
+            className="w-16 h-16 rounded-2xl flex-shrink-0 flex items-center justify-center text-white text-2xl font-bold shadow-md transition-all duration-300"
+            style={
+              communityColor
+                ? { backgroundColor: communityColor }
+                : { backgroundColor: "#9ca3af" }
+            }
           >
-            {community?.name?.[0] ?? "C"}
+            {community?.name?.[0] || ""}
           </div>
 
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              {loading && !community ? (
-                <div className="h-7 w-48 bg-gray-200 rounded animate-pulse" />
-              ) : (
-                <h1 className="text-xl sm:text-2xl font-bold text-dark-text truncate">
-                  {community?.name ?? slug}
-                </h1>
-              )}
+              <h1 className="text-xl sm:text-2xl font-bold text-dark-text truncate">
+                {community?.name}
+              </h1>
             </div>
             {community?.description && (
               <p className="text-sm text-gray-500 mt-1 line-clamp-2">{community.description}</p>
@@ -282,9 +286,9 @@ export default function CommunityPage() {
             <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
               <span className="flex items-center gap-1">
                 <Users className="w-3.5 h-3.5" />
-                {community?.memberCount?.toLocaleString() ?? "—"} members
+                {community ? community.memberCount.toLocaleString() : 0} members
               </span>
-              <span>{community?.postCount?.toLocaleString() ?? "—"} posts</span>
+              <span>{community ? community.postCount.toLocaleString() : 0} posts</span>
             </div>
           </div>
 
@@ -299,7 +303,7 @@ export default function CommunityPage() {
                   ? "border border-gray-300 text-gray-600 hover:border-red-300 hover:text-red-500"
                   : "text-white"
               }`}
-              style={community?.isMember ? {} : { backgroundColor: communityColor }}
+              style={community?.isMember ? {} : { backgroundColor: communityColor || "#111827" }}
             >
               {memberLoading ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -316,7 +320,7 @@ export default function CommunityPage() {
                 id="new-post-btn"
                 onClick={() => setCreatePostModalOpen(true)}
                 className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold text-white transition-all duration-200 active:scale-95 hover:opacity-90 cursor-pointer"
-                style={{ backgroundColor: communityColor }}
+                style={{ backgroundColor: communityColor || "#111827" }}
               >
                 <Plus className="w-4 h-4" />
                 New Post
@@ -364,7 +368,7 @@ export default function CommunityPage() {
               <button
                 onClick={() => setCreatePostModalOpen(true)}
                 className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-semibold text-white transition hover:opacity-90 cursor-pointer"
-                style={{ backgroundColor: communityColor }}
+                style={{ backgroundColor: communityColor || "#111827" }}
               >
                 <Plus className="w-4 h-4" /> Create First Post
               </button>

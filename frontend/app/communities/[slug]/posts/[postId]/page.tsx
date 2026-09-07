@@ -340,8 +340,8 @@ export default function PostDetailPage() {
   const fetchPostAndComments = useCallback(async () => {
     try {
       const [postRes, commentsRes] = await Promise.all([
-        apiFetch(`${API_BASE_URL}/communities/${slug}/posts/${postId}`),
-        apiFetch(`${API_BASE_URL}/posts/${postId}/comments`),
+        apiFetch(`${API_BASE_URL}/communities/${slug}/posts/${postId}`, { cache: "no-store" }),
+        apiFetch(`${API_BASE_URL}/posts/${postId}/comments`, { cache: "no-store" }),
       ]);
 
       if (!postRes.ok) {

@@ -76,7 +76,7 @@ function getCategoryColor(cat?: string) {
 async function getHomePageData() {
   try {
     const fetchOptions: RequestInit = {
-      next: { revalidate: 300, tags: ["homepage", "stories"] },
+      cache: "no-store",
       signal: AbortSignal.timeout(8000),
     };
 

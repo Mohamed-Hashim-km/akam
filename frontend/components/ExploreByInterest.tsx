@@ -55,14 +55,12 @@ export const ExploreByInterest: React.FC<ExploreByInterestProps> = ({
   useEffect(() => {
     if (initialPropCategories && initialPropCategories.length > 0) {
       setCategoriesList(normalizeCategories(initialPropCategories));
-      setLoading(false);
-      return;
     }
 
     let isMounted = true;
     const fetchLiveCommunities = async () => {
       try {
-        const res = await apiFetch(`${API_BASE_URL}/communities`);
+        const res = await apiFetch(`${API_BASE_URL}/communities`, { cache: "no-store" });
         if (res.ok) {
           const liveData: any[] = await res.json();
           if (Array.isArray(liveData) && isMounted) {

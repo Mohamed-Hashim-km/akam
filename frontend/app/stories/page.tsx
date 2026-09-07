@@ -114,7 +114,7 @@ function StoryCatalogContent() {
       const sQuery = searchQuery ? `&search=${encodeURIComponent(searchQuery)}` : "";
       const url = `${API_BASE_URL}/stories?status=APPROVED&page=1&limit=9${cQuery}${sQuery}`;
 
-      const res = await apiFetch(url, { next: { revalidate: 30 } });
+      const res = await apiFetch(url, { cache: "no-store" });
       if (res.ok) {
         const json = await res.json();
         if (json.data) {
