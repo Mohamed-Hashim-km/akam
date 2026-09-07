@@ -23,6 +23,15 @@ export const EditorsNote: React.FC<EditorsNoteProps> = ({
   });
 
   useEffect(() => {
+    // If customized props were already passed from SSR, update state if they change
+    setData({
+      title: initialTitle,
+      note: initialNote,
+    });
+
+    // Only fetch if using default fallback values
+    if (initialTitle !== "Editor's Note") return;
+
     let isMounted = true;
     fetch(`${API_BASE_URL}/settings/editors-note`, {
       next: { revalidate: 60 },

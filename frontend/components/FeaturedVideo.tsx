@@ -33,13 +33,13 @@ export const FeaturedVideo: React.FC<FeaturedVideoProps> = ({
   initialVideos,
 }) => {
   const [videoList, setVideoList] = useState<VideoItem[]>(
-    initialVideos && initialVideos.length > 0 ? initialVideos : []
+    initialVideos !== undefined ? initialVideos : []
   );
   const [activeVideo, setActiveVideo] = useState<VideoItem | null>(null);
   const [swiperInstance, setSwiperInstance] = useState<SwiperClass | null>(null);
 
   useEffect(() => {
-    if (initialVideos && initialVideos.length > 0) {
+    if (initialVideos !== undefined) {
       setVideoList(initialVideos);
       return;
     }
