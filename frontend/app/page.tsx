@@ -60,7 +60,7 @@ function getCategoryColor(cat?: string) {
 async function getHomePageData() {
   try {
     const fetchOptions: RequestInit = {
-      next: { revalidate: 30 },
+      next: { revalidate: 300, tags: ["homepage", "stories"] },
       signal: AbortSignal.timeout(8000),
     };
 

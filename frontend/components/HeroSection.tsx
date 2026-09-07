@@ -104,7 +104,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                 alt={imageAlt}
                 fill
                 priority
-
+                sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 650px"
                 className="object-contain object-center"
               />
             </div>
