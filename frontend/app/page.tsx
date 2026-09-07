@@ -40,35 +40,68 @@ const isUpcomingDate = (day?: string | null, monthYear?: string | null) => {
   return true;
 };
 
+const CATEGORY_COLORS: Record<string, string> = {
+  FICTION: "text-[#D97706]",
+  "NON-FICTION": "text-[#0284C7]",
+  POETRY: "text-[#9333EA]",
+  CULTURE: "text-[#E11D48]",
+  TECHNOLOGY: "text-[#059669]",
+  OPINION: "text-[#D97706]",
+  LITERATURE: "text-[#2563EB]",
+  GENERAL: "text-[#4B5563]",
+};
+
+function getCategoryColor(cat?: string) {
+  if (!cat) return "text-[#D97706]";
+  const key = cat.trim().toUpperCase();
+  return CATEGORY_COLORS[key] || "text-[#D97706]";
+}
+
 async function getHomePageData() {
   try {
     const fetchOptions: RequestInit = {
-      next: { revalidate: 60 },
-      signal: AbortSignal.timeout(3000),
+      next: { revalidate: 30 },
+      signal: AbortSignal.timeout(8000),
     };
 
-    const [storiesRes, categoriesRes, eventsRes, booksRes, videosRes, commentsRes] = await Promise.allSettled([
-      fetch(`${API_BASE_URL}/stories/published?page=1&limit=10`, fetchOptions),
+    const [storiesRes, categoriesRes, eventsRes, booksRes, videosRes, commentsRes, editorsNoteRes] = await Promise.allSettled([
+      fetch(`${API_BASE_URL}/stories?status=APPROVED&limit=10`, fetchOptions),
       fetch(`${API_BASE_URL}/communities`, fetchOptions),
       fetch(`${API_BASE_URL}/events`, fetchOptions),
       fetch(`${API_BASE_URL}/books`, fetchOptions),
       fetch(`${API_BASE_URL}/media?featured=true&limit=3`, fetchOptions),
       fetch(`${API_BASE_URL}/stories/comments/recent?limit=10`, fetchOptions),
+      fetch(`${API_BASE_URL}/settings/editors-note`, fetchOptions),
     ]);
 
-    const stories =
-      storiesRes.status === "fulfilled" && storiesRes.value.ok
-        ? await storiesRes.value.json().then((json) => json.data || (Array.isArray(json) ? json : []))
-        : [];
+    let rawStories: any[] = [];
+    if (storiesRes.status === "fulfilled" && storiesRes.value.ok) {
+      try {
+        const json = await storiesRes.value.json();
+        rawStories = json.data || (Array.isArray(json) ? json : []);
+      } catch (e) {
+        console.error("Failed to parse stories json", e);
+      }
+    }
+
+    const stories = rawStories.map((s: any) => ({
+      id: s.id,
+      category: (s.category || "Fiction").toUpperCase(),
+      badgeTextColor: getCategoryColor(s.category),
+      title: s.title,
+      author: typeof s.author === "string" && s.author.startsWith("By ") ? s.author : `By ${s.authorName || s.authorEmail || "Unknown Author"}`,
+      imageSrc: s.coverImageUrl || s.imageSrc || "/images/stories/ramachi.jpg",
+      href: `/stories/${s.slug || s.id}`,
+    }));
 
     const categories =
       categoriesRes.status === "fulfilled" && categoriesRes.value.ok
-        ? await categoriesRes.value.json().then((json) => (Array.isArray(json) ? json : json.data || []))
+        ? await categoriesRes.value.json().then((json) => (Array.isArray(json) ? json : json.data || [])).catch(() => [])
         : [];
 
     const rawEvents =
       eventsRes.status === "fulfilled" && eventsRes.value.ok
-        ? await eventsRes.value.json().then((json) => (Array.isArray(json) ? json : json.data || []))
+        ? await eventsRes.value.json().then((json) => (Array.isArray(json) ? json : json.data || [])).catch(() => [])
         : [];
 
     const events = rawEvents.filter((e: any) => {
@@ -78,28 +111,52 @@ async function getHomePageData() {
 
     const books =
       booksRes.status === "fulfilled" && booksRes.value.ok
-        ? await booksRes.value.json().then((json) => (Array.isArray(json) ? json : json.data || []))
+        ? await booksRes.value.json().then((json) => (Array.isArray(json) ? json : json.data || [])).catch(() => [])
         : [];
 
     const videos =
       videosRes.status === "fulfilled" && videosRes.value.ok
-        ? await videosRes.value.json().then((json) => json.data || (Array.isArray(json) ? json : []))
+        ? await videosRes.value.json().then((json) => json.data || (Array.isArray(json) ? json : [])).catch(() => [])
         : [];
 
     const comments =
       commentsRes.status === "fulfilled" && commentsRes.value.ok
-        ? await commentsRes.value.json().then((json) => (Array.isArray(json) ? json : json.data || []))
+        ? await commentsRes.value.json().then((json) => (Array.isArray(json) ? json : json.data || [])).catch(() => [])
         : [];
 
-    return { stories, categories, events, books, videos, comments };
+    let editorsNote = {
+      title: "Editor's Note",
+      note: "This month we celebrate the voices shaping Malayalam literature today. Read slowly, share widely, and – if you have a story of your own – write it. Every submission passes through our editorial board before it reaches you.",
+    };
+    if (editorsNoteRes.status === "fulfilled" && editorsNoteRes.value.ok) {
+      try {
+        const json = await editorsNoteRes.value.json();
+        if (json && json.title && json.note) {
+          editorsNote = { title: json.title, note: json.note };
+        }
+      } catch (e) {}
+    }
+
+    return { stories, categories, events, books, videos, comments, editorsNote };
   } catch (err) {
     console.error("Failed server-side data fetch for homepage", err);
-    return { stories: [], categories: [], events: [], books: [], videos: [], comments: [] };
+    return {
+      stories: [],
+      categories: [],
+      events: [],
+      books: [],
+      videos: [],
+      comments: [],
+      editorsNote: {
+        title: "Editor's Note",
+        note: "This month we celebrate the voices shaping Malayalam literature today. Read slowly, share widely, and – if you have a story of your own – write it. Every submission passes through our editorial board before it reaches you.",
+      },
+    };
   }
 }
 
 export default async function Home() {
-  const { stories, categories, events, books, videos, comments } = await getHomePageData();
+  const { stories, categories, events, books, videos, comments, editorsNote } = await getHomePageData();
 
   return (
     <main className="min-h-screen flex flex-col font-poppins">
@@ -110,7 +167,7 @@ export default async function Home() {
       <LatestStories stories={stories} />
 
       {/* Editor's Note Section */}
-      <EditorsNote />
+      <EditorsNote title={editorsNote.title} note={editorsNote.note} />
 
       {/* Explore By Interest Section */}
       <ExploreByInterest categories={categories} />
