@@ -10,7 +10,7 @@ import UpcomingBookReleases from "@/components/UpcomingBookReleases";
 import ReaderReviews from "@/components/ReaderReviews";
 import { API_BASE_URL } from "@/lib/config";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 3600;
 
 export const metadata: Metadata = {
   title: "Akam Digital — Storytelling, Literature & Cultural Platform",
@@ -75,19 +75,37 @@ function getCategoryColor(cat?: string) {
 
 async function getHomePageData() {
   try {
-    const fetchOptions: RequestInit = {
-      cache: "no-store",
-      signal: AbortSignal.timeout(8000),
-    };
+    const timeoutSignal = AbortSignal.timeout(8000);
 
     const [storiesRes, categoriesRes, eventsRes, booksRes, videosRes, commentsRes, editorsNoteRes] = await Promise.allSettled([
-      fetch(`${API_BASE_URL}/stories?status=APPROVED&limit=10`, fetchOptions),
-      fetch(`${API_BASE_URL}/communities`, fetchOptions),
-      fetch(`${API_BASE_URL}/events`, fetchOptions),
-      fetch(`${API_BASE_URL}/books`, fetchOptions),
-      fetch(`${API_BASE_URL}/media?featured=true&limit=3`, fetchOptions),
-      fetch(`${API_BASE_URL}/stories/comments/recent?limit=10`, fetchOptions),
-      fetch(`${API_BASE_URL}/settings/editors-note`, fetchOptions),
+      fetch(`${API_BASE_URL}/stories?status=APPROVED&limit=10`, {
+        next: { tags: ["homepage", "stories"], revalidate: 3600 },
+        signal: timeoutSignal,
+      }),
+      fetch(`${API_BASE_URL}/communities`, {
+        next: { tags: ["homepage", "categories"], revalidate: 3600 },
+        signal: timeoutSignal,
+      }),
+      fetch(`${API_BASE_URL}/events`, {
+        next: { tags: ["homepage", "events"], revalidate: 3600 },
+        signal: timeoutSignal,
+      }),
+      fetch(`${API_BASE_URL}/books`, {
+        next: { tags: ["homepage", "books"], revalidate: 3600 },
+        signal: timeoutSignal,
+      }),
+      fetch(`${API_BASE_URL}/media?featured=true&limit=3`, {
+        next: { tags: ["homepage", "media"], revalidate: 3600 },
+        signal: timeoutSignal,
+      }),
+      fetch(`${API_BASE_URL}/stories/comments/recent?limit=10`, {
+        next: { tags: ["homepage", "comments"], revalidate: 3600 },
+        signal: timeoutSignal,
+      }),
+      fetch(`${API_BASE_URL}/settings/editors-note`, {
+        next: { tags: ["homepage", "editors-note"], revalidate: 3600 },
+        signal: timeoutSignal,
+      }),
     ]);
 
     let rawStories: any[] = [];
