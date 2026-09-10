@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 
 const HOMEPAGE_TAGS = ["homepage", "stories", "events", "books", "media", "comments", "editors-note"];
 
-function performRevalidation(path: string, tag: string | null, profile: string) {
+function performRevalidation(path: string, tag: string | null, profile: string = "max") {
   const revalidatedTags: string[] = [];
 
   if (tag) {
