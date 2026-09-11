@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import AuthHeroWrapper from "@/components/AuthHeroWrapper";
 import LatestStories from "@/components/LatestStories";
+import AboutAkam from "@/components/AboutAkam";
 import EditorsNote from "@/components/EditorsNote";
 import ExploreByInterest from "@/components/ExploreByInterest";
 import UpcomingEvents from "@/components/UpcomingEvents";
@@ -123,9 +124,11 @@ async function getHomePageData() {
       category: (s.category || "Fiction").toUpperCase(),
       badgeTextColor: getCategoryColor(s.category),
       title: s.title,
+      description: s.description || s.excerpt || s.summary || s.shortDescription || "",
       author: typeof s.author === "string" && s.author.startsWith("By ") ? s.author : `By ${s.authorName || s.authorEmail || "Unknown Author"}`,
       imageSrc: s.coverImageUrl || s.imageSrc || "/images/stories/ramachi.jpg",
       href: `/stories/${s.slug || s.id}`,
+      contentType: (s.contentType || s.category || "STORY").toUpperCase(),
     }));
 
     const categories =
@@ -159,7 +162,7 @@ async function getHomePageData() {
         : [];
 
     let editorsNote = {
-      title: "Editor's Note",
+      title: "From Akam editorial",
       note: "This month we celebrate the voices shaping Malayalam literature today. Read slowly, share widely, and – if you have a story of your own – write it. Every submission passes through our editorial board before it reaches you.",
     };
     if (editorsNoteRes.status === "fulfilled" && editorsNoteRes.value.ok) {
@@ -182,7 +185,7 @@ async function getHomePageData() {
       videos: [],
       comments: [],
       editorsNote: {
-        title: "Editor's Note",
+        title: "From Akam editorial",
         note: "This month we celebrate the voices shaping Malayalam literature today. Read slowly, share widely, and – if you have a story of your own – write it. Every submission passes through our editorial board before it reaches you.",
       },
     };
@@ -198,10 +201,13 @@ export default async function Home() {
     <main className="min-h-screen flex flex-col font-poppins">
       {/* Main Hero Section - Only shown for unauthenticated / guest users */}
       <AuthHeroWrapper initialIsLoggedIn={isLoggedInCookie} />
+  {/* About Akam Section */}
+      <AboutAkam />
 
       {/* Latest Stories Section */}
       <LatestStories stories={stories} />
 
+    
       {/* Editor's Note Section */}
       <EditorsNote title={editorsNote.title} note={editorsNote.note} />
 
