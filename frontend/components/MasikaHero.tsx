@@ -19,7 +19,7 @@ export interface MasikaHeroProps {
 }
 
 export const MasikaHero: React.FC<MasikaHeroProps> = ({
-  headline = "Akam Masika",
+  headline = "Akam E-magazine",
   subheadline = "The official digital journal of AKAM. Each edition gathers the editorial board's handpicked selection of contemporary Malayalam serialized fiction, poetry, and cultural essays — elevated above community feeds into a curated publication.",
   ctaText = "Read Latest Edition",
   ctaHref = "#latest-edition",

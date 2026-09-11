@@ -23,8 +23,8 @@ backend/.env
 npm-debug.log*
 
 # Uploaded media files
-backend/uploads/*
-!backend/uploads/.gitkeep
+# backend/uploads/*
+# !backend/uploads/.gitkeep
 
 # OS / IDE
 .DS_Store

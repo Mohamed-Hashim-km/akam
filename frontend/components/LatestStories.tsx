@@ -151,7 +151,7 @@ export const LatestStories: React.FC<LatestStoriesProps> = ({
               iconPosition="right"
               className="group px-6 py-2.5 text-sm font-medium shadow-xs cursor-pointer"
             >
-              View All Stories
+             View all
             </Button>
           </Link>
         </div>

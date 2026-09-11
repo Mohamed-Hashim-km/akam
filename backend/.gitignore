@@ -3,5 +3,5 @@ dist/
 .env
 
 # Uploaded media files
-uploads/*
-!uploads/.gitkeep
+# uploads/*
+# !uploads/.gitkeep

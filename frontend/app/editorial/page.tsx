@@ -329,8 +329,24 @@ function EditorialDashboardContent() {
   // Reader Reviews State
   const [reviewsList, setReviewsList] = useState<any[]>([]);
   const [reviewsMeta, setReviewsMeta] = useState({ total: 0, page: 1, limit: 10, totalPages: 1 });
-  const [reviewFeaturedFilter, setReviewFeaturedFilter] = useState<"ALL" | "FEATURED" | "HIDDEN">("ALL");
-  const [selectedReview, setSelectedReview] = useState<any | null>(null);
+  const [showAddReviewModal, setShowAddReviewModal] = useState(false);
+  const [editingReviewId, setEditingReviewId] = useState<string | null>(null);
+  const [reviewFormName, setReviewFormName] = useState("");
+  const [reviewFormRole, setReviewFormRole] = useState("");
+  const [reviewFormQuote, setReviewFormQuote] = useState("");
+  const [reviewFormImage, setReviewFormImage] = useState("");
+  const [reviewFormPublished, setReviewFormPublished] = useState(true);
+  const [submittingReview, setSubmittingReview] = useState(false);
+  const [uploadingReviewImage, setUploadingReviewImage] = useState(false);
+
+  const resetReviewForm = () => {
+    setEditingReviewId(null);
+    setReviewFormName("");
+    setReviewFormRole("");
+    setReviewFormQuote("");
+    setReviewFormImage("");
+    setReviewFormPublished(true);
+  };
 
   // Editorial Notifications State
   const [notificationsList, setNotificationsList] = useState<any[]>([]);
@@ -528,28 +544,47 @@ function EditorialDashboardContent() {
   const [bookFormPreorderLink, setBookFormPreorderLink] = useState("");
   const [bookFormPublished, setBookFormPublished] = useState(true);
   const [submittingBook, setSubmittingBook] = useState(false);
+  const [uploadingBookCover, setUploadingBookCover] = useState(false);
 
   const resetBookForm = () => {
     setEditingBookId(null);
     setBookFormTitle("");
     setBookFormAuthor("");
-    setBookFormEditionTag("Print Edition");
-    setBookFormDesc("");
     setBookFormCoverImage("");
     setBookFormPreorderLink("");
     setBookFormPublished(true);
   };
 
+  const handleBookCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingBookCover(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await apiFetch(`${API_BASE_URL}/uploads/book-cover`, { method: "POST", body: formData });
+      if (res.ok) {
+        const json = await res.json();
+        setBookFormCoverImage(json.url);
+      } else {
+        alert("Failed to upload cover image.");
+      }
+    } catch (err) {
+      console.error("Error uploading book cover image", err);
+      alert("Error uploading cover image.");
+    } finally {
+      setUploadingBookCover(false);
+    }
+  };
+
   const handleSaveBook = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!bookFormTitle.trim() || !bookFormAuthor.trim() || !bookFormDesc.trim()) return;
+    if (!bookFormTitle.trim() || !bookFormAuthor.trim()) return;
     setSubmittingBook(true);
     try {
       const payload: any = {
         title: bookFormTitle.trim(),
         author: bookFormAuthor.trim(),
-        editionTag: bookFormEditionTag.trim() || "Print Edition",
-        description: bookFormDesc.trim(),
         isPublished: bookFormPublished,
       };
       if (bookFormCoverImage.trim()) payload.coverImage = bookFormCoverImage.trim();
@@ -1061,8 +1096,7 @@ function EditorialDashboardContent() {
         }
       } else if (tab === "reviews") {
         const rSearch = query ? `&search=${encodeURIComponent(query)}` : "";
-        const rFeatured = reviewFeaturedFilter !== "ALL" ? `&featured=${reviewFeaturedFilter === "FEATURED" ? "true" : "false"}` : "";
-        const revRes = await apiFetch(`${API_BASE_URL}/stories/comments/editorial?page=${page}&limit=10${rSearch}${rFeatured}`);
+        const revRes = await apiFetch(`${API_BASE_URL}/editorial/reviews?page=${page}&limit=10${rSearch}`);
         if (revRes.ok) {
           const json = await revRes.json();
           if (json.data) {
@@ -1080,32 +1114,90 @@ function EditorialDashboardContent() {
     }
   };
 
-  const handleToggleFeaturedReview = async (commentId: string) => {
+  const handleReviewImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingReviewImage(true);
     try {
-      const res = await apiFetch(`${API_BASE_URL}/stories/comments/${commentId}/toggle-featured`, {
-        method: "PATCH",
-      });
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await apiFetch(`${API_BASE_URL}/uploads/review-image`, { method: "POST", body: formData });
       if (res.ok) {
-        setFeedbackMessage("Reader review homepage featured status updated.");
+        const json = await res.json();
+        setReviewFormImage(json.url);
+      } else {
+        alert("Failed to upload reviewer photo.");
+      }
+    } catch (err) {
+      console.error("Error uploading review image", err);
+      alert("Error uploading reviewer photo.");
+    } finally {
+      setUploadingReviewImage(false);
+    }
+  };
+
+  const handleSaveReview = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reviewFormName.trim() || !reviewFormQuote.trim()) return;
+    setSubmittingReview(true);
+    try {
+      const payload: any = {
+        name: reviewFormName.trim(),
+        role: reviewFormRole.trim() || undefined,
+        quote: reviewFormQuote.trim(),
+        isPublished: reviewFormPublished,
+      };
+      if (reviewFormImage.trim()) payload.image = reviewFormImage.trim();
+
+      const url = editingReviewId
+        ? `${API_BASE_URL}/editorial/reviews/${editingReviewId}`
+        : `${API_BASE_URL}/editorial/reviews`;
+      const method = editingReviewId ? "PATCH" : "POST";
+
+      const res = await apiFetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (res.ok) {
+        setFeedbackMessage(editingReviewId ? "Review updated successfully!" : "Review created successfully!");
+        fetch("/api/revalidate?path=/").catch(() => {});
+        setShowAddReviewModal(false);
+        resetReviewForm();
         fetchDashboardData("reviews", currentPage, searchQuery);
         setTimeout(() => setFeedbackMessage(null), 3000);
       } else {
         const errData = await res.json().catch(() => ({}));
-        alert(errData.message || "Failed to toggle review featured status.");
+        alert(`Failed to save review: ${errData.message || res.statusText}`);
       }
-    } catch (err) {
-      console.error("Failed to toggle featured review", err);
+    } catch (err: any) {
+      console.error("Failed to save review", err);
+      alert(`Error saving review: ${err.message || err}`);
+    } finally {
+      setSubmittingReview(false);
     }
   };
 
-  const handleDeleteReviewComment = async (commentId: string) => {
-    if (!confirm("Are you sure you want to delete this reader review comment?")) return;
+  const handleTogglePublishReview = async (id: string) => {
     try {
-      const res = await apiFetch(`${API_BASE_URL}/stories/comments/${commentId}`, {
-        method: "DELETE",
-      });
+      const res = await apiFetch(`${API_BASE_URL}/editorial/reviews/${id}/toggle-publish`, { method: "PATCH" });
       if (res.ok) {
-        setFeedbackMessage("Reader review deleted successfully.");
+        setFeedbackMessage("Review publication status updated.");
+        fetchDashboardData("reviews", currentPage, searchQuery);
+        setTimeout(() => setFeedbackMessage(null), 3000);
+      }
+    } catch (err) {
+      console.error("Failed to toggle publish review", err);
+    }
+  };
+
+  const handleDeleteReview = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this reader review/testimonial?")) return;
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/editorial/reviews/${id}`, { method: "DELETE" });
+      if (res.ok) {
+        setFeedbackMessage("Review deleted successfully.");
         fetchDashboardData("reviews", currentPage, searchQuery);
         setTimeout(() => setFeedbackMessage(null), 3000);
       }
@@ -1718,7 +1810,7 @@ function EditorialDashboardContent() {
     if (user && ["EDITOR", "ADMIN"].includes(user.role)) {
       fetchDashboardData(activeTab, currentPage, searchQuery);
     }
-  }, [activeTab, currentPage, reportStatusFilter, reportTypeFilter, inquiryStatusFilter, eventFilterType, reviewFeaturedFilter]);
+  }, [activeTab, currentPage, reportStatusFilter, reportTypeFilter, inquiryStatusFilter, eventFilterType]);
 
   // Server-side debounced search handler
   useEffect(() => {
@@ -4139,10 +4231,18 @@ function EditorialDashboardContent() {
                       className="bg-white rounded-[24px] p-6 border border-gray-200/80 shadow-xs flex flex-col justify-between space-y-4 hover:shadow-md transition-shadow"
                     >
                       <div>
-                        <div className="flex items-start justify-between gap-2 mb-2">
-                          <span className="bg-[#F5EDFF] text-[#8122DB] text-[10px] font-bold px-2.5 py-1 rounded-full">
-                            {book.editionTag || "Print Edition"}
-                          </span>
+                        {book.coverImage && (
+                          <div className="relative w-full aspect-[3/4] rounded-2xl overflow-hidden mb-3 bg-gray-100 border border-gray-100">
+                            <Image
+                              src={formatAssetUrl(book.coverImage)}
+                              alt={book.title}
+                              fill
+                              className="object-cover"
+                              unoptimized
+                            />
+                          </div>
+                        )}
+                        <div className="flex items-center justify-end mb-2">
                           <button
                             onClick={() => handleTogglePublishBook(book.id)}
                             className={`text-[10px] font-bold px-2.5 py-1 rounded-full transition cursor-pointer ${
@@ -4156,18 +4256,7 @@ function EditorialDashboardContent() {
                         </div>
 
                         <h3 className="text-lg font-bold text-gray-950 tracking-tight leading-snug">{book.title}</h3>
-                        <p className="text-xs font-semibold text-gray-500 mb-3">{book.author}</p>
-                        <div className="border-b-2 border-[#EBE0FF] my-3" />
-                        <p className="text-xs text-gray-600 line-clamp-2 leading-relaxed font-normal">{book.description}</p>
-                        {book.description && book.description.length > 80 && (
-                          <button
-                            type="button"
-                            onClick={() => setViewingBookModal(book)}
-                            className="text-xs font-semibold text-[#8122DB] underline hover:text-[#6940AF] cursor-pointer mt-1 inline-block transition-colors"
-                          >
-                            Read more
-                          </button>
-                        )}
+                        <p className="text-xs font-semibold text-gray-500 mb-2">{book.author}</p>
                       </div>
 
                       <div className="pt-3 border-t border-gray-100 flex items-center justify-between gap-2">
@@ -4190,8 +4279,6 @@ function EditorialDashboardContent() {
                               setEditingBookId(book.id);
                               setBookFormTitle(book.title);
                               setBookFormAuthor(book.author);
-                              setBookFormEditionTag(book.editionTag || "Print Edition");
-                              setBookFormDesc(book.description);
                               setBookFormCoverImage(book.coverImage || "");
                               setBookFormPreorderLink(book.preorderLink || "");
                               setBookFormPublished(book.isPublished);
@@ -4717,72 +4804,42 @@ function EditorialDashboardContent() {
                 <div>
                   <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider inline-flex items-center gap-1.5 shadow-2xs">
                     <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-                    Reader Curation & Testimonials
+                    Homepage Testimonials & Reviews
                   </span>
-                  <h2 className="text-2xl font-bold text-gray-950 mt-2 tracking-tight">Reader Reviews & Comments</h2>
+                  <h2 className="text-2xl font-bold text-gray-950 mt-2 tracking-tight">Reader Reviews & Testimonials</h2>
                   <p className="text-xs text-gray-500 mt-1 max-w-xl">
-                    Curate reader comments and feature select reviews on the main website homepage slider.
+                    Create, edit, and curate testimonials displayed in the &ldquo;How Akam Makes A Difference&rdquo; section on the homepage.
                   </p>
                 </div>
 
                 <div className="flex items-center gap-3 shrink-0">
-                  <span className="text-xs font-semibold text-gray-700 bg-gray-50 border border-gray-200/80 px-4 py-2.5 rounded-2xl shadow-xs">
-                    Total Reviews: <strong className="text-gray-900">{reviewsMeta.total || reviewsList.length}</strong>
-                  </span>
+                  <Button
+                    type="button"
+                    variant="primary"
+                    size="md"
+                    onClick={() => {
+                      resetReviewForm();
+                      setShowAddReviewModal(true);
+                    }}
+                    className="bg-black hover:bg-gray-800 text-white px-5 py-2.5 rounded-full text-xs font-semibold inline-flex items-center gap-2 shadow-md cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Add New Review</span>
+                  </Button>
                 </div>
               </div>
 
-              {/* Search & Filter Toolbar */}
+              {/* Search & Toolbar */}
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
                 <div className="relative max-w-md w-full">
                   <Search className="absolute left-3.5 top-3 w-4 h-4 text-gray-400" />
                   <input
                     type="text"
-                    placeholder="Search reader reviews by content, story title, or reviewer..."
+                    placeholder="Search reviews by name, role, or quote content..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-2xl text-xs font-medium outline-none focus:border-black shadow-xs transition-all"
                   />
-                </div>
-
-                {/* Status Filter Segment Control */}
-                <div className="flex items-center gap-1.5 bg-gray-100/90 p-1.5 rounded-2xl border border-gray-200/80 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setReviewFeaturedFilter("ALL");
-                      setCurrentPage(1);
-                    }}
-                    className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                      reviewFeaturedFilter === "ALL" ? "bg-white text-gray-950 shadow-xs" : "text-gray-600 hover:text-gray-950"
-                    }`}
-                  >
-                    All Reviews
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setReviewFeaturedFilter("FEATURED");
-                      setCurrentPage(1);
-                    }}
-                    className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                      reviewFeaturedFilter === "FEATURED" ? "bg-emerald-600 text-white shadow-xs" : "text-gray-600 hover:text-gray-950"
-                    }`}
-                  >
-                    <Sparkles className="w-3.5 h-3.5" /> Featured
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setReviewFeaturedFilter("HIDDEN");
-                      setCurrentPage(1);
-                    }}
-                    className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                      reviewFeaturedFilter === "HIDDEN" ? "bg-white text-gray-950 shadow-xs" : "text-gray-600 hover:text-gray-950"
-                    }`}
-                  >
-                    Hidden
-                  </button>
                 </div>
               </div>
 
@@ -4795,82 +4852,86 @@ function EditorialDashboardContent() {
                 <div className="bg-white rounded-[28px] p-12 text-center border border-gray-200/80 shadow-xs">
                   <MessageSquare className="w-10 h-10 text-gray-300 mx-auto mb-3" />
                   <h3 className="text-base font-bold text-gray-900">No Reader Reviews Found</h3>
-                  <p className="text-xs text-gray-500 max-w-sm mx-auto mt-1">
-                    Reader comments posted on stories will appear here for editorial curation and homepage featuring.
+                  <p className="text-xs text-gray-500 max-w-sm mx-auto mt-1 mb-4">
+                    Create testimonials to display on the homepage &ldquo;How Akam Makes A Difference&rdquo; section.
                   </p>
+                  <Button
+                    type="button"
+                    variant="primary"
+                    size="sm"
+                    onClick={() => {
+                      resetReviewForm();
+                      setShowAddReviewModal(true);
+                    }}
+                    className="bg-black text-white"
+                  >
+                    Create First Review
+                  </Button>
                 </div>
               ) : (
                 <div className="space-y-4">
                   {/* Mobile Card List View (< 640px) */}
                   <div className="block sm:hidden space-y-4">
-                    {reviewsList.map((rev) => (
-                      <div key={rev.id} className="bg-white border border-gray-200 rounded-2xl p-4 shadow-xs space-y-3">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex items-center gap-2.5 min-w-0">
-                            <div className="relative w-8 h-8 rounded-full overflow-hidden bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-xs shrink-0 border border-emerald-200">
-                              {rev.userAvatarUrl ? (
-                                <img
-                                  src={rev.userAvatarUrl}
-                                  alt="Avatar"
-                                  className="w-full h-full object-cover rounded-full"
-                                  onError={(e) => {
-                                    const el = e.currentTarget;
-                                    el.style.display = "none";
-                                    const parent = el.parentElement;
-                                    if (parent && !parent.querySelector("span")) {
-                                      const sp = document.createElement("span");
-                                      sp.textContent = (rev.userName || rev.userEmail || "R")[0].toUpperCase();
-                                      parent.appendChild(sp);
-                                    }
-                                  }}
-                                />
-                              ) : (
-                                <span>{(rev.userName || rev.userEmail || "R")[0].toUpperCase()}</span>
-                              )}
+                    {reviewsList.map((rev) => {
+                      const photo = rev.image ? formatAssetUrl(rev.image) : null;
+                      return (
+                        <div key={rev.id} className="bg-white border border-gray-200 rounded-2xl p-4 shadow-xs space-y-3">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="relative w-10 h-10 rounded-full overflow-hidden bg-gray-100 shrink-0 border border-gray-200">
+                                {photo ? (
+                                  <img src={photo} alt={rev.name} className="w-full h-full object-cover" />
+                                ) : (
+                                  <div className="w-full h-full flex items-center justify-center bg-emerald-100 text-emerald-800 font-bold text-sm">
+                                    {rev.name[0]}
+                                  </div>
+                                )}
+                              </div>
+                              <div className="min-w-0">
+                                <h4 className="font-bold text-gray-900 text-xs truncate">{rev.name}</h4>
+                                {rev.role && <p className="text-[10px] text-gray-500 truncate">{rev.role}</p>}
+                              </div>
                             </div>
-                            <div className="min-w-0">
-                              <h4 className="font-bold text-gray-900 text-xs truncate">{rev.userName || rev.userEmail}</h4>
-                              <p className="text-[10px] text-gray-500 truncate">{rev.storyTitle}</p>
-                            </div>
+                            <span
+                              className={`px-2.5 py-1 rounded-xl text-[10px] font-bold ${
+                                rev.isPublished ? "bg-emerald-100 text-emerald-800" : "bg-gray-100 text-gray-600"
+                              }`}
+                            >
+                              {rev.isPublished ? "Published" : "Draft"}
+                            </span>
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => handleToggleFeaturedReview(rev.id)}
-                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[10px] font-semibold shadow-xs shrink-0 transition-all cursor-pointer ${
-                              rev.isFeatured
-                                ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
-                                : "bg-gray-100 text-gray-600 border border-gray-200"
-                            }`}
-                          >
-                            <Sparkles className={`w-3 h-3 ${rev.isFeatured ? "text-emerald-600 fill-emerald-600" : "text-gray-400"}`} />
-                            {rev.isFeatured ? "Featured" : "Hidden"}
-                          </button>
-                        </div>
 
-                        <div
-                          onClick={() => setSelectedReview(rev)}
-                          className="text-xs italic text-gray-800 bg-gray-50 p-3 rounded-xl border border-gray-100 cursor-pointer hover:bg-gray-100/70 transition"
-                        >
-                          &ldquo;{rev.content}&rdquo;
-                        </div>
+                          <div className="text-xs italic text-gray-800 bg-gray-50 p-3 rounded-xl border border-gray-100">
+                            &ldquo;{rev.quote}&rdquo;
+                          </div>
 
-                        <div className="pt-2 border-t border-gray-100 flex items-center justify-between text-[11px] text-gray-500">
-                          <span>{new Date(rev.createdAt).toLocaleDateString()}</span>
-                          <div className="flex items-center gap-3">
-                            <button type="button" onClick={() => setSelectedReview(rev)} className="text-gray-700 hover:text-black font-semibold">
-                              View
+                          <div className="pt-2 border-t border-gray-100 flex items-center justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingReviewId(rev.id);
+                                setReviewFormName(rev.name || "");
+                                setReviewFormRole(rev.role || "");
+                                setReviewFormQuote(rev.quote || "");
+                                setReviewFormImage(rev.image || "");
+                                setReviewFormPublished(rev.isPublished ?? true);
+                                setShowAddReviewModal(true);
+                              }}
+                              className="text-xs font-bold text-gray-700 hover:text-black"
+                            >
+                              Edit
                             </button>
                             <button
                               type="button"
-                              onClick={() => handleDeleteReviewComment(rev.id)}
-                              className="text-rose-600 hover:underline font-semibold"
+                              onClick={() => handleDeleteReview(rev.id)}
+                              className="text-xs font-bold text-rose-600 hover:underline"
                             >
                               Delete
                             </button>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
 
                   {/* Desktop Table View (>= 640px) */}
@@ -4880,109 +4941,238 @@ function EditorialDashboardContent() {
                         <thead>
                           <tr className="bg-gray-50 border-b border-gray-200 text-gray-500 font-semibold uppercase tracking-wider">
                             <th className="py-4 px-6">Reviewer</th>
-                            <th className="py-4 px-6">Story Title</th>
-                            <th className="py-4 px-6">Comment / Review Content</th>
+                            <th className="py-4 px-6">Quote Content</th>
                             <th className="py-4 px-6">Homepage Status</th>
-                            <th className="py-4 px-6">Date</th>
                             <th className="py-4 px-6 text-right">Actions</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100 text-gray-800">
-                          {reviewsList.map((rev) => (
-                            <tr key={rev.id} className="hover:bg-gray-50/80 transition-colors">
-                              <td className="py-4 px-6 font-semibold text-gray-900">
-                                <div className="flex items-center gap-3">
-                                  <div className="relative w-8 h-8 rounded-full overflow-hidden bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-xs shrink-0 border border-emerald-200">
-                                    {rev.userAvatarUrl ? (
-                                      <img
-                                        src={rev.userAvatarUrl}
-                                        alt="Avatar"
-                                        className="w-full h-full object-cover rounded-full"
-                                        onError={(e) => {
-                                          const el = e.currentTarget;
-                                          el.style.display = "none";
-                                          const parent = el.parentElement;
-                                          if (parent && !parent.querySelector("span")) {
-                                            const sp = document.createElement("span");
-                                            sp.textContent = (rev.userName || rev.userEmail || "R")[0].toUpperCase();
-                                            parent.appendChild(sp);
-                                          }
-                                        }}
-                                      />
-                                    ) : (
-                                      <span>{(rev.userName || rev.userEmail || "R")[0].toUpperCase()}</span>
-                                    )}
+                          {reviewsList.map((rev) => {
+                            const photo = rev.image ? formatAssetUrl(rev.image) : null;
+                            return (
+                              <tr key={rev.id} className="hover:bg-gray-50/80 transition-colors">
+                                <td className="py-4 px-6 font-semibold text-gray-900">
+                                  <div className="flex items-center gap-3">
+                                    <div className="relative w-10 h-10 rounded-full overflow-hidden bg-gray-100 shrink-0 border border-gray-200">
+                                      {photo ? (
+                                        <img src={photo} alt={rev.name} className="w-full h-full object-cover" />
+                                      ) : (
+                                        <div className="w-full h-full flex items-center justify-center bg-emerald-100 text-emerald-800 font-bold text-sm">
+                                          {rev.name[0]}
+                                        </div>
+                                      )}
+                                    </div>
+                                    <div className="min-w-0 max-w-[180px]">
+                                      <p className="truncate font-bold text-gray-900">{rev.name}</p>
+                                      {rev.role && <p className="truncate text-[11px] text-gray-500 font-normal">{rev.role}</p>}
+                                    </div>
                                   </div>
-                                  <div className="min-w-0 max-w-[150px]">
-                                    <p className="truncate font-bold text-gray-900">{rev.userName || "Reader"}</p>
-                                    <p className="truncate text-[10px] text-gray-500 font-normal">{rev.userEmail}</p>
+                                </td>
+                                <td className="py-4 px-6 max-w-[380px]">
+                                  <div className="italic text-gray-800 line-clamp-2 leading-relaxed bg-gray-50/80 p-2.5 rounded-xl border border-gray-100">
+                                    &ldquo;{rev.quote}&rdquo;
                                   </div>
-                                </div>
-                              </td>
-                              <td className="py-4 px-6 font-medium text-gray-700 max-w-[180px]">
-                                <Link
-                                  href={`/stories/${rev.storySlug || rev.storyId}`}
-                                  target="_blank"
-                                  className="font-semibold text-gray-900 hover:text-emerald-700 transition flex items-center gap-1 group/link"
-                                >
-                                  <span className="line-clamp-2 leading-snug">{rev.storyTitle}</span>
-                                  <ExternalLink className="w-3 h-3 text-gray-400 opacity-0 group-hover/link:opacity-100 transition-opacity shrink-0" />
-                                </Link>
-                              </td>
-                              <td className="py-4 px-6 max-w-[320px]">
-                                <div
-                                  onClick={() => setSelectedReview(rev)}
-                                  className="italic text-gray-800 line-clamp-2 leading-relaxed bg-gray-50/80 p-2.5 rounded-xl border border-gray-100 cursor-pointer hover:bg-gray-100/80 transition"
-                                  title="Click to view full comment"
-                                >
-                                  &ldquo;{rev.content}&rdquo;
-                                </div>
-                              </td>
-                              <td className="py-4 px-6 whitespace-nowrap">
-                                <button
-                                  type="button"
-                                  onClick={() => handleToggleFeaturedReview(rev.id)}
-                                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer shadow-xs ${
-                                    rev.isFeatured
-                                      ? "bg-emerald-100 text-emerald-800 border border-emerald-300 hover:bg-emerald-200"
-                                      : "bg-gray-100 text-gray-600 border border-gray-200 hover:bg-gray-200"
-                                  }`}
-                                >
-                                  <Sparkles className={`w-3.5 h-3.5 ${rev.isFeatured ? "text-emerald-600 fill-emerald-600" : "text-gray-400"}`} />
-                                  {rev.isFeatured ? "★ Featured" : "☆ Hidden"}
-                                </button>
-                              </td>
-                              <td className="py-4 px-6 text-gray-500 whitespace-nowrap font-medium">
-                                {new Date(rev.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-                              </td>
-                              <td className="py-4 px-6 text-right whitespace-nowrap">
-                                <div className="flex items-center justify-end gap-1">
+                                </td>
+                                <td className="py-4 px-6 whitespace-nowrap">
                                   <button
                                     type="button"
-                                    onClick={() => setSelectedReview(rev)}
-                                    className="p-2 text-gray-500 hover:text-black hover:bg-gray-100 rounded-xl transition cursor-pointer"
-                                    title="View Comment Details"
+                                    onClick={() => handleTogglePublishReview(rev.id)}
+                                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer shadow-xs ${
+                                      rev.isPublished
+                                        ? "bg-emerald-100 text-emerald-800 border border-emerald-300 hover:bg-emerald-200"
+                                        : "bg-gray-100 text-gray-600 border border-gray-200 hover:bg-gray-200"
+                                    }`}
                                   >
-                                    <Eye className="w-4 h-4" />
+                                    {rev.isPublished ? "Published" : "Draft / Hidden"}
                                   </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDeleteReviewComment(rev.id)}
-                                    className="p-2 text-rose-500 hover:bg-rose-50 rounded-xl transition cursor-pointer"
-                                    title="Delete Comment"
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
+                                </td>
+                                <td className="py-4 px-6 text-right whitespace-nowrap">
+                                  <div className="flex items-center justify-end gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setEditingReviewId(rev.id);
+                                        setReviewFormName(rev.name || "");
+                                        setReviewFormRole(rev.role || "");
+                                        setReviewFormQuote(rev.quote || "");
+                                        setReviewFormImage(rev.image || "");
+                                        setReviewFormPublished(rev.isPublished ?? true);
+                                        setShowAddReviewModal(true);
+                                      }}
+                                      className="p-2 text-gray-600 hover:text-black hover:bg-gray-100 rounded-xl transition cursor-pointer"
+                                      title="Edit Review"
+                                    >
+                                      <Edit3 className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteReview(rev.id)}
+                                      className="p-2 text-rose-500 hover:bg-rose-50 rounded-xl transition cursor-pointer"
+                                      title="Delete Review"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>
                   </div>
 
                   <PaginationFooter meta={reviewsMeta} onPageChange={handlePageChange} />
+                </div>
+              )}
+
+              {/* Add / Edit Review Modal */}
+              {showAddReviewModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs animate-in fade-in">
+                  <div className="relative w-full max-w-lg bg-white rounded-[32px] p-6 sm:p-8 shadow-2xl font-poppins">
+                    <div className="flex items-center justify-between pb-4 border-b border-gray-100 mb-6">
+                      <h3 className="text-xl font-bold text-gray-900">
+                        {editingReviewId ? "Edit Reader Review" : "Add New Reader Review"}
+                      </h3>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowAddReviewModal(false);
+                          resetReviewForm();
+                        }}
+                        className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-full transition cursor-pointer"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
+
+                    <form onSubmit={handleSaveReview} className="space-y-4">
+                      {/* Reviewer Name */}
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-700 mb-1">
+                          Reviewer Name <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="e.g. Rohan V."
+                          value={reviewFormName}
+                          onChange={(e) => setReviewFormName(e.target.value)}
+                          className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-black"
+                        />
+                      </div>
+
+                      {/* Designation / Role */}
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-700 mb-1">
+                          Designation / Role <span className="text-gray-400 font-normal">(optional)</span>
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Doctor, Architect & Writer"
+                          value={reviewFormRole}
+                          onChange={(e) => setReviewFormRole(e.target.value)}
+                          className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-black"
+                        />
+                      </div>
+
+                      {/* Reviewer Photo Upload */}
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-700 mb-1">
+                          Reviewer Photo <span className="text-gray-400 font-normal">(optional)</span>
+                        </label>
+                        <div className="flex items-center gap-3">
+                          {reviewFormImage ? (
+                            <div className="relative w-14 h-14 rounded-2xl overflow-hidden border border-gray-200 shrink-0">
+                              <img src={formatAssetUrl(reviewFormImage)} alt="Preview" className="w-full h-full object-cover" />
+                              <button
+                                type="button"
+                                onClick={() => setReviewFormImage("")}
+                                className="absolute top-0.5 right-0.5 p-1 bg-black/70 text-white rounded-full hover:bg-black"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          ) : null}
+
+                          <label className="flex-1 flex flex-col items-center justify-center p-3 border-2 border-dashed border-gray-200 hover:border-black rounded-xl cursor-pointer transition">
+                            <span className="text-xs font-semibold text-gray-700">
+                              {uploadingReviewImage ? "Uploading Photo..." : "Upload Photo"}
+                            </span>
+                            <span className="text-[10px] text-gray-400">JPG, PNG, WebP</span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={handleReviewImageUpload}
+                              disabled={uploadingReviewImage}
+                            />
+                          </label>
+                        </div>
+                      </div>
+
+                      {/* Quote Content */}
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-700 mb-1">
+                          Quote / Testimonial Content <span className="text-rose-500">*</span>
+                        </label>
+                        <textarea
+                          required
+                          rows={4}
+                          placeholder="Enter reader testimonial quote..."
+                          value={reviewFormQuote}
+                          onChange={(e) => setReviewFormQuote(e.target.value)}
+                          className="w-full border border-gray-200 rounded-xl p-3 text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-black"
+                        />
+                      </div>
+
+                      {/* Published Toggle */}
+                      <div className="flex items-center justify-between p-3.5 bg-gray-50 rounded-xl">
+                        <div>
+                          <p className="text-xs font-semibold text-gray-800">Published</p>
+                          <p className="text-[10px] text-gray-500">Show this review on homepage carousel</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setReviewFormPublished(!reviewFormPublished)}
+                          className={`w-11 h-6 rounded-full transition-colors cursor-pointer relative ${
+                            reviewFormPublished ? "bg-emerald-500" : "bg-gray-300"
+                          }`}
+                        >
+                          <span
+                            className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
+                              reviewFormPublished ? "translate-x-5" : "translate-x-0"
+                            }`}
+                          />
+                        </button>
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="flex gap-3 pt-2">
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="md"
+                          onClick={() => {
+                            setShowAddReviewModal(false);
+                            resetReviewForm();
+                          }}
+                          className="flex-1 border border-gray-200"
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          type="submit"
+                          variant="primary"
+                          size="md"
+                          disabled={submittingReview || !reviewFormName.trim() || !reviewFormQuote.trim()}
+                          className="flex-1 bg-black hover:bg-gray-800 text-white"
+                        >
+                          {submittingReview ? "Saving…" : editingReviewId ? "Update Review" : "Save Review"}
+                        </Button>
+                      </div>
+                    </form>
+                  </div>
                 </div>
               )}
             </div>
@@ -5680,28 +5870,55 @@ function EditorialDashboardContent() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider">Edition Tag</label>
-                <input
-                  type="text"
-                  value={bookFormEditionTag}
-                  onChange={(e) => setBookFormEditionTag(e.target.value)}
-                  placeholder="e.g. Print Edition, Hardcover, Collector Edition"
-                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium text-gray-900 outline-none focus:border-black shadow-xs"
-                />
-              </div>
-
-              <div>
                 <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider">
-                  Description <span className="text-rose-500">*</span>
+                  Book Cover Image
                 </label>
-                <textarea
-                  rows={3}
-                  required
-                  value={bookFormDesc}
-                  onChange={(e) => setBookFormDesc(e.target.value)}
-                  placeholder="The novel published on Akam is now available as a book..."
-                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium text-gray-900 outline-none focus:border-black shadow-xs"
-                />
+                <div className="space-y-2">
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="file"
+                      id="book-cover-upload"
+                      accept="image/*"
+                      onChange={handleBookCoverUpload}
+                      className="hidden"
+                    />
+                    <label
+                      htmlFor="book-cover-upload"
+                      className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-xl text-xs font-semibold cursor-pointer transition-colors flex items-center gap-2 border border-gray-200"
+                    >
+                      {uploadingBookCover ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin text-gray-600" />
+                          <span>Uploading...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="w-4 h-4 text-gray-600" />
+                          <span>Upload Cover Image</span>
+                        </>
+                      )}
+                    </label>
+                    <span className="text-xs text-gray-400">or paste URL below</span>
+                  </div>
+                  <input
+                    type="url"
+                    value={bookFormCoverImage}
+                    onChange={(e) => setBookFormCoverImage(e.target.value)}
+                    placeholder="https://example.com/cover.jpg or /uploads/..."
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium text-gray-900 outline-none focus:border-black shadow-xs"
+                  />
+                  {bookFormCoverImage && (
+                    <div className="relative w-20 h-28 rounded-xl overflow-hidden border border-gray-200 shadow-xs mt-2 bg-gray-100">
+                      <Image
+                        src={formatAssetUrl(bookFormCoverImage)}
+                        alt="Cover Preview"
+                        fill
+                        className="object-cover"
+                        unoptimized
+                      />
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div>
@@ -5745,7 +5962,7 @@ function EditorialDashboardContent() {
                   type="submit"
                   variant="primary"
                   size="sm"
-                  disabled={submittingBook || !bookFormTitle.trim() || !bookFormAuthor.trim() || !bookFormDesc.trim()}
+                  disabled={submittingBook || uploadingBookCover || !bookFormTitle.trim() || !bookFormAuthor.trim()}
                   className="px-6 py-2"
                 >
                   {submittingBook ? "Saving..." : editingBookId ? "Update Book" : "Create Book"}
@@ -5957,96 +6174,6 @@ function EditorialDashboardContent() {
                 </Button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
-
-      {/* Reader Review Detail Modal */}
-      {selectedReview && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-white rounded-[28px] max-w-lg w-full p-6 sm:p-8 space-y-6 shadow-2xl relative border border-gray-200">
-            <div className="flex items-start justify-between gap-4 border-b border-gray-100 pb-4">
-              <div className="flex items-center gap-3">
-                <div className="relative w-10 h-10 rounded-full overflow-hidden bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-sm shrink-0 border border-emerald-200">
-                  {selectedReview.userAvatarUrl ? (
-                    <Image src={selectedReview.userAvatarUrl} alt="Avatar" fill className="object-cover" unoptimized />
-                  ) : (
-                    <span>{(selectedReview.userName || selectedReview.userEmail || "R")[0].toUpperCase()}</span>
-                  )}
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-gray-950">{selectedReview.userName || "Reader Reviewer"}</h3>
-                  <p className="text-xs text-gray-500">{selectedReview.userEmail}</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setSelectedReview(null)}
-                className="p-1.5 text-gray-400 hover:text-black hover:bg-gray-100 rounded-full transition cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Associated Story</span>
-                <Link
-                  href={`/stories/${selectedReview.storySlug || selectedReview.storyId}`}
-                  target="_blank"
-                  className="flex items-center gap-1.5 text-sm font-bold text-gray-900 hover:text-emerald-700 hover:underline"
-                >
-                  <BookOpen className="w-4 h-4 text-emerald-600 shrink-0" />
-                  <span>{selectedReview.storyTitle}</span>
-                  <ExternalLink className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                </Link>
-              </div>
-
-              <div>
-                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1.5">Review / Comment Content</span>
-                <div className="p-4 bg-gray-50 border border-gray-200 rounded-2xl text-xs sm:text-sm text-gray-900 leading-relaxed italic whitespace-pre-wrap">
-                  &ldquo;{selectedReview.content}&rdquo;
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between text-xs text-gray-500 pt-1">
-                <span>
-                  Submitted on:{" "}
-                  <strong className="text-gray-700">
-                    {new Date(selectedReview.createdAt).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
-                  </strong>
-                </span>
-              </div>
-            </div>
-
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-gray-100">
-              <button
-                type="button"
-                onClick={() => {
-                  handleToggleFeaturedReview(selectedReview.id);
-                  setSelectedReview((prev: any) => (prev ? { ...prev, isFeatured: !prev.isFeatured } : null));
-                }}
-                className={`w-full sm:w-auto px-4 py-2.5 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer shadow-xs ${
-                  selectedReview.isFeatured
-                    ? "bg-emerald-100 text-emerald-800 border border-emerald-300 hover:bg-emerald-200"
-                    : "bg-gray-100 text-gray-700 border border-gray-200 hover:bg-gray-200"
-                }`}
-              >
-                <Sparkles className={`w-3.5 h-3.5 ${selectedReview.isFeatured ? "text-emerald-600 fill-emerald-600" : "text-gray-400"}`} />
-                {selectedReview.isFeatured ? "★ Featured on Homepage" : "+ Feature on Homepage"}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  handleDeleteReviewComment(selectedReview.id);
-                  setSelectedReview(null);
-                }}
-                className="w-full sm:w-auto px-4 py-2.5 bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-200 rounded-xl text-xs font-semibold transition cursor-pointer"
-              >
-                Delete Review
-              </button>
-            </div>
           </div>
         </div>
       )}
