@@ -16,6 +16,7 @@ export interface EventItem {
   monthYear: string | null;
   eventDate: Date | null;
   imageSrc: string | null;
+  images?: string[];
   videoUrl: string | null;
   registerHref: string | null;
   isPublished: boolean;
@@ -23,7 +24,7 @@ export interface EventItem {
   updatedAt: Date;
 }
 
-const SELECT_FIELDS = `id, type, title, description, location, time, day, "monthYear", "imageSrc", "videoUrl", "registerHref", "isPublished", "createdAt", "updatedAt"`;
+const SELECT_FIELDS = `id, type, title, description, location, time, day, "monthYear", "imageSrc", images, "videoUrl", "registerHref", "isPublished", "createdAt", "updatedAt"`;
 
 @Injectable()
 export class EventsService {
@@ -49,6 +50,46 @@ export class EventsService {
        WHERE "isPublished" = true
        ORDER BY "createdAt" DESC`
     );
+  }
+
+  async findPastArchivesPaginated(page: number = 1, limit: number = 6) {
+    const offset = (page - 1) * limit;
+
+    const countRow = await this.prisma.queryOne<{ total: string }>(
+      `SELECT COUNT(*)::int as total
+       FROM "event"
+       WHERE "isPublished" = true
+         AND (
+           type::text = 'PAST_ARCHIVE'
+           OR ("eventDate" IS NOT NULL AND "eventDate" < NOW())
+         )`
+    );
+    const total = parseInt(countRow?.total ?? '0', 10);
+
+    const data = await this.prisma.query<EventItem>(
+      `SELECT ${SELECT_FIELDS}
+       FROM "event"
+       WHERE "isPublished" = true
+         AND (
+           type::text = 'PAST_ARCHIVE'
+           OR ("eventDate" IS NOT NULL AND "eventDate" < NOW())
+         )
+       ORDER BY "createdAt" DESC
+       LIMIT $1 OFFSET $2`,
+      [limit, offset]
+    );
+
+    const hasMore = offset + data.length < total;
+    return {
+      data,
+      meta: {
+        page,
+        limit,
+        total,
+        hasMore,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
   }
 
   async findOne(id: string): Promise<EventItem> {
@@ -172,10 +213,13 @@ export class EventsService {
   async create(dto: CreateEventDto): Promise<EventItem> {
     const id = `evt-${Date.now()}`;
     const isPublished = dto.isPublished ?? true;
+    const imagesList = dto.images && Array.isArray(dto.images) && dto.images.length > 0
+      ? dto.images
+      : (dto.imageSrc ? [dto.imageSrc] : []);
 
     const row = await this.prisma.queryOne<EventItem>(
-      `INSERT INTO "event" (id, type, title, description, location, time, day, "monthYear", "imageSrc", "videoUrl", "registerHref", "isPublished")
-       VALUES ($1, $2::"EventType", $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      `INSERT INTO "event" (id, type, title, description, location, time, day, "monthYear", "imageSrc", images, "videoUrl", "registerHref", "isPublished")
+       VALUES ($1, $2::"EventType", $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
        RETURNING ${SELECT_FIELDS}`,
       [
         id,
@@ -186,7 +230,8 @@ export class EventsService {
         dto.time ?? null,
         dto.day ?? null,
         dto.monthYear ?? null,
-        dto.imageSrc ?? null,
+        dto.imageSrc ?? (imagesList[0] || null),
+        imagesList,
         dto.videoUrl ?? null,
         dto.registerHref ?? null,
         isPublished,
@@ -207,6 +252,7 @@ export class EventsService {
     const day = dto.day !== undefined ? dto.day : existing.day;
     const monthYear = dto.monthYear !== undefined ? dto.monthYear : existing.monthYear;
     const imageSrc = dto.imageSrc !== undefined ? dto.imageSrc : existing.imageSrc;
+    const imagesList = dto.images !== undefined ? dto.images : (existing.images || []);
     const videoUrl = dto.videoUrl !== undefined ? dto.videoUrl : existing.videoUrl;
     const registerHref = dto.registerHref !== undefined ? dto.registerHref : existing.registerHref;
     const isPublished = dto.isPublished !== undefined ? dto.isPublished : existing.isPublished;
@@ -226,13 +272,14 @@ export class EventsService {
          day = $6,
          "monthYear" = $7,
          "imageSrc" = $8,
-         "videoUrl" = $9,
-         "registerHref" = $10,
-         "isPublished" = $11,
+         images = $9,
+         "videoUrl" = $10,
+         "registerHref" = $11,
+         "isPublished" = $12,
          "updatedAt" = CURRENT_TIMESTAMP
-       WHERE id = $12
+       WHERE id = $13
        RETURNING ${SELECT_FIELDS}`,
-      [type, title, description, location, time, day, monthYear, imageSrc, videoUrl, registerHref, isPublished, id]
+      [type, title, description, location, time, day, monthYear, imageSrc, imagesList, videoUrl, registerHref, isPublished, id]
     );
 
     return row!;

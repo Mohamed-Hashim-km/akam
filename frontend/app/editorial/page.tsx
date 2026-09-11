@@ -510,7 +510,7 @@ function EditorialDashboardContent() {
   const [registrationsList, setRegistrationsList] = useState<any[]>([]);
   const [loadingRegistrations, setLoadingRegistrations] = useState(false);
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
-  const [eventFormType, setEventFormType] = useState<"READING_SESSION" | "DISCUSSION" | "WORKSHOP" | "PAST_ARCHIVE">("READING_SESSION");
+  const [eventFormType, setEventFormType] = useState<"READING_SESSION" | "DISCUSSION" | "WORKSHOP" | "EXHIBITION" | "FILM_SCREENING" | "PAST_ARCHIVE">("READING_SESSION");
   const [eventFormTitle, setEventFormTitle] = useState("");
   const [eventFormDesc, setEventFormDesc] = useState("");
   const [eventFormLoc, setEventFormLoc] = useState("");
@@ -518,6 +518,7 @@ function EditorialDashboardContent() {
   const [eventFormDay, setEventFormDay] = useState("");
   const [eventFormMonthYear, setEventFormMonthYear] = useState("");
   const [eventFormImage, setEventFormImage] = useState("");
+  const [eventFormImages, setEventFormImages] = useState<string[]>([]);
   const [uploadingEventImage, setUploadingEventImage] = useState(false);
   const [eventFormRegisterHref, setEventFormRegisterHref] = useState("");
   const [eventFormPublished, setEventFormPublished] = useState(true);
@@ -1228,13 +1229,14 @@ function EditorialDashboardContent() {
     e.preventDefault();
     if (!eventFormTitle.trim() || !eventFormDesc.trim()) return;
 
-    if (["WORKSHOP", "PAST_ARCHIVE"].includes(eventFormType) && !eventFormImage.trim()) {
+    if (["WORKSHOP", "PAST_ARCHIVE"].includes(eventFormType) && !eventFormImage.trim() && eventFormImages.length === 0) {
       alert("Cover image is required for Workshop and Past Archive events.");
       return;
     }
 
     setSubmittingEvent(true);
     try {
+      const imagesList = eventFormImages.length > 0 ? eventFormImages : (eventFormImage.trim() ? [eventFormImage.trim()] : []);
       const payload = {
         type: eventFormType,
         title: eventFormTitle.trim(),
@@ -1243,7 +1245,8 @@ function EditorialDashboardContent() {
         time: eventFormTime.trim() || undefined,
         day: eventFormDay.trim() || undefined,
         monthYear: eventFormMonthYear.trim() || undefined,
-        imageSrc: eventFormImage.trim() || undefined,
+        imageSrc: eventFormImage.trim() || imagesList[0] || undefined,
+        images: imagesList,
         registerHref: eventFormRegisterHref.trim() || undefined,
         isPublished: eventFormPublished,
       };
@@ -1383,24 +1386,31 @@ function EditorialDashboardContent() {
   };
 
   const handleEventImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
 
     setUploadingEventImage(true);
+    const newUrls: string[] = [];
+
     try {
-      const formData = new FormData();
-      formData.append("file", file);
+      for (let i = 0; i < files.length; i++) {
+        const formData = new FormData();
+        formData.append("file", files[i]);
 
-      const res = await apiFetch(`${API_BASE_URL}/uploads/image`, {
-        method: "POST",
-        body: formData,
-      });
+        const res = await apiFetch(`${API_BASE_URL}/uploads/image`, {
+          method: "POST",
+          body: formData,
+        });
 
-      if (res.ok) {
-        const json = await res.json();
-        setEventFormImage(json.url);
-      } else {
-        alert("Failed to upload image. Please try again.");
+        if (res.ok) {
+          const json = await res.json();
+          if (json.url) newUrls.push(json.url);
+        }
+      }
+
+      if (newUrls.length > 0) {
+        setEventFormImages((prev) => [...prev, ...newUrls]);
+        if (!eventFormImage) setEventFormImage(newUrls[0]);
       }
     } catch (err) {
       console.error("Error uploading image", err);
@@ -1420,6 +1430,7 @@ function EditorialDashboardContent() {
     setEventFormDay("");
     setEventFormMonthYear("");
     setEventFormImage("");
+    setEventFormImages([]);
     setEventFormRegisterHref("");
     setEventFormPublished(true);
   };
@@ -4008,6 +4019,8 @@ function EditorialDashboardContent() {
                     { id: "READING_SESSION", label: "Reading Sessions" },
                     { id: "DISCUSSION", label: "Discussions" },
                     { id: "WORKSHOP", label: "Workshops" },
+                    { id: "EXHIBITION", label: "Exhibitions" },
+                    { id: "FILM_SCREENING", label: "Film Screenings" },
                     { id: "PAST_ARCHIVE", label: "Past Archives" },
                   ].map((f) => (
                     <button
@@ -4097,6 +4110,7 @@ function EditorialDashboardContent() {
                                 setEventFormDay(ev.day || "");
                                 setEventFormMonthYear(ev.monthYear || "");
                                 setEventFormImage(ev.imageSrc || "");
+                                setEventFormImages(Array.isArray(ev.images) && ev.images.length > 0 ? ev.images : (ev.imageSrc ? [ev.imageSrc] : []));
                                 setEventFormRegisterHref(ev.registerHref || "");
                                 setEventFormPublished(ev.isPublished);
                                 setShowAddEventModal(true);
@@ -5416,11 +5430,13 @@ function EditorialDashboardContent() {
                 <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider">
                   Event Category / Type <span className="text-rose-500">*</span>
                 </label>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   {[
                     { id: "READING_SESSION", label: "Reading Session" },
                     { id: "DISCUSSION", label: "Discussion" },
                     { id: "WORKSHOP", label: "Workshop" },
+                    { id: "EXHIBITION", label: "Exhibition" },
+                    { id: "FILM_SCREENING", label: "Film Screening" },
                   ].map((t) => (
                     <button
                       key={t.id}
@@ -5530,41 +5546,59 @@ function EditorialDashboardContent() {
                 )}
               </div>
 
-              {/* Cover Image Upload (Only for Workshop and Past Archive) */}
-              {["WORKSHOP", "PAST_ARCHIVE"].includes(eventFormType) && (
-                <div>
-                  <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider">
-                    {eventFormType === "PAST_ARCHIVE" ? "Archive Cover Image" : "Workshop Cover Image"} <span className="text-rose-500">*</span>
-                  </label>
-                  {eventFormImage ? (
-                    <div className="relative rounded-2xl overflow-hidden border border-gray-200 h-40 bg-gray-50 flex items-center justify-center group">
-                      <img
-                        src={eventFormImage.startsWith("/") ? `${API_BASE_URL.replace(/\/api$/, "")}${eventFormImage}` : eventFormImage}
-                        alt="Event Cover"
-                        className="w-full h-full object-cover"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setEventFormImage("")}
-                        className="absolute top-2 right-2 p-1.5 bg-black/70 hover:bg-rose-600 text-white rounded-full transition-colors cursor-pointer"
-                        title="Remove image"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-                  ) : (
-                    <label className="border-2 border-dashed border-gray-200 hover:border-black rounded-2xl p-4 flex flex-col items-center justify-center cursor-pointer transition-colors bg-gray-50/50 hover:bg-gray-50">
-                      <input type="file" accept="image/*" onChange={handleEventImageUpload} disabled={uploadingEventImage} className="hidden" />
-                      <div className="text-center">
-                        <span className="text-xs font-bold text-gray-900">
-                          {uploadingEventImage ? "Uploading Image..." : "📁 Select Cover Image from Device"}
-                        </span>
-                        <p className="text-[10px] text-gray-500 mt-1">PNG, JPG, WEBP up to 5MB</p>
+              {/* Cover & Gallery Images Upload */}
+              <div>
+                <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider">
+                  Event Images Gallery {["WORKSHOP", "PAST_ARCHIVE"].includes(eventFormType) && <span className="text-rose-500">*</span>}
+                </label>
+
+                {/* Uploaded Thumbnails Grid */}
+                {eventFormImages.length > 0 && (
+                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5 mb-3">
+                    {eventFormImages.map((imgUrl, idx) => (
+                      <div key={idx} className="relative rounded-xl overflow-hidden border border-gray-200 h-24 bg-gray-50 group">
+                        <img
+                          src={imgUrl.startsWith("/") ? `${API_BASE_URL.replace(/\/api$/, "")}${imgUrl}` : imgUrl}
+                          alt={`Event image ${idx + 1}`}
+                          className="w-full h-full object-cover"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const updated = eventFormImages.filter((_, i) => i !== idx);
+                            setEventFormImages(updated);
+                            if (eventFormImage === imgUrl) {
+                              setEventFormImage(updated[0] || "");
+                            }
+                          }}
+                          className="absolute top-1 right-1 p-1 bg-black/70 hover:bg-rose-600 text-white rounded-full transition-colors cursor-pointer"
+                          title="Remove image"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
                       </div>
-                    </label>
-                  )}
-                </div>
-              )}
+                    ))}
+                  </div>
+                )}
+
+                {/* File Drop Area */}
+                <label className="border-2 border-dashed border-gray-200 hover:border-black rounded-2xl p-4 flex flex-col items-center justify-center cursor-pointer transition-colors bg-gray-50/50 hover:bg-gray-50">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handleEventImageUpload}
+                    disabled={uploadingEventImage}
+                    className="hidden"
+                  />
+                  <div className="text-center">
+                    <span className="text-xs font-bold text-gray-900">
+                      {uploadingEventImage ? "Uploading Images..." : "📁 Select Images from Device (Multiple Allowed)"}
+                    </span>
+                    <p className="text-[10px] text-gray-500 mt-1">PNG, JPG, WEBP up to 5MB each</p>
+                  </div>
+                </label>
+              </div>
 
               {/* Stream / Meeting Link (Optional) - Commented out as requested
               <div>

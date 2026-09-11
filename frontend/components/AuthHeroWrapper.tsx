@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { HeroSection } from "./HeroSection";
+import AboutAkam from "./AboutAkam";
 import { API_BASE_URL, apiFetch } from "@/lib/config";
 
 interface AuthHeroWrapperProps {
@@ -62,7 +63,13 @@ export default function AuthHeroWrapper({ initialIsLoggedIn = false }: AuthHeroW
   }, []);
 
   if (isLoggedIn) return null;
-  return <HeroSection />;
+
+  return (
+    <>
+      <HeroSection />
+      <AboutAkam />
+    </>
+  );
 }
 
 
