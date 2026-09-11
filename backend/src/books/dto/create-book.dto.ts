@@ -17,10 +17,10 @@ export class CreateBookDto {
   @IsOptional()
   editionTag?: string;
 
-  @ApiProperty({ description: 'Book Description' })
+  @ApiPropertyOptional({ description: 'Book Description' })
   @IsString()
-  @IsNotEmpty()
-  description: string;
+  @IsOptional()
+  description?: string;
 
   @ApiPropertyOptional({ description: 'Book Cover Image URL' })
   @IsString()

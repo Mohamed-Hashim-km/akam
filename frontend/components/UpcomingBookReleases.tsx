@@ -1,22 +1,23 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { ArrowRight, ChevronLeft, ChevronRight, X } from "lucide-react";
+import Image from "next/image";
+import { ArrowRight, ChevronLeft, ChevronRight } from "lucide-react";
 import { Swiper, SwiperSlide } from "swiper/react";
 import { Navigation } from "swiper/modules";
 import type { Swiper as SwiperClass } from "swiper";
-import Button from "./ui/Button";
-import { API_BASE_URL, apiFetch } from "@/lib/config";
+import { API_BASE_URL, apiFetch, formatAssetUrl } from "@/lib/config";
 
 import "swiper/css";
 import "swiper/css/navigation";
+import Button from "./ui/Button";
 
 export interface BookReleaseItem {
   id: string;
   title: string;
   author: string;
   editionTag?: string | null;
-  description: string;
+  description?: string | null;
   coverImage?: string | null;
   preorderLink?: string | null;
   preorderHref?: string | null;
@@ -30,86 +31,51 @@ export interface UpcomingBookReleasesProps {
 
 const BookCard: React.FC<{
   item: BookReleaseItem;
-  onReadMore: () => void;
-}> = ({ item, onReadMore }) => {
-  const [canExpand, setCanExpand] = useState(false);
-  const textRef = React.useRef<HTMLParagraphElement>(null);
-
-  useEffect(() => {
-    const checkOverflow = () => {
-      if (textRef.current) {
-        setCanExpand(textRef.current.scrollHeight > textRef.current.clientHeight + 1);
-      }
-    };
-    checkOverflow();
-    window.addEventListener("resize", checkOverflow);
-    return () => window.removeEventListener("resize", checkOverflow);
-  }, [item.description]);
-
-  const showReadMore = canExpand || (Boolean(item.description) && (item.description?.length ?? 0) > 80);
+}> = ({ item }) => {
+  const imageUrl = item.coverImage ? formatAssetUrl(item.coverImage) : null;
+  const linkHref = item.preorderLink || item.preorderHref || "https://kairalibooks.com/";
+  const displayAuthor = item.author.trim().startsWith("By ") ? item.author.trim() : `By ${item.author.trim()}`;
 
   return (
-    <div
-      key={item.id}
-      className="bg-white rounded-3xl p-7 sm:p-8 flex flex-col justify-between w-full h-full shadow-xs hover:shadow-lg transition-all duration-300 group border border-purple-100/80"
+    <a
+      href={linkHref}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="group flex flex-col w-full h-full bg-white rounded-[24px] overflow-hidden shadow-xs hover:shadow-md transition-all duration-300 cursor-pointer"
     >
-      <div className="flex-1 flex flex-col justify-between">
-        <div>
-          {/* Header: Title + Tag */}
-          <div className="flex items-start justify-between gap-3 mb-1">
-            <h3 className="text-xl sm:text-2xl font-semibold text-dark-bg tracking-tight leading-tight break-words">
+      {/* Cover Image Container */}
+      <div className="relative w-full aspect-[3/4.2] bg-gradient-to-br from-amber-100 to-amber-200 overflow-hidden">
+        {imageUrl ? (
+          <Image
+            src={imageUrl}
+            alt={item.title}
+            fill
+            sizes="(max-width: 640px) 80vw, (max-width: 1024px) 40vw, 20vw"
+            className="object-cover group-hover:scale-[1.02] transition-transform duration-300"
+            unoptimized
+          />
+        ) : (
+          <div className="w-full h-full flex flex-col items-center justify-center p-4 text-center bg-gradient-to-br from-purple-100 to-indigo-100">
+            <span className="text-sm font-bold text-purple-900 leading-snug line-clamp-3">
               {item.title}
-            </h3>
-            {item.editionTag && (
-              <span className="bg-[#F5EDFF] text-[#8122DB] px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap shrink-0">
-                {item.editionTag}
-              </span>
-            )}
+            </span>
+            <span className="text-xs text-purple-600 font-medium mt-2">
+              {item.author}
+            </span>
           </div>
-
-          {/* Author Name */}
-          <p className="text-sm font-medium text-dark-bg/60 mb-4 break-words">
-            {item.author}
-          </p>
-
-          {/* Description clamped to 2 lines */}
-          <p
-            ref={textRef}
-            className="text-sm sm:text-base text-dark-bg/75 leading-relaxed font-normal break-words line-clamp-2 mb-1.5"
-          >
-            {item.description}
-          </p>
-
-          {showReadMore && (
-            <button
-              type="button"
-              onClick={onReadMore}
-              className="text-xs sm:text-sm font-semibold text-[#8122DB] underline hover:text-[#6940AF] cursor-pointer mb-4 inline-block transition-colors"
-            >
-              Read more
-            </button>
-          )}
-
-          {!showReadMore && <div className="mb-2" />}
-        </div>
-
-        {/* Light Purple Divider */}
-        <div className="border-b-2 border-[#EBE0FF] my-4" />
+        )}
       </div>
 
-      {/* Bottom Pre-order Button */}
-      <div className="pt-1">
-        <a
-          href={item.preorderLink || item.preorderHref || "https://kairalibooks.com/"}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="w-full bg-white border border-black/20 text-dark-bg py-2.5 px-5 rounded-full text-sm font-medium inline-flex items-center justify-between transition-all duration-300 group-hover:bg-dark-bg group-hover:text-white group-hover:border-dark-bg shadow-xs group/btn cursor-pointer"
-        >
-          <span>Pre-order</span>
-          <ArrowRight className="w-4 h-4 transition-transform group-hover/btn:translate-x-1" />
-        </a>
+      {/* Book Info Below Cover: Title & Author Name inside padded white card area */}
+      <div className="flex flex-col justify-start p-5 bg-white flex-1">
+        <h3 className="text-base sm:text-lg font-bold text-gray-900 leading-snug line-clamp-2">
+          {item.title}
+        </h3>
+        <p className="text-xs sm:text-sm text-gray-500 font-medium mt-1 truncate">
+          {displayAuthor}
+        </p>
       </div>
-    </div>
+    </a>
   );
 };
 
@@ -122,21 +88,6 @@ export const UpcomingBookReleases: React.FC<UpcomingBookReleasesProps> = ({
     initialReleases !== undefined ? initialReleases : []
   );
   const [swiperInstance, setSwiperInstance] = useState<SwiperClass | null>(null);
-  const [selectedBookForModal, setSelectedBookForModal] = useState<BookReleaseItem | null>(null);
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        setSelectedBookForModal(null);
-      }
-    };
-    if (selectedBookForModal) {
-      window.addEventListener("keydown", handleKeyDown);
-    }
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [selectedBookForModal]);
 
   useEffect(() => {
     if (initialReleases !== undefined) {
@@ -171,69 +122,65 @@ export const UpcomingBookReleases: React.FC<UpcomingBookReleasesProps> = ({
   }
 
   return (
-    <section className="relative w-full bg-gradient-to-b from-[#EBE0FF] to-white py-16 lg:py-24 font-poppins overflow-hidden">
-      <div className="container px-4 mx-auto relative z-10">
+    <section className="relative w-full bg-[#EECAA6] py-14 sm:py-20 lg:py-24 font-poppins overflow-hidden">
+      <div className="container px-4 sm:px-6 lg:px-8 mx-auto relative z-10">
         {/* Section Header */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-10 lg:mb-14">
-          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-medium text-[#6940AF] tracking-tight">
+        <div className="flex flex-row items-center justify-between gap-4 mb-8 sm:mb-12">
+          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-medium text-dark-text tracking-tight">
             {title}
           </h2>
 
-          <a href={viewAllHref} target="_blank" rel="noopener noreferrer">
-            <Button
-              variant="primary"
-              size="md"
-              icon={<ArrowRight className="w-4 h-4 ml-1 transition-transform group-hover:translate-x-1" />}
-              iconPosition="right"
-              className="group px-6 py-2.5 text-sm font-medium shadow-xs cursor-pointer"
-            >
-              View All Releases
-            </Button>
+          <a
+            href={viewAllHref}
+           >
+              <Button
+                          variant="primary"
+                          size="md"
+                          icon={<ArrowRight className="w-4 h-4 ml-1 transition-transform group-hover:translate-x-1" />}
+                          iconPosition="right"
+                          className="group px-6 py-2.5 text-sm font-medium shadow-xs cursor-pointer"
+                        >
+            <span>View All Releases</span>
+           </Button>
           </a>
         </div>
 
-        {/* Desktop Static Grid Layout (Hidden on Mobile) */}
-        <div className="hidden md:grid md:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8 items-stretch w-full">
-          {releasesList.map((item) => (
-            <BookCard
-              key={item.id}
-              item={item}
-              onReadMore={() => setSelectedBookForModal(item)}
-            />
-          ))}
-        </div>
-
-        {/* Mobile Swiper Releases Carousel (Hidden on Desktop) */}
-        <div className="block md:hidden w-full">
+        {/* Multi-Book Responsive Swiper Carousel */}
+        <div className="w-full">
           <Swiper
             modules={[Navigation]}
             onSwiper={(swiper) => setSwiperInstance(swiper)}
-            spaceBetween={16}
-            slidesPerView={1.15}
+            spaceBetween={20}
+            slidesPerView={1.25}
+            breakpoints={{
+              540: { slidesPerView: 2.2, spaceBetween: 20 },
+              768: { slidesPerView: 3.2, spaceBetween: 24 },
+              1024: { slidesPerView: 4.2, spaceBetween: 24 },
+              1280: { slidesPerView: 5, spaceBetween: 24 },
+            }}
             className="w-full [&_.swiper-wrapper]:!items-stretch [&_.swiper-slide]:!h-auto [&_.swiper-slide]:!flex [&_.swiper-slide]:!flex-col"
           >
             {releasesList.map((item) => (
               <SwiperSlide key={item.id} className="!h-auto !flex !flex-col">
-                <BookCard
-                  item={item}
-                  onReadMore={() => setSelectedBookForModal(item)}
-                />
+                <BookCard item={item} />
               </SwiperSlide>
             ))}
           </Swiper>
 
-          {/* Mobile Bottom Right Swiper Navigation Arrow Buttons */}
-          <div className="flex items-center justify-end gap-3 pt-6">
+          {/* Bottom Right Swiper Navigation Arrow Buttons */}
+          <div className="flex items-center justify-end gap-3 pt-6 sm:pt-8">
             <button
+              type="button"
               onClick={() => swiperInstance?.slidePrev()}
-              className="w-10 h-10 rounded-full border border-gray-300 bg-white flex items-center justify-center text-gray-700 hover:bg-gray-100 transition focus:outline-none cursor-pointer shadow-xs active:scale-95"
+              className="w-10 h-10 rounded-full border border-black/30 bg-transparent flex items-center justify-center text-gray-900 hover:bg-black/10 transition-all focus:outline-none cursor-pointer active:scale-95"
               aria-label="Previous Release"
             >
               <ChevronLeft className="w-5 h-5" />
             </button>
             <button
+              type="button"
               onClick={() => swiperInstance?.slideNext()}
-              className="w-10 h-10 rounded-full border border-gray-300 bg-white flex items-center justify-center text-gray-700 hover:bg-gray-100 transition focus:outline-none cursor-pointer shadow-xs active:scale-95"
+              className="w-10 h-10 rounded-full border border-black/30 bg-transparent flex items-center justify-center text-gray-900 hover:bg-black/10 transition-all focus:outline-none cursor-pointer active:scale-95"
               aria-label="Next Release"
             >
               <ChevronRight className="w-5 h-5" />
@@ -241,87 +188,8 @@ export const UpcomingBookReleases: React.FC<UpcomingBookReleasesProps> = ({
           </div>
         </div>
       </div>
-
-      {/* Book Details & Full Description Popup Modal */}
-      {selectedBookForModal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in font-poppins"
-          onClick={() => setSelectedBookForModal(null)}
-        >
-          <div
-            className="relative w-full max-w-lg bg-white rounded-3xl p-6 sm:p-8 shadow-2xl max-h-[90vh] overflow-y-auto flex flex-col space-y-5"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Modal Header */}
-            <div className="flex items-start justify-between gap-4 border-b border-gray-100 pb-4">
-              <div className="flex-1">
-                <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                  {selectedBookForModal.editionTag && (
-                    <span className="bg-[#F5EDFF] text-[#8122DB] px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap shrink-0">
-                      {selectedBookForModal.editionTag}
-                    </span>
-                  )}
-                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                    Book Release
-                  </span>
-                </div>
-                <h3 className="text-xl sm:text-2xl font-bold text-dark-bg tracking-tight leading-snug">
-                  {selectedBookForModal.title}
-                </h3>
-                <p className="text-sm font-medium text-dark-bg/60 mt-1">
-                  {selectedBookForModal.author}
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setSelectedBookForModal(null)}
-                className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors cursor-pointer shrink-0"
-                aria-label="Close modal"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Modal Body: Full Description */}
-            <div>
-              <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">
-                About This Book
-              </h4>
-              <p className="text-sm sm:text-base text-dark-bg/85 leading-relaxed font-normal whitespace-pre-line">
-                {selectedBookForModal.description}
-              </p>
-            </div>
-
-            {/* Modal Footer */}
-            <div className="pt-4 border-t border-gray-100 flex items-center justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setSelectedBookForModal(null)}
-                className="px-5 py-2.5 rounded-full border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer"
-              >
-                Close
-              </button>
-              <a
-                href={
-                  selectedBookForModal.preorderLink ||
-                  selectedBookForModal.preorderHref ||
-                  "https://kairalibooks.com/"
-                }
-                target="_blank"
-                rel="noopener noreferrer"
-                className="bg-[#6940AF] hover:bg-[#563493] text-white py-2.5 px-6 rounded-full text-sm font-medium inline-flex items-center gap-2 transition-all shadow-xs cursor-pointer"
-              >
-                <span>Pre-order on Kairali Books</span>
-                <ArrowRight className="w-4 h-4" />
-              </a>
-            </div>
-          </div>
-        </div>
-      )}
     </section>
   );
 };
 
 export default UpcomingBookReleases;
-
