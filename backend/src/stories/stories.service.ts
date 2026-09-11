@@ -24,6 +24,7 @@ type StoryRow = {
   id: string;
   title: string;
   slug: string;
+  description?: string | null;
   content?: string;
   category?: string;
   coverImageUrl: string | null;
@@ -89,7 +90,7 @@ export class StoriesService {
     const queryParams = [...params, limit, offset];
     const data = await this.prisma.query<StoryRow>(
       `SELECT
-         s.id, s.title, s.slug, s.content, s.category, s."coverImageUrl", s.status, s."createdAt",
+         s.id, s.title, s.slug, s.description, s.content, s.category, s."coverImageUrl", s.status, s."createdAt",
          s."authorId",
          u.name AS "authorName",
          u."avatarUrl" AS "authorAvatarUrl"
@@ -115,7 +116,7 @@ export class StoriesService {
   async findOne(idOrSlug: string): Promise<StoryRow> {
     const story = await this.prisma.queryOne<StoryRow>(
       `SELECT
-         s.id, s.title, s.slug, s.content, s.category, s."coverImageUrl", s.status,
+         s.id, s.title, s.slug, s.description, s.content, s.category, s."coverImageUrl", s.status,
          s."rejectionNote", s."createdAt", s."updatedAt",
          s."authorId",
          u.name AS "authorName",
@@ -133,7 +134,7 @@ export class StoriesService {
 
   async getAuthorStories(authorId: string): Promise<StoryRow[]> {
     return this.prisma.query<StoryRow>(
-      `SELECT id, title, slug, category, "coverImageUrl", status, "createdAt", "updatedAt"
+      `SELECT id, title, slug, description, category, "coverImageUrl", status, "createdAt", "updatedAt"
        FROM story WHERE "authorId" = $1 ORDER BY "updatedAt" DESC`,
       [authorId],
     );
@@ -175,12 +176,13 @@ export class StoriesService {
     }
 
     const categoryVal = dto.category?.trim() || 'Fiction';
+    const descriptionVal = dto.description?.trim() || null;
 
     const story = await this.prisma.queryOne<StoryRow>(
-      `INSERT INTO story (id, title, slug, content, category, status, "authorId", "createdAt", "updatedAt")
-       VALUES (gen_random_uuid()::text, $1, $2, $3, $4, $5::"StoryStatus", $6, now(), now())
-       RETURNING id, title, slug, category, status, "createdAt"`,
-      [dto.title, slug, dto.content, categoryVal, initialStatus, targetAuthorId],
+      `INSERT INTO story (id, title, slug, description, content, category, status, "authorId", "createdAt", "updatedAt")
+       VALUES (gen_random_uuid()::text, $1, $2, $3, $4, $5, $6::"StoryStatus", $7, now(), now())
+       RETURNING id, title, slug, description, category, status, "createdAt"`,
+      [dto.title, slug, descriptionVal, dto.content, categoryVal, initialStatus, targetAuthorId],
     );
 
     return story!;
@@ -200,6 +202,10 @@ export class StoriesService {
       params.push(dto.title);
       updates.push(`title = $${params.length}`);
     }
+    if (dto.description !== undefined) {
+      params.push(dto.description);
+      updates.push(`description = $${params.length}`);
+    }
     if (dto.content !== undefined) {
       params.push(dto.content);
       updates.push(`content = $${params.length}`);
@@ -215,7 +221,7 @@ export class StoriesService {
     return (await this.prisma.queryOne<StoryRow>(
       `UPDATE story SET ${updates.join(', ')}
        WHERE id = $${idParamIndex}
-       RETURNING id, title, slug, category, status, "updatedAt"`,
+       RETURNING id, title, slug, description, category, status, "updatedAt"`,
       params,
     ))!;
   }

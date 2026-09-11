@@ -6,6 +6,7 @@ import MasikaHero from "@/components/MasikaHero";
 import FeaturedArtist from "@/components/FeaturedArtist";
 import PreviousEditions, { EditionItem } from "@/components/PreviousEditions";
 import AboutDigitalEdition from "@/components/AboutDigitalEdition";
+import ReadingPlansSection from "@/components/ReadingPlansSection";
 import { API_BASE_URL, formatAssetUrl } from "@/lib/config";
 
 const EditionFlipbook = dynamic(() => import("@/components/EditionFlipbook"), { ssr: false });
@@ -53,12 +54,12 @@ export default function MasikaPage() {
         latestEditionTitle={latestEdition?.title}
         imageSrc={latestEdition?.coverImage ? formatAssetUrl(latestEdition.coverImage) : undefined}
       />
-
+   <PreviousEditions />
       {/* Featured Artist Section */}
       <FeaturedArtist />
 
       {/* Previous Editions Section */}
-      <PreviousEditions />
+   
 
       {/* About Digital Edition & Pricing Section */}
       <AboutDigitalEdition />

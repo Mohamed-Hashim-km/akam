@@ -19,12 +19,12 @@ export interface MasikaHeroProps {
 }
 
 export const MasikaHero: React.FC<MasikaHeroProps> = ({
-  headline = "Akam E-magazine",
+  headline = "Akam E-Magazine",
   subheadline = "The official digital journal of AKAM. Each edition gathers the editorial board's handpicked selection of contemporary Malayalam serialized fiction, poetry, and cultural essays — elevated above community feeds into a curated publication.",
   ctaText = "Read Latest Edition",
   ctaHref = "#latest-edition",
   imageSrc = "/images/masika/masika2.webp",
-  imageAlt = "Akam Masika Digital Journal Cover",
+  imageAlt = "Akam E-Magazine Digital Journal Cover",
   editionLabel = "Digital Journal Edition - 2026",
   onReadLatest,
   latestEditionTitle,
@@ -38,7 +38,7 @@ export const MasikaHero: React.FC<MasikaHeroProps> = ({
       <div className="container px-4 mx-auto relative z-10 flex items-center">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center w-full pt-[85px] pb-12 lg:pt-[105px] lg:pb-16">
           <div className="lg:col-span-6 xl:col-span-6 space-y-6 sm:space-y-8 text-left">
-            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-semibold text-gray-950 tracking-tight leading-[1.12]">
+            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-semibold text-dark-text tracking-tight leading-[1.12]">
               {headline}
             </h1>
 

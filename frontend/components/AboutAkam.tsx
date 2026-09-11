@@ -9,7 +9,7 @@ export interface AboutAkamProps {
 
 export const AboutAkam: React.FC<AboutAkamProps> = ({
   title = "About Akam",
-  description = "Akam Masika's digital edition brings the richness of contemporary Malayalam literature directly to your screens. Designed for optimal readability across desktop, tablet, and mobile devices, each monthly issue delivers an interactive, high-resolution reading experience complete with printable PDF archives, original cover artwork, and curated literary audio features.",
+  description = "Akam E-Magazine's digital edition brings the richness of contemporary Malayalam literature directly to your screens. Designed for optimal readability across desktop, tablet, and mobile devices, each monthly issue delivers an interactive, high-resolution reading experience complete with printable PDF archives, original cover artwork, and curated literary audio features.",
 }) => {
   return (
     <section className="relative w-full bg-white py-16 sm:py-20 lg:py-24 overflow-hidden font-poppins flex items-center justify-center">

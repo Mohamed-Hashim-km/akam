@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import AuthHeroWrapper from "@/components/AuthHeroWrapper";
 import LatestStories from "@/components/LatestStories";
-import AboutAkam from "@/components/AboutAkam";
 import EditorsNote from "@/components/EditorsNote";
 import ExploreByInterest from "@/components/ExploreByInterest";
 import UpcomingEvents from "@/components/UpcomingEvents";
@@ -199,10 +198,8 @@ export default async function Home() {
 
   return (
     <main className="min-h-screen flex flex-col font-poppins">
-      {/* Main Hero Section - Only shown for unauthenticated / guest users */}
+      {/* Main Hero & About Akam Section - Only shown for unauthenticated / guest users */}
       <AuthHeroWrapper initialIsLoggedIn={isLoggedInCookie} />
-  {/* About Akam Section */}
-      <AboutAkam />
 
       {/* Latest Stories Section */}
       <LatestStories stories={stories} />

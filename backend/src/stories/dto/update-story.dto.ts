@@ -8,6 +8,10 @@ export class UpdateStoryDto {
 
   @IsOptional()
   @IsString()
+  description?: string;
+
+  @IsOptional()
+  @IsString()
   content?: string;
 
   @IsOptional()

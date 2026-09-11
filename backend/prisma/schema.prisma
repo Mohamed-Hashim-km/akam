@@ -61,6 +61,7 @@ model Story {
   id            String      @id @default(uuid())
   title         String
   slug          String      @unique
+  description   String?     @db.Text
   content       String      @db.Text
   coverImageUrl String?
   status        StoryStatus @default(DRAFT)
@@ -360,6 +361,8 @@ enum EventType {
   READING_SESSION
   DISCUSSION
   WORKSHOP
+  EXHIBITION
+  FILM_SCREENING
   PAST_ARCHIVE
 }
 
@@ -374,6 +377,7 @@ model Event {
   monthYear    String?
   eventDate    DateTime?
   imageSrc     String?
+  images       String[]  @default([])
   videoUrl     String?
   registerHref String?
   isPublished  Boolean   @default(true)

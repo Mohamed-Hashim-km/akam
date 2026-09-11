@@ -6,6 +6,10 @@ export class CreateStoryDto {
   @MaxLength(200)
   title: string;
 
+  @IsOptional()
+  @IsString()
+  description?: string;
+
   @IsString()
   @IsNotEmpty()
   content: string; // JSON string from Tiptap/rich-text editor

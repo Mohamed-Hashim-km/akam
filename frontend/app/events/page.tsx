@@ -2,7 +2,6 @@ import React from "react";
 import type { Metadata } from "next";
 import EventsHero from "@/components/EventsHero";
 import EventSessions, { SessionItem } from "@/components/EventSessions";
-import WorkshopsSection, { WorkshopItem } from "@/components/WorkshopsSection";
 import PastEventArchive, { PastEventItem } from "@/components/PastEventArchive";
 import { API_BASE_URL } from "@/lib/config";
 
@@ -11,11 +10,11 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: "Literary Events & Workshops | Akam Digital",
   description:
-    "Explore upcoming reading sessions, author discussions, creative writing masterclasses, and past literary archives on Akam.",
+    "Explore upcoming reading sessions, author discussions, creative writing masterclasses, film screenings, and past literary archives on Akam.",
   openGraph: {
     title: "Literary Events & Workshops | Akam Digital",
     description:
-      "Explore upcoming reading sessions, author discussions, creative writing masterclasses, and past literary archives on Akam.",
+      "Explore upcoming reading sessions, author discussions, creative writing masterclasses, film screenings, and past literary archives on Akam.",
     images: [
       {
         url: "https://akamdigital.vercel.app/images/ogImage/ogImage.png",
@@ -30,7 +29,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Literary Events & Workshops | Akam Digital",
     description:
-      "Explore upcoming reading sessions, author discussions, creative writing masterclasses, and past literary archives on Akam.",
+      "Explore upcoming reading sessions, author discussions, creative writing masterclasses, film screenings, and past literary archives on Akam.",
     images: ["https://akamdigital.vercel.app/images/ogImage/ogImage.png"],
   },
 };
@@ -48,15 +47,12 @@ function parseEventDate(
     const d = new Date(eventDate);
     if (!isNaN(d.getTime())) return d;
   }
-  if (day && monthYear) {
-    const cleanedDay = day.trim();
-    const cleanedMonthYear = monthYear.trim();
-    const parsed = new Date(`${cleanedDay} ${cleanedMonthYear}`);
-    if (!isNaN(parsed.getTime())) return parsed;
 
-    const parsedAlt = new Date(`${cleanedMonthYear} ${cleanedDay}`);
-    if (!isNaN(parsedAlt.getTime())) return parsedAlt;
+  if (day && monthYear) {
+    const parsed = new Date(`${day} ${monthYear}`);
+    if (!isNaN(parsed.getTime())) return parsed;
   }
+
   return null;
 }
 
@@ -70,10 +66,10 @@ function isUpcomingEvent(
   eventDate?: string | Date | null
 ): boolean {
   const d = parseEventDate(day, monthYear, eventDate);
-  if (!d) return true; // If date cannot be parsed, keep it visible
-  const endOfDay = new Date(d);
-  endOfDay.setHours(23, 59, 59, 999);
-  return endOfDay.getTime() >= Date.now();
+  if (!d) return true;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return d.getTime() >= today.getTime();
 }
 
 /**
@@ -92,8 +88,8 @@ function compareEventsAsc(a: any, b: any): number {
  * Comparator to sort past events descending by date (most recent past event first).
  */
 function compareEventsDesc(a: any, b: any): number {
-  const dateA = parseEventDate(a.day, a.monthYear, a.eventDate) || (a.createdAt ? new Date(a.createdAt) : null);
-  const dateB = parseEventDate(b.day, b.monthYear, b.eventDate) || (b.createdAt ? new Date(b.createdAt) : null);
+  const dateA = parseEventDate(a.day, a.monthYear, a.eventDate);
+  const dateB = parseEventDate(b.day, b.monthYear, b.eventDate);
   if (!dateA && !dateB) return 0;
   if (!dateA) return 1;
   if (!dateB) return -1;
@@ -126,13 +122,25 @@ export default async function EventsPage() {
   // Filter for published events
   const publishedEvents = rawEvents.filter((e: any) => e.isPublished !== false);
 
-  // 1. Upcoming reading and discussion sessions, sorted chronologically ascending
+  // 1. Upcoming events by category, sorted chronologically ascending
   const readingSessions = publishedEvents
     .filter((e: any) => e.type === "READING_SESSION" && isUpcomingEvent(e.day, e.monthYear, e.eventDate))
     .sort(compareEventsAsc);
 
   const discussionSessions = publishedEvents
     .filter((e: any) => e.type === "DISCUSSION" && isUpcomingEvent(e.day, e.monthYear, e.eventDate))
+    .sort(compareEventsAsc);
+
+  const workshopEvents = publishedEvents
+    .filter((e: any) => e.type === "WORKSHOP" && isUpcomingEvent(e.day, e.monthYear, e.eventDate))
+    .sort(compareEventsAsc);
+
+  const exhibitionEvents = publishedEvents
+    .filter((e: any) => e.type === "EXHIBITION" && isUpcomingEvent(e.day, e.monthYear, e.eventDate))
+    .sort(compareEventsAsc);
+
+  const filmScreeningEvents = publishedEvents
+    .filter((e: any) => e.type === "FILM_SCREENING" && isUpcomingEvent(e.day, e.monthYear, e.eventDate))
     .sort(compareEventsAsc);
 
   const sessions: SessionItem[] = [
@@ -145,6 +153,7 @@ export default async function EventsPage() {
       time: e.time || "",
       day: e.day || "",
       monthYear: e.monthYear || "",
+      imageSrc: e.imageSrc || undefined,
       registerHref: e.registerHref || undefined,
     })),
     ...discussionSessions.map((e: any) => ({
@@ -156,27 +165,48 @@ export default async function EventsPage() {
       time: e.time || "",
       day: e.day || "",
       monthYear: e.monthYear || "",
+      imageSrc: e.imageSrc || undefined,
+      registerHref: e.registerHref || undefined,
+    })),
+    ...workshopEvents.map((e: any) => ({
+      id: e.id,
+      category: "workshop" as const,
+      title: e.title,
+      description: e.description,
+      location: e.location,
+      time: e.time || "",
+      day: e.day || "",
+      monthYear: e.monthYear || "",
+      imageSrc: e.imageSrc || undefined,
+      registerHref: e.registerHref || undefined,
+    })),
+    ...exhibitionEvents.map((e: any) => ({
+      id: e.id,
+      category: "exhibition" as const,
+      title: e.title,
+      description: e.description,
+      location: e.location,
+      time: e.time || "",
+      day: e.day || "",
+      monthYear: e.monthYear || "",
+      imageSrc: e.imageSrc || undefined,
+      registerHref: e.registerHref || undefined,
+    })),
+    ...filmScreeningEvents.map((e: any) => ({
+      id: e.id,
+      category: "film_screening" as const,
+      title: e.title,
+      description: e.description,
+      location: e.location,
+      time: e.time || "",
+      day: e.day || "",
+      monthYear: e.monthYear || "",
+      imageSrc: e.imageSrc || undefined,
       registerHref: e.registerHref || undefined,
     })),
   ];
 
-  // 2. Upcoming workshops, sorted chronologically ascending
-  const upcomingWorkshops = publishedEvents
-    .filter((e: any) => e.type === "WORKSHOP" && isUpcomingEvent(e.day, e.monthYear, e.eventDate))
-    .sort(compareEventsAsc);
-
-  const workshops: WorkshopItem[] = upcomingWorkshops.map((e: any) => ({
-    id: e.id,
-    title: e.title,
-    description: e.description,
-    location: e.location,
-    time: e.time || "",
-    day: e.day || "",
-    monthYear: e.monthYear || "",
-    imageSrc: e.imageSrc || "",
-  }));
-
-  // 3. Past events archive: items marked as PAST_ARCHIVE or whose date has passed
+  // 2. Past events archive: items marked as PAST_ARCHIVE or whose date has passed
   const pastEventsRaw = publishedEvents
     .filter((e: any) => {
       if (e.type === "PAST_ARCHIVE") return true;
@@ -191,6 +221,7 @@ export default async function EventsPage() {
     description: e.description,
     location: e.location,
     imageSrc: e.imageSrc || e.image || e.imageUrl || e.coverImage || "",
+    images: Array.isArray(e.images) && e.images.length > 0 ? e.images : (e.imageSrc ? [e.imageSrc] : []),
     href: e.registerHref || undefined,
     videoUrl: e.videoUrl || undefined,
   }));
@@ -200,11 +231,8 @@ export default async function EventsPage() {
       {/* Events Hero Section */}
       <EventsHero />
 
-      {/* Event Sessions Section */}
+      {/* Unified Event Sessions Section (Reading, Discussions, Workshop, Exhibition, Film Screening) */}
       <EventSessions sessions={sessions} isLoading={false} />
-
-      {/* Workshops Section */}
-      <WorkshopsSection workshops={workshops} isLoading={false} />
 
       {/* Past Event Archive Section */}
       <PastEventArchive events={pastEvents} isLoading={false} />

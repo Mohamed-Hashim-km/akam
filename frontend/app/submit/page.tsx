@@ -9,6 +9,8 @@ import {
   Image as ImageIcon,
   Send,
   ArrowLeft,
+  ChevronDown,
+  UploadCloud,
   CheckCircle2,
   AlertCircle,
   Eye,
@@ -32,6 +34,7 @@ import {
   X,
   Globe,
   Loader2,
+  ArrowRight,
 } from "lucide-react";
 import Button from "@/components/ui/Button";
 import { API_BASE_URL, apiFetch } from "@/lib/config";
@@ -41,6 +44,7 @@ export default function SubmitStoryPage() {
   const [editingStoryId, setEditingStoryId] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("Fiction");
+  const [description, setDescription] = useState("");
   const [content, setContent] = useState("");
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [coverPreview, setCoverPreview] = useState<string | null>(null);
@@ -237,6 +241,7 @@ export default function SubmitStoryPage() {
             const s = await res.json();
             setTitle(s.title || "");
             setCategory(s.category || "Fiction");
+            setDescription(s.description || "");
             const formattedHtml = convertMarkdownToHtml(s.content || "");
             setContent(formattedHtml);
             if (s.coverImageUrl) {
@@ -468,28 +473,25 @@ export default function SubmitStoryPage() {
     result = result.replace(/<\/?ul[^>]*>/gi, "\n\n");
     result = result.replace(/<\/?ol[^>]*>/gi, "\n\n");
 
-    // ── Step 1: Mark empty paragraphs with a placeholder BEFORE boundary processing.
-    // This prevents the </p>\s*<p> regex from swallowing the gap on step 3.
+    // Mark empty paragraphs with a placeholder
     result = result.replace(/<p[^>]*><br\s*\/?>\s*<\/p>/gi, "§BLANK§");
     result = result.replace(/<div[^>]*aria-hidden[^>]*><\/div>/gi, "§BLANK§");
     result = result.replace(/<p[^>]*>\s*<\/p>/gi, "§BLANK§");
 
-    // ── Step 2: Normal paragraph boundary → \n\n (single Enter gap)
+    // Normal paragraph boundary
     result = result.replace(/<\/p>\s*<p[^>]*>/gi, "\n\n");
     result = result.replace(/<p[^>]*>/gi, "");
     result = result.replace(/<\/p>/gi, "\n\n");
     result = result.replace(/<br\s*\/?>/gi, "\n");
     result = result.replace(/<div[^>]*>/gi, "\n\n").replace(/<\/div>/gi, "");
 
-    // ── Step 3: Restore placeholder → \n (1 newline each).
-    // Each §BLANK§ is already sandwiched between \n\n from </p> stripping,
-    // so 1 extra Enter adds exactly 1 more \n to the gap (linear scaling).
+    // Restore placeholder
     result = result.replace(/§BLANK§/g, "\n");
 
     // Strip unhandled HTML tags except <u>
     result = result.replace(/<(?!u|\/u)[^>]+>/gi, "");
 
-    // Clean up spaces INSIDE bold/italic tags without stripping preceding or following newlines
+    // Clean up spaces INSIDE bold/italic tags
     result = result.replace(/\*\*([^\S\r\n]+)(.*?)\*\*/g, "**$2**");
     result = result.replace(/\*\*(.*?)([^\S\r\n]+)\*\*/g, "**$1**");
     result = result.replace(/\*([^\S\r\n]+)(.*?)\*/g, "*$2*");
@@ -498,7 +500,7 @@ export default function SubmitStoryPage() {
     // Normalize Windows newlines
     result = result.replace(/\r\n/g, "\n");
 
-    // Allow up to 8 consecutive newlines (prevents accidental 100-Enter spam)
+    // Allow up to 8 consecutive newlines
     result = result.replace(/\n{9,}/g, "\n\n\n\n\n\n\n\n");
 
     return result.trim();
@@ -531,12 +533,13 @@ export default function SubmitStoryPage() {
       });
 
       let story: any;
+      const selectedCategory = category || (categories.length > 0 ? categories[0].name : "Fiction");
 
       if (editingStoryId) {
         const storyRes = await apiFetch(`${API_BASE_URL}/stories/${editingStoryId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ title, content: markdownContent, category }),
+          body: JSON.stringify({ title, description, content: markdownContent, category: selectedCategory }),
         });
         if (!storyRes.ok) {
           const errData = await storyRes.json();
@@ -547,7 +550,7 @@ export default function SubmitStoryPage() {
         const storyRes = await apiFetch(`${API_BASE_URL}/stories`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ title, content: markdownContent, category }),
+          body: JSON.stringify({ title, description, content: markdownContent, category: selectedCategory }),
         });
         if (!storyRes.ok) {
           const errData = await storyRes.json();
@@ -643,6 +646,8 @@ export default function SubmitStoryPage() {
 
         <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-gray-950 tracking-tight leading-tight">{title || "Untitled Story"}</h1>
 
+        {description && <p className="text-base text-gray-600 italic leading-relaxed">{description}</p>}
+
         <div className="flex items-center justify-between py-4 border-y border-gray-100 my-4">
           <div className="flex items-center gap-3">
             <div className="relative w-11 h-11 rounded-full overflow-hidden bg-gray-900 text-white flex items-center justify-center font-bold text-sm shadow-xs shrink-0">
@@ -706,11 +711,16 @@ export default function SubmitStoryPage() {
           {/* Header */}
           <div className="flex items-center justify-between mb-8 pb-6 border-b border-gray-200">
             <div>
-              <Link href="/" className="inline-flex items-center gap-2 text-xs text-gray-500 hover:text-black mb-2 transition-colors">
-                <ArrowLeft className="w-3.5 h-3.5" /> Back to AKAM Digital
-              </Link>
+              <button
+                type="button"
+                onClick={() => router.back()}
+                className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-gray-300 bg-white text-xs sm:text-sm font-medium text-gray-800 hover:text-black hover:border-gray-400 transition-all cursor-pointer shadow-2xs mb-6"
+              >
+                <ArrowLeft className="w-3.5 h-3.5 text-gray-700" />
+                Go Back
+              </button>
               <h1 className="text-3xl lg:text-4xl font-bold text-gray-900 tracking-tight">
-                {editingStoryId ? "Edit Story Draft" : "Authoring Studio"}
+                {editingStoryId ? "Edit Story Draft" : "Submit Your Work"}
               </h1>
               <p className="text-sm text-[#646464] mt-1">
                 {editingStoryId
@@ -736,24 +746,90 @@ export default function SubmitStoryPage() {
           )}
 
           <div className="space-y-8">
+            {/* Story Title, Category & Description Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-xs font-semibold text-gray-800 uppercase tracking-wider mb-2">
+                  Category <span className="text-rose-500">*</span>
+                </label>
+                <div className="relative">
+                  <select
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value)}
+                    className="w-full px-4 py-3.5 bg-white border border-gray-200 rounded-2xl text-sm font-medium text-gray-900 outline-none focus:border-black cursor-pointer shadow-xs appearance-none pr-10"
+                  >
+                    {categories.length > 0 ? (
+                      categories.map((cat) => (
+                        <option key={cat.id} value={cat.name}>
+                          {cat.name}
+                        </option>
+                      ))
+                    ) : (
+                      <>
+                        <option value="Fiction">Fiction</option>
+                        <option value="Non-Fiction">Non-Fiction</option>
+                        <option value="Poetry">Poetry</option>
+                        <option value="Culture">Culture</option>
+                        <option value="Technology">Technology</option>
+                        <option value="Opinion">Opinion</option>
+                        <option value="Literature">Literature</option>
+                        <option value="General">General</option>
+                      </>
+                    )}
+                  </select>
+                  <ChevronDown className="w-4 h-4 text-gray-400 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none" />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-800 uppercase tracking-wider mb-2">
+                  Title <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="Enter title of the content..."
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  required
+                  className="w-full px-5 py-3.5 placeholder:text-[14px] bg-white border border-gray-200 rounded-2xl text-base text-gray-900 placeholder-gray-400 outline-none focus:border-black transition-all font-medium"
+                />
+              </div>
+            </div>
+
+            {/* Description Field */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-800 uppercase tracking-wider mb-2">
+                Description <span className="text-gray-400 font-normal lowercase">(optional)</span>
+              </label>
+              <textarea
+                rows={2}
+                placeholder="Enter a brief description or summary of your work..."
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                className="w-full px-5 py-3.5 placeholder:text-[14px] bg-white border border-gray-200 rounded-2xl text-base text-gray-900 placeholder-gray-400 outline-none focus:border-black transition-all font-medium resize-none"
+              />
+            </div>
+
             {/* Story Cover Image Upload Dropzone */}
             <div>
               <label className="block text-xs font-semibold text-gray-800 uppercase tracking-wider mb-2">
-                Main Story Cover Image <span className="text-rose-500 font-bold">*</span>
+                Upload Cover Image <span className="text-rose-500 font-bold">*</span>
               </label>
               <div
-                className={`relative border-2 border-dashed transition-all rounded-[28px] overflow-hidden bg-white p-6 flex flex-col items-center justify-center text-center cursor-pointer min-h-[220px] ${
+                className={`relative border-2 border-dashed transition-all rounded-[28px] overflow-hidden bg-white p-6 flex flex-col items-center justify-center text-center cursor-pointer min-h-[200px] ${
                   error && !coverPreview ? "border-rose-300 bg-rose-50/20" : "border-gray-200 hover:border-gray-400"
                 }`}
+                onClick={() => !coverPreview && coverInputRef.current?.click()}
               >
                 {coverPreview ? (
-                  <div className="relative w-full max-w-xs aspect-[3/4] sm:aspect-[4/5] rounded-[24px] overflow-hidden shadow-sm border border-gray-200 bg-gray-100">
+                  <div className="relative w-full max-w-xs aspect-[4/3] rounded-[24px] overflow-hidden shadow-sm border border-gray-200 bg-gray-100">
                     <Image src={coverPreview} alt="Cover Preview" fill className="object-cover" unoptimized />
                     <Button
                       type="button"
                       variant="secondary"
                       size="sm"
-                      onClick={() => {
+                      onClick={(e) => {
+                        e.stopPropagation();
                         setCoverFile(null);
                         setCoverPreview(null);
                       }}
@@ -764,111 +840,40 @@ export default function SubmitStoryPage() {
                   </div>
                 ) : (
                   <div className="w-full flex flex-col items-center justify-center py-6">
-                    <div className="w-12 h-12 rounded-full bg-gray-50 border border-gray-200 flex items-center justify-center text-gray-500 mb-3 shadow-xs">
-                      <Upload className="w-5 h-5" />
-                    </div>
-                    <span className="text-sm font-semibold text-gray-900 mb-1">Click to upload cover image</span>
-                    <span className="text-xs text-gray-400 mb-4">PNG, JPG or WEBP up to 5MB</span>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      icon={<Upload className="w-3.5 h-3.5" />}
-                      iconPosition="left"
-                      onClick={() => coverInputRef.current?.click()}
-                      className="border border-gray-300 shadow-xs"
-                    >
-                      Upload Cover Image
-                    </Button>
+                    <UploadCloud className="w-12 h-12 text-gray-300 stroke-[1.2] mb-3" />
+                    <span className="text-sm text-gray-400 font-normal">Select and Upload your Files Here</span>
                     <input ref={coverInputRef} type="file" accept="image/*" onChange={handleCoverSelect} className="hidden" />
                   </div>
                 )}
               </div>
             </div>
 
-            {/* Story Title & Category Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="md:col-span-2">
-                <label className="block text-xs font-semibold text-gray-800 uppercase tracking-wider mb-2">
-                  Story Title <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  placeholder="Enter a compelling title..."
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  required
-                  className="w-full px-5 py-3.5 placeholder:text-[14px] bg-white border border-gray-200 rounded-2xl text-base text-gray-900 placeholder-gray-400 outline-none focus:border-black transition-all font-medium"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-800 uppercase tracking-wider mb-2">
-                  Story Category <span className="text-rose-500">*</span>
-                </label>
-                <select
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value)}
-                  className="w-full px-4 py-3.5 bg-white border border-gray-200 rounded-2xl text-sm font-medium text-gray-900 outline-none focus:border-black cursor-pointer shadow-xs"
-                >
-                  {categories.length > 0 ? (
-                    categories.map((cat) => (
-                      <option key={cat.id} value={cat.name}>
-                        {cat.name}
-                      </option>
-                    ))
-                  ) : (
-                    <>
-                      <option value="Fiction">Fiction</option>
-                      <option value="Non-Fiction">Non-Fiction</option>
-                      <option value="Poetry">Poetry</option>
-                      <option value="Culture">Culture</option>
-                      <option value="Technology">Technology</option>
-                      <option value="Opinion">Opinion</option>
-                      <option value="Literature">Literature</option>
-                      <option value="General">General</option>
-                    </>
-                  )}
-                </select>
-              </div>
-            </div>
-
             {/* Editor Workspace & Editorial Formatting Toolbar */}
             <div>
-              <div className="flex items-center gap-2 mb-3">
-                {/* Mode Tabs using custom Button */}
-                <Button
-                  type="button"
-                  variant={activeTab === "write" ? "primary" : "secondary"}
-                  size="sm"
-                  icon={<Edit3 className="w-3.5 h-3.5" />}
-                  iconPosition="left"
-                  onClick={() => {
-                    if (editorRef.current && content && !editorRef.current.innerHTML.trim()) {
-                      editorRef.current.innerHTML = content;
-                    }
-                    setActiveTab("write");
-                  }}
-                  className="shadow-xs cursor-pointer"
-                >
-                  Write Story
-                </Button>
-                <Button
-                  type="button"
-                  variant={activeTab === "preview" ? "primary" : "secondary"}
-                  size="sm"
-                  icon={<Eye className="w-3.5 h-3.5" />}
-                  iconPosition="left"
-                  onClick={() => {
-                    if (editorRef.current) {
-                      setContent(editorRef.current.innerHTML);
-                    }
-                    setActiveTab("preview");
-                  }}
-                  className="shadow-xs cursor-pointer"
-                >
-                  Reader Preview
-                </Button>
+              <div className="flex items-center justify-between mb-3">
+                <label className="block text-xs font-semibold text-gray-800 uppercase tracking-wider">
+                  Upload / Body <span className="text-rose-500">*</span>
+                </label>
+                {/* Mode Tabs */}
+                <div className="flex items-center gap-2">
+        
+                  <Button
+                    type="button"
+                    variant={activeTab === "preview" ? "primary" : "secondary"}
+                    size="sm"
+                    icon={<Eye className="w-3.5 h-3.5" />}
+                    iconPosition="left"
+                    onClick={() => {
+                      if (editorRef.current) {
+                        setContent(editorRef.current.innerHTML);
+                      }
+                      setActiveTab("preview");
+                    }}
+                    className="shadow-xs cursor-pointer"
+                  >
+                    Reader Preview
+                  </Button>
+                </div>
               </div>
 
               {/* Editorial Formatting Toolbar */}
@@ -880,7 +885,7 @@ export default function SubmitStoryPage() {
                       type="button"
                       title="Bold (Ctrl+B)"
                       onClick={() => executeCommand("bold")}
-                      className={`p-2 rounded-xl transition-all ${
+                      className={`p-2 rounded-xl transition-all cursor-pointer ${
                         activeFormats.bold ? "bg-black text-white shadow-xs" : "text-gray-600 hover:bg-gray-100 hover:text-black"
                       }`}
                     >
@@ -890,7 +895,7 @@ export default function SubmitStoryPage() {
                       type="button"
                       title="Italic (Ctrl+I)"
                       onClick={() => executeCommand("italic")}
-                      className={`p-2 rounded-xl transition-all ${
+                      className={`p-2 rounded-xl transition-all cursor-pointer ${
                         activeFormats.italic ? "bg-black text-white shadow-xs" : "text-gray-600 hover:bg-gray-100 hover:text-black"
                       }`}
                     >
@@ -900,7 +905,7 @@ export default function SubmitStoryPage() {
                       type="button"
                       title="Underline (Ctrl+U)"
                       onClick={() => executeCommand("underline")}
-                      className={`p-2 rounded-xl transition-all ${
+                      className={`p-2 rounded-xl transition-all cursor-pointer ${
                         activeFormats.underline ? "bg-black text-white shadow-xs" : "text-gray-600 hover:bg-gray-100 hover:text-black"
                       }`}
                     >
@@ -910,7 +915,7 @@ export default function SubmitStoryPage() {
                       type="button"
                       title="Strikethrough"
                       onClick={() => executeCommand("strikeThrough")}
-                      className={`p-2 rounded-xl transition-all ${
+                      className={`p-2 rounded-xl transition-all cursor-pointer ${
                         activeFormats.strikethrough ? "bg-black text-white shadow-xs" : "text-gray-600 hover:bg-gray-100 hover:text-black"
                       }`}
                     >
@@ -924,7 +929,7 @@ export default function SubmitStoryPage() {
                       type="button"
                       title="Section Heading (H2)"
                       onClick={() => executeCommand("formatBlock", activeFormats.h2 ? "<p>" : "<h2>")}
-                      className={`px-2.5 py-1.5 rounded-xl font-bold text-xs transition-all flex items-center gap-1 ${
+                      className={`px-2.5 py-1.5 rounded-xl font-bold text-xs transition-all flex items-center gap-1 cursor-pointer ${
                         activeFormats.h2 ? "bg-black text-white shadow-xs" : "text-gray-600 hover:bg-gray-100 hover:text-black"
                       }`}
                     >
@@ -934,7 +939,7 @@ export default function SubmitStoryPage() {
                       type="button"
                       title="Subheading (H3)"
                       onClick={() => executeCommand("formatBlock", activeFormats.h3 ? "<p>" : "<h3>")}
-                      className={`px-2.5 py-1.5 rounded-xl font-bold text-xs transition-all flex items-center gap-1 ${
+                      className={`px-2.5 py-1.5 rounded-xl font-bold text-xs transition-all flex items-center gap-1 cursor-pointer ${
                         activeFormats.h3 ? "bg-black text-white shadow-xs" : "text-gray-600 hover:bg-gray-100 hover:text-black"
                       }`}
                     >
@@ -948,7 +953,7 @@ export default function SubmitStoryPage() {
                       type="button"
                       title="Bullet Points List"
                       onClick={() => executeCommand("insertUnorderedList")}
-                      className={`p-2 rounded-xl transition-all ${
+                      className={`p-2 rounded-xl transition-all cursor-pointer ${
                         activeFormats.bulletList ? "bg-black text-white shadow-xs" : "text-gray-600 hover:bg-gray-100 hover:text-black"
                       }`}
                     >
@@ -958,7 +963,7 @@ export default function SubmitStoryPage() {
                       type="button"
                       title="Numbered Points List"
                       onClick={() => executeCommand("insertOrderedList")}
-                      className={`p-2 rounded-xl transition-all ${
+                      className={`p-2 rounded-xl transition-all cursor-pointer ${
                         activeFormats.orderedList ? "bg-black text-white shadow-xs" : "text-gray-600 hover:bg-gray-100 hover:text-black"
                       }`}
                     >
@@ -1012,7 +1017,7 @@ export default function SubmitStoryPage() {
                       type="button"
                       title="Undo"
                       onClick={() => executeCommand("undo")}
-                      className="p-2 rounded-xl text-gray-600 hover:bg-gray-100 hover:text-black transition-all"
+                      className="p-2 rounded-xl text-gray-600 hover:bg-gray-100 hover:text-black transition-all cursor-pointer"
                     >
                       <Undo className="w-4 h-4" />
                     </button>
@@ -1020,7 +1025,7 @@ export default function SubmitStoryPage() {
                       type="button"
                       title="Redo"
                       onClick={() => executeCommand("redo")}
-                      className="p-2 rounded-xl text-gray-600 hover:bg-gray-100 hover:text-black transition-all"
+                      className="p-2 rounded-xl text-gray-600 hover:bg-gray-100 hover:text-black transition-all cursor-pointer"
                     >
                       <Redo className="w-4 h-4" />
                     </button>
@@ -1028,7 +1033,7 @@ export default function SubmitStoryPage() {
                       type="button"
                       title="Clear Formatting"
                       onClick={() => executeCommand("removeFormat")}
-                      className="p-2 rounded-xl text-gray-600 hover:bg-gray-100 hover:text-black transition-all"
+                      className="p-2 rounded-xl text-gray-600 hover:bg-gray-100 hover:text-black transition-all cursor-pointer"
                     >
                       <RemoveFormatting className="w-4 h-4" />
                     </button>
@@ -1102,7 +1107,7 @@ export default function SubmitStoryPage() {
                   onClick={() => handleSaveStory(true)}
                   className="w-full sm:w-auto px-5 py-2.5 font-medium text-xs sm:text-sm cursor-pointer shadow-xs justify-center whitespace-nowrap disabled:opacity-50"
                 >
-                  {submitting ? "Submitting..." : "Submit to Queue"}
+                  {submitting ? "Submitting..." : "Submit for Review"}
                 </Button>
               </div>
             </div>
@@ -1116,7 +1121,7 @@ export default function SubmitStoryPage() {
           <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl border border-gray-100 font-poppins relative">
             <button
               onClick={() => setLinkModalOpen(false)}
-              className="absolute top-5 right-5 text-gray-400 hover:text-black p-1 rounded-full hover:bg-gray-100 transition-all"
+              className="absolute top-5 right-5 text-gray-400 hover:text-black p-1 rounded-full hover:bg-gray-100 transition-all cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
