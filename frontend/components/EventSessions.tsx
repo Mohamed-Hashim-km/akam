@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState } from "react";
-import { MapPin, Clock, ArrowRight, ChevronLeft, ChevronRight } from "lucide-react";
+import Image from "next/image";
+import { ArrowRight, ChevronLeft, ChevronRight } from "lucide-react";
 import { Swiper, SwiperSlide } from "swiper/react";
 import { Navigation } from "swiper/modules";
 import type { Swiper as SwiperClass } from "swiper";
@@ -13,13 +14,14 @@ import "swiper/css/navigation";
 
 export interface SessionItem {
   id: string;
-  category: "reading" | "discussions";
+  category: "reading" | "discussions" | "workshop" | "exhibition" | "film_screening";
   title: string;
   description: string;
   location: string;
   time: string;
   day: string;
   monthYear: string;
+  imageSrc?: string;
   registerHref?: string;
 }
 
@@ -28,37 +30,39 @@ export interface EventSessionsProps {
   isLoading?: boolean;
 }
 
+const CATEGORY_TABS: { id: SessionItem["category"]; label: string }[] = [
+  { id: "reading", label: "Reading Events" },
+  { id: "discussions", label: "Discussions" },
+  { id: "workshop", label: "Workshop" },
+  { id: "exhibition", label: "Exhibition" },
+  { id: "film_screening", label: "Film Screening" },
+];
+
 export const EventSessions: React.FC<EventSessionsProps> = ({
   sessions = [],
   isLoading = false,
 }) => {
   const [swiperInstance, setSwiperInstance] = useState<SwiperClass | null>(null);
-  const [activeTab, setActiveTab] = useState<"reading" | "discussions">("reading");
+  const [activeTab, setActiveTab] = useState<SessionItem["category"]>("reading");
   const [selectedEventForReg, setSelectedEventForReg] = useState<SessionItem | null>(null);
 
-  const filteredSessions = sessions.filter((s) => s.category === activeTab);
+  const displaySessions = sessions.filter((s) => s.category === activeTab);
 
   if (isLoading) {
     return (
-      <section className="relative w-full bg-[#EEF7F2] py-14 sm:py-18 lg:py-22 font-poppins overflow-hidden">
+      <section className="relative w-full bg-[#E6F4FB] py-14 sm:py-18 lg:py-22 font-poppins overflow-hidden">
         <div className="container px-4 mx-auto relative z-10">
           <div className="flex justify-center mb-10">
-            <div className="w-64 h-11 bg-white/70 rounded-full animate-pulse" />
+            <div className="w-80 h-12 bg-white/70 rounded-full animate-pulse" />
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5  mx-auto">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 mx-auto">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="bg-white rounded-3xl p-6 border border-gray-100 animate-pulse min-h-[320px] flex flex-col justify-between">
-                <div>
-                  <div className="h-6 bg-gray-200/80 rounded-md w-3/4 mb-3" />
-                  <div className="h-3.5 bg-gray-200/80 rounded-md w-full mb-2" />
-                  <div className="h-3.5 bg-gray-200/80 rounded-md w-5/6 mb-5" />
-                  <div className="h-3.5 bg-gray-200/80 rounded-md w-1/2 mb-2" />
-                  <div className="h-3.5 bg-gray-200/80 rounded-md w-1/3" />
-                </div>
-                <div className="pt-5 border-t border-gray-100 flex items-center justify-between">
-                  <div className="h-7 bg-gray-200/80 rounded-md w-14" />
-                  <div className="h-8 bg-gray-200/80 rounded-full w-24" />
-                </div>
+              <div
+                key={i}
+                className="bg-white/80 rounded-[28px] p-6 border border-gray-100 animate-pulse h-[400px] flex flex-col justify-end"
+              >
+                <div className="h-6 bg-gray-200 rounded-md w-3/4 mb-3" />
+                <div className="h-4 bg-gray-200 rounded-md w-1/2" />
               </div>
             ))}
           </div>
@@ -67,139 +71,129 @@ export const EventSessions: React.FC<EventSessionsProps> = ({
     );
   }
 
-  if (!sessions || sessions.length === 0) return null;
-
   return (
-    <section className="relative w-full bg-[#EEF7F2] py-8 sm:py-12 font-poppins overflow-hidden">
+    <section className="relative w-full bg-[#E6F4FB] py-10 sm:py-16 font-poppins overflow-hidden">
       <div className="container px-4 mx-auto relative z-10">
-        {/* Centered Category Pill Switcher */}
-        <div className="flex justify-center mb-6 sm:mb-8">
-          <div className="bg-white p-1.5 rounded-full border border-gray-200/60 inline-flex items-center gap-1 shadow-2xs">
-            <button
-              onClick={() => setActiveTab("reading")}
-              className={`px-6 py-2 rounded-full text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
-                activeTab === "reading"
-                  ? "bg-[#21B573] text-white shadow-xs"
-                  : "text-gray-700 hover:text-gray-950"
-              }`}
-            >
-              Reading Events
-            </button>
-            <button
-              onClick={() => setActiveTab("discussions")}
-              className={`px-6 py-2 rounded-full text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
-                activeTab === "discussions"
-                  ? "bg-[#21B573] text-white shadow-xs"
-                  : "text-gray-700 hover:text-gray-950"
-              }`}
-            >
-              Discussions
-            </button>
+        {/* Centered Category Pill Filter Tabs */}
+        <div className="flex justify-center mb-8 sm:mb-12">
+          <div className="bg-white/90 backdrop-blur-xs p-1.5 rounded-full border border-gray-200/60 inline-flex items-center gap-1 sm:gap-1.5 shadow-sm flex-wrap justify-center">
+            {CATEGORY_TABS.map((tab) => {
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`px-5 sm:px-6 py-2 sm:py-2.5 rounded-full text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
+                    isActive
+                      ? "bg-[#4EB2E4] text-white shadow-xs"
+                      : "text-gray-700 hover:text-gray-950 hover:bg-gray-100/60"
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              );
+            })}
           </div>
         </div>
 
-        {/* Event Cards Swiper Carousel */}
-        {filteredSessions.length === 0 ? (
-          <div className="text-center py-8 bg-white/60 rounded-3xl max-w-xl mx-auto border border-gray-100 p-6">
-            <p className="text-sm font-medium text-gray-600 font-poppins">
-              No {activeTab === "reading" ? "reading sessions" : "discussions"} scheduled at this time.
-            </p>
-          </div>
-        ) : (
-          <div className="w-full relative">
-            <Swiper
-              key={activeTab}
-              modules={[Navigation]}
-              onSwiper={setSwiperInstance}
-              spaceBetween={20}
-              slidesPerView={1.15}
-              breakpoints={{
-                640: { slidesPerView: 1.4, spaceBetween: 20 },
-                768: { slidesPerView: 2.0, spaceBetween: 24 },
-                1024: { slidesPerView: 2.7, spaceBetween: 24 },
-              }}
-              className="w-full !pb-2 [&_.swiper-wrapper]:!items-stretch [&_.swiper-slide]:!h-auto [&_.swiper-slide]:!flex [&_.swiper-slide]:!flex-col"
-            >
-              {filteredSessions.map((item) => (
-                <SwiperSlide key={item.id} className="flex flex-col">
-                  <div className="bg-white rounded-3xl p-6 sm:p-7 flex-1 flex flex-col justify-between border border-gray-100 transition-all shadow-2xs hover:shadow-md h-full">
-                    <div className="flex-1 flex flex-col justify-between">
-                      <div>
-                        {/* Title */}
-                        <h3 className="text-base sm:text-lg font-semibold text-dark-text/ tracking-tight leading-snug font-poppins mb-2.5">
-                          {item.title}
-                        </h3>
+        {/* Event Cards Swiper Carousel or Empty State */}
+        <div className="w-full relative">
+          {displaySessions.length > 0 ? (
+            <>
+              <Swiper
+                key={activeTab}
+                modules={[Navigation]}
+                onSwiper={setSwiperInstance}
+                spaceBetween={20}
+                slidesPerView={1.15}
+                breakpoints={{
+                  640: { slidesPerView: 1.4, spaceBetween: 24 },
+                  768: { slidesPerView: 2.1, spaceBetween: 24 },
+                  1024: { slidesPerView: 2.7, spaceBetween: 24 },
+                  1280: { slidesPerView: 3.1, spaceBetween: 24 },
+                }}
+                className="w-full !pb-4 [&_.swiper-wrapper]:!items-stretch"
+              >
+                {displaySessions.map((item) => {
+                  const coverImg =
+                    item.imageSrc ||
+                    "https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?auto=format&fit=crop&q=80&w=800";
 
-                        {/* Description */}
-                        <p className="text-md text-gray-400 font-normal leading-relaxed mb-5 font-poppins">
-                          {item.description}
-                        </p>
-                      </div>
+                  return (
+                    <SwiperSlide key={item.id} className="flex flex-col">
+                      {/* Visual Image Cover Card matching Mockup */}
+                      <div className="relative h-[380px] sm:h-[420px] rounded-[28px] overflow-hidden flex flex-col justify-end p-6 sm:p-7 shadow-md hover:shadow-xl transition-all duration-300 group border border-white/20">
+                        {/* Background Image */}
+                        <Image
+                          src={coverImg}
+                          alt={item.title}
+                          fill
+                          className="object-cover transition-transform duration-700 group-hover:scale-105"
+                          unoptimized
+                        />
 
-                      {/* Meta details (Location & Time) */}
-                      <div className="space-y-1.5 text-sm text-gray-500 font-medium mt-auto font-poppins">
-                        <div className="flex items-center gap-2">
-                          <MapPin className="w-3.5 h-3.5 text-dark-text/70 shrink-0" />
-                          <span>{item.location}</span>
+                        {/* Dark Gradient Overlay for optimal text readability */}
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/45 to-black/10 z-10" />
+
+                        {/* Card Content Overlay */}
+                        <div className="relative z-20 flex flex-col justify-end h-full">
+                          {/* Title */}
+                          <h3 className="text-white font-bold text-lg sm:text-xl leading-snug font-poppins mb-4 line-clamp-2 group-hover:text-sky-200 transition-colors">
+                            {item.title}
+                          </h3>
+
+                          {/* Bottom Date & Action Row */}
+                          <div className="flex items-center justify-between gap-3 pt-2">
+                            {/* Date Block */}
+                            <div className="flex flex-col">
+                              <span className="text-2xl sm:text-3xl font-extrabold text-white leading-none font-poppins tracking-tight">
+                                {item.day || "22"}
+                              </span>
+                              <span className="text-[11px] font-medium text-white/80 uppercase font-poppins mt-1 tracking-wider">
+                                {item.monthYear || "Aug 2026"}
+                              </span>
+                            </div>
+
+                            {/* Register Button */}
+                            <button
+                              onClick={() => setSelectedEventForReg(item)}
+                              className="bg-white hover:bg-white/95 text-gray-950 font-semibold px-4 py-2 sm:px-5 sm:py-2.5 rounded-full text-xs sm:text-sm flex items-center gap-1.5 transition-all shadow-xs cursor-pointer shrink-0 active:scale-95"
+                            >
+                              <span>Register Now</span>
+                              <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-1" />
+                            </button>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <Clock className="w-3.5 h-3.5 text-dark-text/70 shrink-0" />
-                          <span>{item.time}</span>
-                        </div>
                       </div>
-                    </div>
+                    </SwiperSlide>
+                  );
+                })}
+              </Swiper>
 
-                    {/* Bottom Divider & Registration Row */}
-                    <div className="mt-5">
-                      <div className="border-b border-gray-100 mb-5 w-full" />
-
-                      <div className="flex items-center justify-between gap-2">
-                        {/* Date */}
-                        <div className="flex flex-col">
-                          <span className="text-2xl sm:text-3xl font-semibold text-dark-text tracking-tight leading-none font-poppins">
-                            {item.day}
-                          </span>
-                          <span className="text-[10px] text-gray-400 font-normal mt-1 font-poppins uppercase">
-                            {item.monthYear}
-                          </span>
-                        </div>
-
-                        {/* Register Button */}
-                        <button
-                          onClick={() => setSelectedEventForReg(item)}
-                          className="bg-white border border-gray-300 rounded-full px-4 sm:px-5 py-2 text-xs font-semibold text-gray-900 hover:bg-black hover:text-white hover:border-black flex items-center gap-1.5 transition-all group cursor-pointer shadow-2xs shrink-0"
-                        >
-                          <span>Register Now</span>
-                          <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-1" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </SwiperSlide>
-              ))}
-            </Swiper>
-
-            {/* Bottom-Right Carousel Navigation Controls */}
-            {filteredSessions.length > 1 && (
+              {/* Bottom-Right Carousel Navigation Arrows */}
               <div className="flex items-center justify-end gap-3 mt-6 sm:mt-8 pr-1">
                 <button
                   onClick={() => swiperInstance?.slidePrev()}
-                  className="w-10 h-10 rounded-full border border-gray-300 bg-white flex items-center justify-center text-gray-700 hover:bg-black hover:text-white hover:border-black transition-all focus:outline-none cursor-pointer shadow-2xs"
+                  className="w-10 h-10 rounded-full border border-gray-400/40 bg-white/80 backdrop-blur-xs flex items-center justify-center text-gray-700 hover:bg-white hover:text-black transition-all focus:outline-none cursor-pointer shadow-2xs"
                   aria-label="Previous slide"
                 >
                   <ChevronLeft className="w-5 h-5" />
                 </button>
                 <button
                   onClick={() => swiperInstance?.slideNext()}
-                  className="w-10 h-10 rounded-full border border-gray-300 bg-white flex items-center justify-center text-gray-700 hover:bg-black hover:text-white hover:border-black transition-all focus:outline-none cursor-pointer shadow-2xs"
+                  className="w-10 h-10 rounded-full border border-gray-400/40 bg-white/80 backdrop-blur-xs flex items-center justify-center text-gray-700 hover:bg-white hover:text-black transition-all focus:outline-none cursor-pointer shadow-2xs"
                   aria-label="Next slide"
                 >
                   <ChevronRight className="w-5 h-5" />
                 </button>
               </div>
-            )}
-          </div>
-        )}
+            </>
+          ) : (
+            <div className="w-full py-14 flex flex-col items-center justify-center text-center  p-8 ">
+            
+            </div>
+          )}
+        </div>
       </div>
 
       <EventRegisterModal

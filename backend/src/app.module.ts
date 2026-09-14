@@ -22,6 +22,7 @@ import { EventsModule } from './events/events.module.js';
 import { BooksModule } from './books/books.module.js';
 import { MediaModule } from './media/media.module.js';
 import { EditionsModule } from './editions/editions.module.js';
+import { ReviewsModule } from './reviews/reviews.module.js';
 
 @Module({
   imports: [
@@ -49,6 +50,7 @@ import { EditionsModule } from './editions/editions.module.js';
     BooksModule,
     MediaModule,
     EditionsModule,
+    ReviewsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

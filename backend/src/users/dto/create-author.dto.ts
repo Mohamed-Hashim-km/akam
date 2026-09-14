@@ -11,6 +11,14 @@ export class CreateAuthorDto {
 
   @IsString()
   @IsOptional()
+  phone?: string;
+
+  @IsBoolean()
+  @IsOptional()
+  privacyPolicyAccepted?: boolean;
+
+  @IsString()
+  @IsOptional()
   @MinLength(6)
   password?: string;
 

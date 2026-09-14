@@ -47,4 +47,38 @@ export class UploadsController {
     const url = await this.uploadsService.uploadPdf(file, `edition`);
     return { url };
   }
+
+  @Post('book-cover')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('EDITOR', 'ADMIN')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Upload a book cover image into uploads/books folder' })
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadBookCover(@UploadedFile() file: Express.Multer.File) {
+    const url = await this.uploadsService.uploadFile(
+      file,
+      'books',
+      `book-${Date.now()}`,
+    );
+    return { url };
+  }
+
+  @Post('review-image')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('EDITOR', 'ADMIN')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Upload a reviewer photo into uploads/reviews folder' })
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadReviewImage(@UploadedFile() file: Express.Multer.File) {
+    const url = await this.uploadsService.uploadFile(
+      file,
+      'reviews',
+      `review-${Date.now()}`,
+    );
+    return { url };
+  }
 }

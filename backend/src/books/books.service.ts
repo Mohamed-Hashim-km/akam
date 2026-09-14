@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service.js';
+import { UploadsService } from '../uploads/uploads.service.js';
 import { CreateBookDto } from './dto/create-book.dto.js';
 import { UpdateBookDto } from './dto/update-book.dto.js';
 
@@ -18,7 +19,10 @@ export interface BookReleaseItem {
 
 @Injectable()
 export class BooksService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly uploadsService: UploadsService,
+  ) {}
 
   async findAllPublished(): Promise<BookReleaseItem[]> {
     return this.prisma.query<BookReleaseItem>(
@@ -95,7 +99,7 @@ export class BooksService {
         dto.title,
         dto.author,
         dto.editionTag || 'Print Edition',
-        dto.description,
+        dto.description || '',
         dto.coverImage || null,
         dto.preorderLink || null,
         isPublished,
@@ -107,6 +111,10 @@ export class BooksService {
 
   async update(id: string, dto: UpdateBookDto): Promise<BookReleaseItem> {
     const existing = await this.findOne(id);
+
+    if (dto.coverImage !== undefined && dto.coverImage !== existing.coverImage && existing.coverImage) {
+      this.uploadsService.deleteFileByUrl(existing.coverImage);
+    }
 
     const title = dto.title ?? existing.title;
     const author = dto.author ?? existing.author;
@@ -143,7 +151,11 @@ export class BooksService {
   }
 
   async remove(id: string) {
-    await this.findOne(id);
+    const existing = await this.findOne(id);
+    if (existing.coverImage) {
+      this.uploadsService.deleteFileByUrl(existing.coverImage);
+    }
+
     await this.prisma.execute(`DELETE FROM "book_release" WHERE id = $1`, [id]);
     return { success: true, message: 'Book release deleted successfully' };
   }

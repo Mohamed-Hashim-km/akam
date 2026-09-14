@@ -24,6 +24,12 @@ enum StoryStatus {
   REJECTED
 }
 
+enum SubmissionType {
+  STORY
+  PAINTING
+  VIDEO
+}
+
 enum NotificationType {
   STORY_SUBMITTED
   STORY_APPROVED
@@ -58,22 +64,27 @@ model OtpCode {
 }
 
 model Story {
-  id            String      @id @default(uuid())
-  title         String
-  slug          String      @unique
-  content       String      @db.Text
-  coverImageUrl String?
-  status        StoryStatus @default(DRAFT)
-  rejectionNote String?
-  authorId      String
-  author        User        @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  id             String         @id @default(uuid())
+  title          String
+  slug           String         @unique
+  description    String?        @db.Text
+  content        String         @default("") @db.Text
+  coverImageUrl  String?
+  submissionType SubmissionType @default(STORY)
+  mediaUrl       String?        // for VIDEO type: YouTube/Vimeo URL; for PAINTING: alternate image URL
+  category       String?
+  status         StoryStatus    @default(DRAFT)
+  rejectionNote  String?
+  authorId       String
+  author         User           @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
 
   notifications Notification[]
 
   @@index([status])
   @@index([authorId])
+  @@index([submissionType])
 }
 
 model Notification {
@@ -360,6 +371,8 @@ enum EventType {
   READING_SESSION
   DISCUSSION
   WORKSHOP
+  EXHIBITION
+  FILM_SCREENING
   PAST_ARCHIVE
 }
 
@@ -374,6 +387,7 @@ model Event {
   monthYear    String?
   eventDate    DateTime?
   imageSrc     String?
+  images       String[]  @default([])
   videoUrl     String?
   registerHref String?
   isPublished  Boolean   @default(true)
@@ -431,4 +445,21 @@ model MediaVideo {
   @@index([category, isPublished])
   @@index([isFeatured, isPublished])
   @@map("media_video")
+}
+
+// ─── READER REVIEWS & TESTIMONIALS PLATFORM ─────────────────────────────────
+
+model Review {
+  id          String   @id @default(uuid())
+  name        String
+  role        String?
+  quote       String   @db.Text
+  image       String?
+  isPublished Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([isPublished])
+  @@map("review")
 }

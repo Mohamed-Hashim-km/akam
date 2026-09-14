@@ -10,7 +10,7 @@ import UpcomingBookReleases from "@/components/UpcomingBookReleases";
 import ReaderReviews from "@/components/ReaderReviews";
 import { API_BASE_URL } from "@/lib/config";
 
-export const revalidate = 3600;
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Akam Digital — Storytelling, Literature & Cultural Platform",
@@ -77,33 +77,33 @@ async function getHomePageData() {
   try {
     const timeoutSignal = AbortSignal.timeout(8000);
 
-    const [storiesRes, categoriesRes, eventsRes, booksRes, videosRes, commentsRes, editorsNoteRes] = await Promise.allSettled([
+    const [storiesRes, categoriesRes, eventsRes, booksRes, videosRes, reviewsRes, editorsNoteRes] = await Promise.allSettled([
       fetch(`${API_BASE_URL}/stories?status=APPROVED&limit=10`, {
-        next: { tags: ["homepage", "stories"], revalidate: 3600 },
+        next: { tags: ["homepage", "stories"], revalidate: 60 },
         signal: timeoutSignal,
       }),
       fetch(`${API_BASE_URL}/communities`, {
-        next: { tags: ["homepage", "categories"], revalidate: 3600 },
+        next: { tags: ["homepage", "categories"], revalidate: 60 },
         signal: timeoutSignal,
       }),
       fetch(`${API_BASE_URL}/events`, {
-        next: { tags: ["homepage", "events"], revalidate: 3600 },
+        cache: "no-store",
         signal: timeoutSignal,
       }),
       fetch(`${API_BASE_URL}/books`, {
-        next: { tags: ["homepage", "books"], revalidate: 3600 },
+        next: { tags: ["homepage", "books"], revalidate: 60 },
         signal: timeoutSignal,
       }),
-      fetch(`${API_BASE_URL}/media?featured=true&limit=3`, {
-        next: { tags: ["homepage", "media"], revalidate: 3600 },
+      fetch(`${API_BASE_URL}/media?featured=true&limit=4`, {
+        cache: "no-store",
         signal: timeoutSignal,
       }),
-      fetch(`${API_BASE_URL}/stories/comments/recent?limit=10`, {
-        next: { tags: ["homepage", "comments"], revalidate: 3600 },
+      fetch(`${API_BASE_URL}/reviews`, {
+        cache: "no-store",
         signal: timeoutSignal,
       }),
       fetch(`${API_BASE_URL}/settings/editors-note`, {
-        next: { tags: ["homepage", "editors-note"], revalidate: 3600 },
+        cache: "no-store",
         signal: timeoutSignal,
       }),
     ]);
@@ -123,9 +123,11 @@ async function getHomePageData() {
       category: (s.category || "Fiction").toUpperCase(),
       badgeTextColor: getCategoryColor(s.category),
       title: s.title,
+      description: s.description || s.excerpt || s.summary || s.shortDescription || "",
       author: typeof s.author === "string" && s.author.startsWith("By ") ? s.author : `By ${s.authorName || s.authorEmail || "Unknown Author"}`,
       imageSrc: s.coverImageUrl || s.imageSrc || "/images/stories/ramachi.jpg",
       href: `/stories/${s.slug || s.id}`,
+      contentType: (s.contentType || s.category || "STORY").toUpperCase(),
     }));
 
     const categories =
@@ -153,13 +155,13 @@ async function getHomePageData() {
         ? await videosRes.value.json().then((json) => json.data || (Array.isArray(json) ? json : [])).catch(() => [])
         : [];
 
-    const comments =
-      commentsRes.status === "fulfilled" && commentsRes.value.ok
-        ? await commentsRes.value.json().then((json) => (Array.isArray(json) ? json : json.data || [])).catch(() => [])
+    const reviews =
+      reviewsRes.status === "fulfilled" && reviewsRes.value.ok
+        ? await reviewsRes.value.json().then((json) => (Array.isArray(json) ? json : json.data || [])).catch(() => [])
         : [];
 
     let editorsNote = {
-      title: "Editor's Note",
+      title: "From Akam editorial",
       note: "This month we celebrate the voices shaping Malayalam literature today. Read slowly, share widely, and – if you have a story of your own – write it. Every submission passes through our editorial board before it reaches you.",
     };
     if (editorsNoteRes.status === "fulfilled" && editorsNoteRes.value.ok) {
@@ -171,7 +173,7 @@ async function getHomePageData() {
       } catch (e) { }
     }
 
-    return { stories, categories, events, books, videos, comments, editorsNote };
+    return { stories, categories, events, books, videos, reviews, editorsNote };
   } catch (err) {
     console.error("Failed server-side data fetch for homepage", err);
     return {
@@ -180,9 +182,9 @@ async function getHomePageData() {
       events: [],
       books: [],
       videos: [],
-      comments: [],
+      reviews: [],
       editorsNote: {
-        title: "Editor's Note",
+        title: "From Akam editorial",
         note: "This month we celebrate the voices shaping Malayalam literature today. Read slowly, share widely, and – if you have a story of your own – write it. Every submission passes through our editorial board before it reaches you.",
       },
     };
@@ -192,16 +194,17 @@ async function getHomePageData() {
 export default async function Home() {
   const cookieStore = await cookies();
   const isLoggedInCookie = cookieStore.get("akam_logged_in")?.value === "true";
-  const { stories, categories, events, books, videos, comments, editorsNote } = await getHomePageData();
+  const { stories, categories, events, books, videos, reviews, editorsNote } = await getHomePageData();
 
   return (
     <main className="min-h-screen flex flex-col font-poppins">
-      {/* Main Hero Section - Only shown for unauthenticated / guest users */}
+      {/* Main Hero & About Akam Section - Only shown for unauthenticated / guest users */}
       <AuthHeroWrapper initialIsLoggedIn={isLoggedInCookie} />
 
       {/* Latest Stories Section */}
       <LatestStories stories={stories} />
 
+    
       {/* Editor's Note Section */}
       <EditorsNote title={editorsNote.title} note={editorsNote.note} />
 
@@ -218,7 +221,7 @@ export default async function Home() {
       <UpcomingBookReleases releases={books} />
 
       {/* Reader Reviews Section */}
-      <ReaderReviews reviews={comments} />
+      <ReaderReviews reviews={reviews} />
     </main>
   );
 }

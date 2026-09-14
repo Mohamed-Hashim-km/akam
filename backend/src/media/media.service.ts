@@ -24,9 +24,9 @@ export class MediaService {
     }
     const res = await this.prisma.query<{ count: string }>(sql, params);
     const count = parseInt(res[0]?.count || '0', 10);
-    if (count >= 3) {
+    if (count >= 4) {
       throw new BadRequestException(
-        'Maximum of 3 featured videos allowed on the homepage. Please un-feature an existing featured video first.'
+        'Maximum of 4 featured videos allowed on the homepage. Please un-feature an existing featured video first.'
       );
     }
   }

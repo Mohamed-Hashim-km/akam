@@ -18,6 +18,20 @@ export class EventsController {
     return this.eventsService.findAllPublished(type);
   }
 
+  @Get('past-archives')
+  @Header('Cache-Control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=120')
+  @ApiOperation({ summary: 'Get paginated past event archives' })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  findPastArchives(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const pageNum = Math.max(1, parseInt(page || '1', 10));
+    const limitNum = Math.max(1, Math.min(50, parseInt(limit || '6', 10)));
+    return this.eventsService.findPastArchivesPaginated(pageNum, limitNum);
+  }
+
   @Get(':id')
   @Header('Cache-Control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=120')
   @ApiOperation({ summary: 'Get published event by ID' })

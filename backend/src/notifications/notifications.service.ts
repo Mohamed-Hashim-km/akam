@@ -16,15 +16,43 @@ type NotificationRow = {
 export class NotificationsService {
   constructor(private prisma: PrismaService) {}
 
-  async getUserNotifications(userId: string): Promise<NotificationRow[]> {
-    return this.prisma.query<NotificationRow>(
-      `SELECT id, type, message, read, "relatedStoryId", "createdAt"
-       FROM notification
-       WHERE "userId" = $1
-       ORDER BY "createdAt" DESC
-       LIMIT 50`,
-      [userId],
-    );
+  async getUserNotifications(
+    userId: string,
+    page: number = 1,
+    limit: number = 10,
+  ): Promise<{
+    data: NotificationRow[];
+    meta: { page: number; limit: number; total: number; hasMore: boolean };
+  }> {
+    const offset = (page - 1) * limit;
+
+    const [totalRow, data] = await Promise.all([
+      this.prisma.queryOne<{ count: string }>(
+        `SELECT COUNT(*) AS count FROM notification WHERE "userId" = $1`,
+        [userId],
+      ),
+      this.prisma.query<NotificationRow>(
+        `SELECT id, type, message, read, "relatedStoryId", "createdAt"
+         FROM notification
+         WHERE "userId" = $1
+         ORDER BY "createdAt" DESC
+         LIMIT $2 OFFSET $3`,
+        [userId, limit, offset],
+      ),
+    ]);
+
+    const total = parseInt(totalRow?.count ?? '0', 10);
+    const hasMore = offset + data.length < total;
+
+    return {
+      data,
+      meta: {
+        page,
+        limit,
+        total,
+        hasMore,
+      },
+    };
   }
 
   async markAsRead(id: string, userId: string): Promise<{ success: boolean }> {
