@@ -200,20 +200,28 @@ export class AuthService {
       [otp.id],
     );
 
-    // Upsert user
+    const phone = dto.phone?.trim() || null;
+    const privacyPolicyAccepted = dto.privacyPolicyAccepted === true;
+
+    // Upsert user with phone and privacyPolicyAccepted
     const user = await this.prisma.queryOne<{
       id: string;
       email: string;
       name: string | null;
+      phone: string | null;
+      privacyPolicyAccepted: boolean;
       role: string;
       bio: string | null;
       avatarUrl: string | null;
     }>(
-      `INSERT INTO "user" (id, email, role, "createdAt", "updatedAt")
-       VALUES (gen_random_uuid()::text, $1, 'READER', now(), now())
-       ON CONFLICT (email) DO UPDATE SET "updatedAt" = now()
-       RETURNING id, email, name, role, bio, "avatarUrl"`,
-      [email],
+      `INSERT INTO "user" (id, email, phone, "privacyPolicyAccepted", role, "createdAt", "updatedAt")
+       VALUES (gen_random_uuid()::text, $1, $2, $3, 'READER', now(), now())
+       ON CONFLICT (email) DO UPDATE SET
+         phone = COALESCE(EXCLUDED.phone, "user".phone),
+         "privacyPolicyAccepted" = CASE WHEN EXCLUDED."privacyPolicyAccepted" = true THEN true ELSE "user"."privacyPolicyAccepted" END,
+         "updatedAt" = now()
+       RETURNING id, email, name, phone, "privacyPolicyAccepted", role, bio, "avatarUrl"`,
+      [email, phone, privacyPolicyAccepted],
     );
 
     if (!user) {

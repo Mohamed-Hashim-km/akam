@@ -28,6 +28,8 @@ type StoryRow = {
   content?: string;
   category?: string;
   coverImageUrl: string | null;
+  submissionType?: string;
+  mediaUrl?: string | null;
   status: string;
   rejectionNote?: string | null;
   authorId: string;
@@ -90,7 +92,9 @@ export class StoriesService {
     const queryParams = [...params, limit, offset];
     const data = await this.prisma.query<StoryRow>(
       `SELECT
-         s.id, s.title, s.slug, s.description, s.content, s.category, s."coverImageUrl", s.status, s."createdAt",
+         s.id, s.title, s.slug, s.description, s.content, s.category, s."coverImageUrl",
+         s."submissionType", s."mediaUrl",
+         s.status, s."createdAt",
          s."authorId",
          u.name AS "authorName",
          u."avatarUrl" AS "authorAvatarUrl"
@@ -116,8 +120,9 @@ export class StoriesService {
   async findOne(idOrSlug: string): Promise<StoryRow> {
     const story = await this.prisma.queryOne<StoryRow>(
       `SELECT
-         s.id, s.title, s.slug, s.description, s.content, s.category, s."coverImageUrl", s.status,
-         s."rejectionNote", s."createdAt", s."updatedAt",
+         s.id, s.title, s.slug, s.description, s.content, s.category, s."coverImageUrl",
+         s."submissionType", s."mediaUrl",
+         s.status, s."rejectionNote", s."createdAt", s."updatedAt",
          s."authorId",
          u.name AS "authorName",
          u."avatarUrl" AS "authorAvatarUrl",
@@ -134,7 +139,7 @@ export class StoriesService {
 
   async getAuthorStories(authorId: string): Promise<StoryRow[]> {
     return this.prisma.query<StoryRow>(
-      `SELECT id, title, slug, description, category, "coverImageUrl", status, "createdAt", "updatedAt"
+      `SELECT id, title, slug, description, category, "coverImageUrl", "submissionType", "mediaUrl", status, "createdAt", "updatedAt"
        FROM story WHERE "authorId" = $1 ORDER BY "updatedAt" DESC`,
       [authorId],
     );
@@ -175,14 +180,17 @@ export class StoriesService {
       slug = `${baseSlug}-${counter}`;
     }
 
-    const categoryVal = dto.category?.trim() || 'Fiction';
+    const categoryVal = dto.category?.trim() || 'General';
     const descriptionVal = dto.description?.trim() || null;
+    const submissionTypeVal = dto.submissionType || 'STORY';
+    const mediaUrlVal = dto.mediaUrl?.trim() || null;
+    const contentVal = dto.content ?? '';
 
     const story = await this.prisma.queryOne<StoryRow>(
-      `INSERT INTO story (id, title, slug, description, content, category, status, "authorId", "createdAt", "updatedAt")
-       VALUES (gen_random_uuid()::text, $1, $2, $3, $4, $5, $6::"StoryStatus", $7, now(), now())
-       RETURNING id, title, slug, description, category, status, "createdAt"`,
-      [dto.title, slug, descriptionVal, dto.content, categoryVal, initialStatus, targetAuthorId],
+      `INSERT INTO story (id, title, slug, description, content, category, status, "submissionType", "mediaUrl", "authorId", "createdAt", "updatedAt")
+       VALUES (gen_random_uuid()::text, $1, $2, $3, $4, $5, $6::"StoryStatus", $7::"SubmissionType", $8, $9, now(), now())
+       RETURNING id, title, slug, description, category, "submissionType", "mediaUrl", status, "createdAt"`,
+      [dto.title, slug, descriptionVal, contentVal, categoryVal, initialStatus, submissionTypeVal, mediaUrlVal, targetAuthorId],
     );
 
     return story!;
@@ -214,6 +222,14 @@ export class StoriesService {
       params.push(dto.category);
       updates.push(`category = $${params.length}`);
     }
+    if (dto.submissionType !== undefined) {
+      params.push(dto.submissionType);
+      updates.push(`"submissionType" = $${params.length}::"SubmissionType"`);
+    }
+    if (dto.mediaUrl !== undefined) {
+      params.push(dto.mediaUrl);
+      updates.push(`"mediaUrl" = $${params.length}`);
+    }
 
     params.push(id);
     const idParamIndex = params.length;
@@ -221,7 +237,7 @@ export class StoriesService {
     return (await this.prisma.queryOne<StoryRow>(
       `UPDATE story SET ${updates.join(', ')}
        WHERE id = $${idParamIndex}
-       RETURNING id, title, slug, description, category, status, "updatedAt"`,
+       RETURNING id, title, slug, description, category, "submissionType", "mediaUrl", status, "updatedAt"`,
       params,
     ))!;
   }
@@ -292,7 +308,9 @@ export class StoriesService {
     const queryParams = [...params, limit, offset];
     const data = await this.prisma.query<StoryRow>(
       `SELECT
-         s.id, s.title, s.slug, s.content, s.category, s."coverImageUrl", s.status, s."rejectionNote", s."createdAt", s."updatedAt",
+         s.id, s.title, s.slug, s.content, s.category, s."coverImageUrl",
+         s."submissionType", s."mediaUrl",
+         s.status, s."rejectionNote", s."createdAt", s."updatedAt",
          s."authorId",
          u.name AS "authorName",
          u.email AS "authorEmail"

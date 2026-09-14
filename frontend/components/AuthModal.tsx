@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-import { X, Mail, KeyRound, ArrowRight, CheckCircle2, AlertCircle } from "lucide-react";
+import { X, Mail, Phone, KeyRound, ArrowRight, CheckCircle2, AlertCircle } from "lucide-react";
 import Button from "./ui/Button";
 
 import { API_BASE_URL } from "@/lib/config";
@@ -23,6 +23,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const router = useRouter();
   const [step, setStep] = useState<"email" | "otp" | "success">("email");
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [acceptedPrivacy, setAcceptedPrivacy] = useState(false);
   const [otp, setOtp] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -36,6 +38,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       setError("Please enter a valid email address");
       return;
     }
+    if (!phone || phone.trim().length < 8) {
+      setError("Please enter a valid phone number");
+      return;
+    }
+    if (!acceptedPrivacy) {
+      setError("You must accept the Privacy Policy and Terms of Service to continue.");
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
@@ -43,7 +54,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       const res = await fetch(`${API_BASE_URL}/auth/request-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({
+          email,
+          phone,
+          privacyPolicyAccepted: acceptedPrivacy,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Failed to send OTP");
@@ -71,7 +86,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ email, code: otp }),
+        body: JSON.stringify({
+          email,
+          code: otp,
+          phone,
+          privacyPolicyAccepted: acceptedPrivacy,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Verification failed");
@@ -123,7 +143,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             {step === "success" && "Authenticated!"}
           </h3>
           <p className="text-sm text-[#646464] mt-1 font-normal">
-            {step === "email" && "Enter your email to receive a passwordless OTP code."}
+            {step === "email" && "Enter your email & phone to receive a passwordless OTP code."}
             {step === "otp" && `We sent a 6-digit code to ${email}`}
             {step === "success" && (redirectTo ? `Redirecting to ${redirectTo}...` : "Redirecting...")}
           </p>
@@ -160,6 +180,45 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   required
                 />
               </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">
+                Phone Number
+              </label>
+              <div className="relative flex items-center">
+                <Phone className="absolute left-4 w-4 h-4 text-gray-400" />
+                <input
+                  type="tel"
+                  placeholder="+91 98765 43210"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  className="w-full pl-11 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium text-gray-900 outline-none focus:border-black focus:bg-white transition-all"
+                  required
+                />
+              </div>
+            </div>
+
+            {/* Privacy Policy Acceptance Checkbox */}
+            <div className="flex items-start gap-2.5 pt-1">
+              <input
+                type="checkbox"
+                id="privacy-checkbox"
+                checked={acceptedPrivacy}
+                onChange={(e) => setAcceptedPrivacy(e.target.checked)}
+                className="mt-0.5 w-4 h-4 rounded border-gray-300 text-[#0FA975] focus:ring-[#0FA975] cursor-pointer"
+                required
+              />
+              <label htmlFor="privacy-checkbox" className="text-xs text-gray-600 leading-snug cursor-pointer select-none">
+                I agree to the{" "}
+                <a href="/privacy-policy" target="_blank" className="font-semibold text-black underline hover:text-[#0FA975]">
+                  Privacy Policy
+                </a>{" "}
+                and{" "}
+                <a href="/terms" target="_blank" className="font-semibold text-black underline hover:text-[#0FA975]">
+                  Terms of Service
+                </a>.
+              </label>
             </div>
 
             <Button

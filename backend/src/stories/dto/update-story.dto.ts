@@ -1,4 +1,4 @@
-import { IsString, IsOptional, MaxLength } from 'class-validator';
+import { IsString, IsOptional, MaxLength, IsIn } from 'class-validator';
 
 export class UpdateStoryDto {
   @IsOptional()
@@ -17,4 +17,13 @@ export class UpdateStoryDto {
   @IsOptional()
   @IsString()
   category?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['STORY', 'PAINTING', 'VIDEO'])
+  submissionType?: string;
+
+  @IsOptional()
+  @IsString()
+  mediaUrl?: string;
 }
