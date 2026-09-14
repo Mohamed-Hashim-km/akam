@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs';
 import * as path from 'path';
 
-type StorageBucket = 'avatars' | 'covers' | 'inline-images' | 'pdfs';
+type StorageBucket = 'avatars' | 'covers' | 'inline-images' | 'pdfs' | 'books' | 'reviews';
 
 @Injectable()
 export class UploadsService {

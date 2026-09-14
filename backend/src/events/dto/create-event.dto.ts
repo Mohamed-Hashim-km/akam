@@ -3,6 +3,7 @@ import {
   IsOptional,
   IsEnum,
   IsBoolean,
+  IsArray,
   MinLength,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -45,6 +46,12 @@ export class CreateEventDto {
   @IsOptional()
   @IsString()
   imageSrc?: string;
+
+  @ApiPropertyOptional({ example: ['/images/event1.jpg', '/images/event2.jpg'] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  images?: string[];
 
   @ApiPropertyOptional({ example: 'https://example.com/register' })
   @IsOptional()

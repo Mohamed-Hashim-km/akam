@@ -27,8 +27,13 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
     try {
       const client = await this.pool.connect();
       await client.query('SELECT 1');
+      await client.query('ALTER TABLE story ADD COLUMN IF NOT EXISTS description TEXT;');
+      await client.query('ALTER TABLE story ADD COLUMN IF NOT EXISTS category TEXT DEFAULT \'Fiction\';');
+      await client.query(`ALTER TYPE "EventType" ADD VALUE IF NOT EXISTS 'EXHIBITION';`);
+      await client.query(`ALTER TYPE "EventType" ADD VALUE IF NOT EXISTS 'FILM_SCREENING';`);
+      await client.query(`ALTER TABLE "event" ADD COLUMN IF NOT EXISTS images TEXT[] DEFAULT '{}';`);
       client.release();
-      this.logger.log('✅ Database connection established');
+      this.logger.log('✅ Database connection established and schema verified');
     } catch (error) {
       this.logger.error('❌ Failed to connect to database', error);
     }

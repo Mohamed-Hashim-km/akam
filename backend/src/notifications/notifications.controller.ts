@@ -1,5 +1,5 @@
-import { Controller, Get, Patch, Param, UseGuards, HttpCode, HttpStatus } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { Controller, Get, Patch, Param, Query, UseGuards, HttpCode, HttpStatus } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
 import type { AuthUser } from '../auth/decorators/current-user.decorator.js';
@@ -13,9 +13,17 @@ export class NotificationsController {
   constructor(private readonly notificationsService: NotificationsService) {}
 
   @Get()
-  @ApiOperation({ summary: 'Get all notifications for the current user' })
-  async getMyNotifications(@CurrentUser() user: AuthUser) {
-    return this.notificationsService.getUserNotifications(user.id);
+  @ApiOperation({ summary: 'Get notifications for the current user with pagination' })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  async getMyNotifications(
+    @CurrentUser() user: AuthUser,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const pageNum = Math.max(1, parseInt(page || '1', 10));
+    const limitNum = Math.max(1, Math.min(100, parseInt(limit || '10', 10)));
+    return this.notificationsService.getUserNotifications(user.id, pageNum, limitNum);
   }
 
   @Get('unread-count')

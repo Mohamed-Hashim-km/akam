@@ -74,6 +74,8 @@ interface PendingStory {
   content: string;
   category?: string;
   coverImageUrl: string | null;
+  submissionType?: "STORY" | "PAINTING" | "VIDEO";
+  mediaUrl?: string | null;
   status: "PENDING" | "APPROVED" | "REJECTED" | "DRAFT";
   createdAt: string;
   updatedAt: string;
@@ -86,6 +88,8 @@ interface RosterUser {
   id: string;
   email: string;
   name: string | null;
+  phone?: string | null;
+  privacyPolicyAccepted?: boolean;
   bio: string | null;
   avatarUrl: string | null;
   role: "READER" | "AUTHOR" | "EDITOR" | "ADMIN";
@@ -315,6 +319,7 @@ function EditorialDashboardContent() {
 
   const [categoriesList, setCategoriesList] = useState<any[]>([]);
   const [categoriesMeta, setCategoriesMeta] = useState({ total: 0, page: 1, limit: 10, totalPages: 1 });
+  const [allPlatformCategories, setAllPlatformCategories] = useState<any[]>([]);
 
   const [reportsList, setReportsList] = useState<ReportItem[]>([]);
   const [reportsMeta, setReportsMeta] = useState({ total: 0, page: 1, limit: 10, totalPages: 1 });
@@ -329,8 +334,24 @@ function EditorialDashboardContent() {
   // Reader Reviews State
   const [reviewsList, setReviewsList] = useState<any[]>([]);
   const [reviewsMeta, setReviewsMeta] = useState({ total: 0, page: 1, limit: 10, totalPages: 1 });
-  const [reviewFeaturedFilter, setReviewFeaturedFilter] = useState<"ALL" | "FEATURED" | "HIDDEN">("ALL");
-  const [selectedReview, setSelectedReview] = useState<any | null>(null);
+  const [showAddReviewModal, setShowAddReviewModal] = useState(false);
+  const [editingReviewId, setEditingReviewId] = useState<string | null>(null);
+  const [reviewFormName, setReviewFormName] = useState("");
+  const [reviewFormRole, setReviewFormRole] = useState("");
+  const [reviewFormQuote, setReviewFormQuote] = useState("");
+  const [reviewFormImage, setReviewFormImage] = useState("");
+  const [reviewFormPublished, setReviewFormPublished] = useState(true);
+  const [submittingReview, setSubmittingReview] = useState(false);
+  const [uploadingReviewImage, setUploadingReviewImage] = useState(false);
+
+  const resetReviewForm = () => {
+    setEditingReviewId(null);
+    setReviewFormName("");
+    setReviewFormRole("");
+    setReviewFormQuote("");
+    setReviewFormImage("");
+    setReviewFormPublished(true);
+  };
 
   // Editorial Notifications State
   const [notificationsList, setNotificationsList] = useState<any[]>([]);
@@ -340,6 +361,7 @@ function EditorialDashboardContent() {
   const [registerAuthorModalOpen, setRegisterAuthorModalOpen] = useState(false);
   const [authorFormName, setAuthorFormName] = useState("");
   const [authorFormEmail, setAuthorFormEmail] = useState("");
+  const [authorFormPhone, setAuthorFormPhone] = useState("");
   const [authorFormBio, setAuthorFormBio] = useState("");
   const [authorFormAvatarFile, setAuthorFormAvatarFile] = useState<File | null>(null);
   const [authorFormAvatarPreview, setAuthorFormAvatarPreview] = useState<string | null>(null);
@@ -352,6 +374,7 @@ function EditorialDashboardContent() {
   const [editingAuthorTarget, setEditingAuthorTarget] = useState<RosterUser | null>(null);
   const [authorEditName, setAuthorEditName] = useState("");
   const [authorEditEmail, setAuthorEditEmail] = useState("");
+  const [authorEditPhone, setAuthorEditPhone] = useState("");
   const [authorEditBio, setAuthorEditBio] = useState("");
   const [authorEditRole, setAuthorEditRole] = useState<"READER" | "AUTHOR" | "EDITOR">("AUTHOR");
   const [authorEditAvatarFile, setAuthorEditAvatarFile] = useState<File | null>(null);
@@ -377,6 +400,21 @@ function EditorialDashboardContent() {
   const [storyStudioActiveTab, setStoryStudioActiveTab] = useState<"write" | "preview">("write");
   const [savingAuthorStory, setSavingAuthorStory] = useState(false);
   const [uploadingAuthorInlineImage, setUploadingAuthorInlineImage] = useState(false);
+
+  // Add Submission (Painting / Video) Modal for an Author
+  const [addSubmissionModalOpen, setAddSubmissionModalOpen] = useState(false);
+  const [addSubmissionAuthorTarget, setAddSubmissionAuthorTarget] = useState<RosterUser | null>(null);
+  const [addSubmissionType, setAddSubmissionType] = useState<"PAINTING" | "VIDEO">("PAINTING");
+  const [addSubmissionTitle, setAddSubmissionTitle] = useState("");
+  const [addSubmissionDescription, setAddSubmissionDescription] = useState("");
+  const [addSubmissionCategory, setAddSubmissionCategory] = useState("Art");
+  const [addSubmissionVideoUrl, setAddSubmissionVideoUrl] = useState("");
+  const [addSubmissionPaintingFile, setAddSubmissionPaintingFile] = useState<File | null>(null);
+  const [addSubmissionPaintingPreview, setAddSubmissionPaintingPreview] = useState<string | null>(null);
+  const [savingAddSubmission, setSavingAddSubmission] = useState(false);
+  const [addSubmissionError, setAddSubmissionError] = useState<string | null>(null);
+  const [addSubmissionSuccess, setAddSubmissionSuccess] = useState<string | null>(null);
+  const addSubmissionPaintingRef = React.useRef<HTMLInputElement>(null);
 
   const authorCoverInputRef = React.useRef<HTMLInputElement>(null);
   const authorInlineInputRef = React.useRef<HTMLInputElement>(null);
@@ -494,7 +532,7 @@ function EditorialDashboardContent() {
   const [registrationsList, setRegistrationsList] = useState<any[]>([]);
   const [loadingRegistrations, setLoadingRegistrations] = useState(false);
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
-  const [eventFormType, setEventFormType] = useState<"READING_SESSION" | "DISCUSSION" | "WORKSHOP" | "PAST_ARCHIVE">("READING_SESSION");
+  const [eventFormType, setEventFormType] = useState<"READING_SESSION" | "DISCUSSION" | "WORKSHOP" | "EXHIBITION" | "FILM_SCREENING" | "PAST_ARCHIVE">("READING_SESSION");
   const [eventFormTitle, setEventFormTitle] = useState("");
   const [eventFormDesc, setEventFormDesc] = useState("");
   const [eventFormLoc, setEventFormLoc] = useState("");
@@ -502,6 +540,7 @@ function EditorialDashboardContent() {
   const [eventFormDay, setEventFormDay] = useState("");
   const [eventFormMonthYear, setEventFormMonthYear] = useState("");
   const [eventFormImage, setEventFormImage] = useState("");
+  const [eventFormImages, setEventFormImages] = useState<string[]>([]);
   const [uploadingEventImage, setUploadingEventImage] = useState(false);
   const [eventFormRegisterHref, setEventFormRegisterHref] = useState("");
   const [eventFormPublished, setEventFormPublished] = useState(true);
@@ -528,28 +567,47 @@ function EditorialDashboardContent() {
   const [bookFormPreorderLink, setBookFormPreorderLink] = useState("");
   const [bookFormPublished, setBookFormPublished] = useState(true);
   const [submittingBook, setSubmittingBook] = useState(false);
+  const [uploadingBookCover, setUploadingBookCover] = useState(false);
 
   const resetBookForm = () => {
     setEditingBookId(null);
     setBookFormTitle("");
     setBookFormAuthor("");
-    setBookFormEditionTag("Print Edition");
-    setBookFormDesc("");
     setBookFormCoverImage("");
     setBookFormPreorderLink("");
     setBookFormPublished(true);
   };
 
+  const handleBookCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingBookCover(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await apiFetch(`${API_BASE_URL}/uploads/book-cover`, { method: "POST", body: formData });
+      if (res.ok) {
+        const json = await res.json();
+        setBookFormCoverImage(json.url);
+      } else {
+        alert("Failed to upload cover image.");
+      }
+    } catch (err) {
+      console.error("Error uploading book cover image", err);
+      alert("Error uploading cover image.");
+    } finally {
+      setUploadingBookCover(false);
+    }
+  };
+
   const handleSaveBook = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!bookFormTitle.trim() || !bookFormAuthor.trim() || !bookFormDesc.trim()) return;
+    if (!bookFormTitle.trim() || !bookFormAuthor.trim()) return;
     setSubmittingBook(true);
     try {
       const payload: any = {
         title: bookFormTitle.trim(),
         author: bookFormAuthor.trim(),
-        editionTag: bookFormEditionTag.trim() || "Print Edition",
-        description: bookFormDesc.trim(),
         isPublished: bookFormPublished,
       };
       if (bookFormCoverImage.trim()) payload.coverImage = bookFormCoverImage.trim();
@@ -881,6 +939,7 @@ function EditorialDashboardContent() {
         localStorage.setItem("akam_user", JSON.stringify(uData));
 
         if (["EDITOR", "ADMIN"].includes(uData.role)) {
+          fetchAllPlatformCategories();
           await fetchDashboardData(activeTab, currentPage, searchQuery);
         }
       } else {
@@ -891,6 +950,19 @@ function EditorialDashboardContent() {
       setUser(null);
     } finally {
       setAuthChecking(false);
+    }
+  };
+
+  const fetchAllPlatformCategories = async () => {
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/categories?limit=100`);
+      if (res.ok) {
+        const json = await res.json();
+        const list = Array.isArray(json) ? json : json.data || [];
+        setAllPlatformCategories(list);
+      }
+    } catch (e) {
+      console.error("Error loading categories", e);
     }
   };
 
@@ -1061,8 +1133,7 @@ function EditorialDashboardContent() {
         }
       } else if (tab === "reviews") {
         const rSearch = query ? `&search=${encodeURIComponent(query)}` : "";
-        const rFeatured = reviewFeaturedFilter !== "ALL" ? `&featured=${reviewFeaturedFilter === "FEATURED" ? "true" : "false"}` : "";
-        const revRes = await apiFetch(`${API_BASE_URL}/stories/comments/editorial?page=${page}&limit=10${rSearch}${rFeatured}`);
+        const revRes = await apiFetch(`${API_BASE_URL}/editorial/reviews?page=${page}&limit=10${rSearch}`);
         if (revRes.ok) {
           const json = await revRes.json();
           if (json.data) {
@@ -1080,32 +1151,90 @@ function EditorialDashboardContent() {
     }
   };
 
-  const handleToggleFeaturedReview = async (commentId: string) => {
+  const handleReviewImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingReviewImage(true);
     try {
-      const res = await apiFetch(`${API_BASE_URL}/stories/comments/${commentId}/toggle-featured`, {
-        method: "PATCH",
-      });
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await apiFetch(`${API_BASE_URL}/uploads/review-image`, { method: "POST", body: formData });
       if (res.ok) {
-        setFeedbackMessage("Reader review homepage featured status updated.");
+        const json = await res.json();
+        setReviewFormImage(json.url);
+      } else {
+        alert("Failed to upload reviewer photo.");
+      }
+    } catch (err) {
+      console.error("Error uploading review image", err);
+      alert("Error uploading reviewer photo.");
+    } finally {
+      setUploadingReviewImage(false);
+    }
+  };
+
+  const handleSaveReview = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reviewFormName.trim() || !reviewFormQuote.trim()) return;
+    setSubmittingReview(true);
+    try {
+      const payload: any = {
+        name: reviewFormName.trim(),
+        role: reviewFormRole.trim() || undefined,
+        quote: reviewFormQuote.trim(),
+        isPublished: reviewFormPublished,
+      };
+      if (reviewFormImage.trim()) payload.image = reviewFormImage.trim();
+
+      const url = editingReviewId
+        ? `${API_BASE_URL}/editorial/reviews/${editingReviewId}`
+        : `${API_BASE_URL}/editorial/reviews`;
+      const method = editingReviewId ? "PATCH" : "POST";
+
+      const res = await apiFetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (res.ok) {
+        setFeedbackMessage(editingReviewId ? "Review updated successfully!" : "Review created successfully!");
+        fetch("/api/revalidate?path=/").catch(() => {});
+        setShowAddReviewModal(false);
+        resetReviewForm();
         fetchDashboardData("reviews", currentPage, searchQuery);
         setTimeout(() => setFeedbackMessage(null), 3000);
       } else {
         const errData = await res.json().catch(() => ({}));
-        alert(errData.message || "Failed to toggle review featured status.");
+        alert(`Failed to save review: ${errData.message || res.statusText}`);
       }
-    } catch (err) {
-      console.error("Failed to toggle featured review", err);
+    } catch (err: any) {
+      console.error("Failed to save review", err);
+      alert(`Error saving review: ${err.message || err}`);
+    } finally {
+      setSubmittingReview(false);
     }
   };
 
-  const handleDeleteReviewComment = async (commentId: string) => {
-    if (!confirm("Are you sure you want to delete this reader review comment?")) return;
+  const handleTogglePublishReview = async (id: string) => {
     try {
-      const res = await apiFetch(`${API_BASE_URL}/stories/comments/${commentId}`, {
-        method: "DELETE",
-      });
+      const res = await apiFetch(`${API_BASE_URL}/editorial/reviews/${id}/toggle-publish`, { method: "PATCH" });
       if (res.ok) {
-        setFeedbackMessage("Reader review deleted successfully.");
+        setFeedbackMessage("Review publication status updated.");
+        fetchDashboardData("reviews", currentPage, searchQuery);
+        setTimeout(() => setFeedbackMessage(null), 3000);
+      }
+    } catch (err) {
+      console.error("Failed to toggle publish review", err);
+    }
+  };
+
+  const handleDeleteReview = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this reader review/testimonial?")) return;
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/editorial/reviews/${id}`, { method: "DELETE" });
+      if (res.ok) {
+        setFeedbackMessage("Review deleted successfully.");
         fetchDashboardData("reviews", currentPage, searchQuery);
         setTimeout(() => setFeedbackMessage(null), 3000);
       }
@@ -1136,13 +1265,14 @@ function EditorialDashboardContent() {
     e.preventDefault();
     if (!eventFormTitle.trim() || !eventFormDesc.trim()) return;
 
-    if (["WORKSHOP", "PAST_ARCHIVE"].includes(eventFormType) && !eventFormImage.trim()) {
+    if (["WORKSHOP", "PAST_ARCHIVE"].includes(eventFormType) && !eventFormImage.trim() && eventFormImages.length === 0) {
       alert("Cover image is required for Workshop and Past Archive events.");
       return;
     }
 
     setSubmittingEvent(true);
     try {
+      const imagesList = eventFormImages.length > 0 ? eventFormImages : (eventFormImage.trim() ? [eventFormImage.trim()] : []);
       const payload = {
         type: eventFormType,
         title: eventFormTitle.trim(),
@@ -1151,7 +1281,8 @@ function EditorialDashboardContent() {
         time: eventFormTime.trim() || undefined,
         day: eventFormDay.trim() || undefined,
         monthYear: eventFormMonthYear.trim() || undefined,
-        imageSrc: eventFormImage.trim() || undefined,
+        imageSrc: eventFormImage.trim() || imagesList[0] || undefined,
+        images: imagesList,
         registerHref: eventFormRegisterHref.trim() || undefined,
         isPublished: eventFormPublished,
       };
@@ -1291,24 +1422,31 @@ function EditorialDashboardContent() {
   };
 
   const handleEventImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
 
     setUploadingEventImage(true);
+    const newUrls: string[] = [];
+
     try {
-      const formData = new FormData();
-      formData.append("file", file);
+      for (let i = 0; i < files.length; i++) {
+        const formData = new FormData();
+        formData.append("file", files[i]);
 
-      const res = await apiFetch(`${API_BASE_URL}/uploads/image`, {
-        method: "POST",
-        body: formData,
-      });
+        const res = await apiFetch(`${API_BASE_URL}/uploads/image`, {
+          method: "POST",
+          body: formData,
+        });
 
-      if (res.ok) {
-        const json = await res.json();
-        setEventFormImage(json.url);
-      } else {
-        alert("Failed to upload image. Please try again.");
+        if (res.ok) {
+          const json = await res.json();
+          if (json.url) newUrls.push(json.url);
+        }
+      }
+
+      if (newUrls.length > 0) {
+        setEventFormImages((prev) => [...prev, ...newUrls]);
+        if (!eventFormImage) setEventFormImage(newUrls[0]);
       }
     } catch (err) {
       console.error("Error uploading image", err);
@@ -1328,6 +1466,7 @@ function EditorialDashboardContent() {
     setEventFormDay("");
     setEventFormMonthYear("");
     setEventFormImage("");
+    setEventFormImages([]);
     setEventFormRegisterHref("");
     setEventFormPublished(true);
   };
@@ -1517,65 +1656,7 @@ function EditorialDashboardContent() {
     return result.trim();
   };
 
-  const handleCreateAuthorSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!authorFormName.trim() || !authorFormEmail.trim()) {
-      alert("Name and email are required.");
-      return;
-    }
 
-    setSavingAuthor(true);
-    try {
-      let avatarUrl = "";
-      if (authorFormAvatarFile) {
-        const formData = new FormData();
-        formData.append("file", authorFormAvatarFile);
-        const upRes = await apiFetch(`${API_BASE_URL}/uploads/image`, {
-          method: "POST",
-          body: formData,
-        });
-        if (upRes.ok) {
-          const json = await upRes.json();
-          avatarUrl = json.url;
-        }
-      }
-
-      const res = await apiFetch(`${API_BASE_URL}/users/create-author`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: authorFormName.trim(),
-          email: authorFormEmail.trim(),
-          bio: authorFormBio.trim(),
-          avatarUrl: avatarUrl || undefined,
-          isFeatured: authorFormIsFeatured,
-          sortOrder: authorFormSortOrder,
-        }),
-      });
-
-      if (res.ok) {
-        setFeedbackMessage(`Author '${authorFormName}' registered successfully!`);
-        setRegisterAuthorModalOpen(false);
-        setAuthorFormName("");
-        setAuthorFormEmail("");
-        setAuthorFormBio("");
-        setAuthorFormAvatarFile(null);
-        setAuthorFormAvatarPreview(null);
-        setAuthorFormIsFeatured(false);
-        setAuthorFormSortOrder(0);
-        fetchDashboardData("authors", currentPage, searchQuery);
-        setTimeout(() => setFeedbackMessage(null), 3500);
-      } else {
-        const errData = await res.json();
-        alert(errData.message || "Failed to register author");
-      }
-    } catch (err) {
-      console.error(err);
-      alert("Error registering author");
-    } finally {
-      setSavingAuthor(false);
-    }
-  };
 
   const handleAuthorEditorKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -1626,7 +1707,7 @@ function EditorialDashboardContent() {
     const markdownContent = convertHtmlToMarkdown(rawEditorHtml);
 
     if (!storyStudioTitle.trim() || !markdownContent.trim()) {
-      alert("Please enter a story title and content.");
+      alert("Please enter a title and content.");
       return;
     }
 
@@ -1646,7 +1727,7 @@ function EditorialDashboardContent() {
 
       if (!res.ok) {
         const errData = await res.json();
-        throw new Error(errData.message || "Failed to create story");
+        throw new Error(errData.message || "Failed to create article / story");
       }
 
       const story = await res.json();
@@ -1661,10 +1742,10 @@ function EditorialDashboardContent() {
       }
 
       if (publishDirectly) {
-        setFeedbackMessage(`Story '${storyStudioTitle}' created & published for ${storyAuthorTarget.name || storyAuthorTarget.email}!`);
+        setFeedbackMessage(`Article / Story '${storyStudioTitle}' created & published for ${storyAuthorTarget.name || storyAuthorTarget.email}!`);
         fetch("/api/revalidate?path=/").catch(() => {});
       } else {
-        setFeedbackMessage(`Story draft created for ${storyAuthorTarget.name || storyAuthorTarget.email}!`);
+        setFeedbackMessage(`Article / Story draft created for ${storyAuthorTarget.name || storyAuthorTarget.email}!`);
       }
 
       setAuthorStoryStudioOpen(false);
@@ -1676,9 +1757,106 @@ function EditorialDashboardContent() {
       setTimeout(() => setFeedbackMessage(null), 3500);
     } catch (err: any) {
       console.error(err);
-      alert(err.message || "Error creating story for author");
+      alert(err.message || "Error creating article / story for author");
     } finally {
       setSavingAuthorStory(false);
+    }
+  };
+
+  const getAddSubmissionVideoEmbed = (url: string) => {
+    const ytMatch = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
+    if (ytMatch) return { type: "youtube" as const, id: ytMatch[1] };
+    const vimeoMatch = url.match(/vimeo\.com\/(?:video\/)?(\d+)/);
+    if (vimeoMatch) return { type: "vimeo" as const, id: vimeoMatch[1] };
+    return null;
+  };
+
+  const handleAuthorSubmissionSubmit = async (publishDirectly: boolean) => {
+    if (!addSubmissionAuthorTarget) return;
+
+    if (!addSubmissionTitle.trim()) {
+      setAddSubmissionError("Please enter a title.");
+      return;
+    }
+    if (!addSubmissionDescription.trim()) {
+      setAddSubmissionError("Description is required.");
+      return;
+    }
+
+    if (addSubmissionType === "PAINTING" && !addSubmissionPaintingFile && !addSubmissionPaintingPreview) {
+      setAddSubmissionError("Please upload a painting artwork image.");
+      return;
+    }
+
+    if (addSubmissionType === "VIDEO") {
+      if (!addSubmissionVideoUrl.trim()) {
+        setAddSubmissionError("Please enter a video URL.");
+        return;
+      }
+      const embed = getAddSubmissionVideoEmbed(addSubmissionVideoUrl);
+      if (!embed) {
+        setAddSubmissionError("Please enter a valid YouTube or Vimeo URL.");
+        return;
+      }
+    }
+
+    setSavingAddSubmission(true);
+    setAddSubmissionError(null);
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/stories`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: addSubmissionTitle.trim(),
+          description: addSubmissionDescription.trim(),
+          content: addSubmissionDescription.trim(),
+          category: addSubmissionCategory || (addSubmissionType === "PAINTING" ? "Art" : "Cinema"),
+          authorId: addSubmissionAuthorTarget.id,
+          submissionType: addSubmissionType,
+          mediaUrl: addSubmissionType === "VIDEO" ? addSubmissionVideoUrl.trim() : undefined,
+          status: publishDirectly ? "APPROVED" : "DRAFT",
+        }),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.message || `Failed to create ${addSubmissionType.toLowerCase()}`);
+      }
+
+      const created = await res.json();
+
+      if (addSubmissionPaintingFile) {
+        const formData = new FormData();
+        formData.append("file", addSubmissionPaintingFile);
+        await apiFetch(`${API_BASE_URL}/stories/${created.id}/cover`, {
+          method: "POST",
+          body: formData,
+        });
+      }
+
+      const typeName = addSubmissionType === "PAINTING" ? "Painting" : "Video";
+      const targetName = addSubmissionAuthorTarget.name || addSubmissionAuthorTarget.email;
+      if (publishDirectly) {
+        setFeedbackMessage(`${typeName} '${addSubmissionTitle}' created & published for ${targetName}!`);
+        fetch("/api/revalidate?path=/").catch(() => {});
+      } else {
+        setFeedbackMessage(`${typeName} draft created for ${targetName}!`);
+      }
+
+      setAddSubmissionModalOpen(false);
+      setAddSubmissionTitle("");
+      setAddSubmissionDescription("");
+      setAddSubmissionVideoUrl("");
+      setAddSubmissionPaintingFile(null);
+      setAddSubmissionPaintingPreview(null);
+      setAddSubmissionError(null);
+      fetchDashboardData("catalog");
+      setTimeout(() => setFeedbackMessage(null), 3500);
+    } catch (err: any) {
+      console.error(err);
+      setAddSubmissionError(err.message || `Error creating ${addSubmissionType.toLowerCase()}`);
+    } finally {
+      setSavingAddSubmission(false);
     }
   };
 
@@ -1718,7 +1896,7 @@ function EditorialDashboardContent() {
     if (user && ["EDITOR", "ADMIN"].includes(user.role)) {
       fetchDashboardData(activeTab, currentPage, searchQuery);
     }
-  }, [activeTab, currentPage, reportStatusFilter, reportTypeFilter, inquiryStatusFilter, eventFilterType, reviewFeaturedFilter]);
+  }, [activeTab, currentPage, reportStatusFilter, reportTypeFilter, inquiryStatusFilter, eventFilterType]);
 
   // Server-side debounced search handler
   useEffect(() => {
@@ -1742,7 +1920,7 @@ function EditorialDashboardContent() {
       });
 
       if (res.ok) {
-        setFeedbackMessage(decision === "APPROVED" ? "Story approved and published!" : "Story rejected with feedback sent to author.");
+        setFeedbackMessage(decision === "APPROVED" ? "Submission approved and published!" : "Submission rejected with feedback sent to author.");
         if (decision === "APPROVED") {
           fetch("/api/revalidate?path=/").catch(() => {});
         }
@@ -1752,11 +1930,11 @@ function EditorialDashboardContent() {
         fetchDashboardData();
       } else {
         const errData = await res.json();
-        alert(errData.message || "Failed to review story");
+        alert(errData.message || "Failed to review submission");
       }
     } catch (err) {
       console.error(err);
-      alert("Error reviewing story");
+      alert("Error reviewing submission");
     } finally {
       setActionLoading(false);
       setTimeout(() => setFeedbackMessage(null), 3500);
@@ -1891,10 +2069,74 @@ function EditorialDashboardContent() {
     }
   };
 
+  const handleCreateAuthorSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!authorFormName.trim() || !authorFormEmail.trim()) {
+      alert("Name and email are required.");
+      return;
+    }
+
+    setSavingAuthor(true);
+    try {
+      let avatarUrl = "";
+      if (authorFormAvatarFile) {
+        const formData = new FormData();
+        formData.append("file", authorFormAvatarFile);
+        const upRes = await apiFetch(`${API_BASE_URL}/uploads/image`, {
+          method: "POST",
+          body: formData,
+        });
+        if (upRes.ok) {
+          const json = await upRes.json();
+          avatarUrl = json.url;
+        }
+      }
+
+      const res = await apiFetch(`${API_BASE_URL}/users/create-author`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: authorFormName.trim(),
+          email: authorFormEmail.trim(),
+          phone: authorFormPhone.trim() || undefined,
+          privacyPolicyAccepted: true,
+          bio: authorFormBio.trim(),
+          avatarUrl: avatarUrl || undefined,
+          isFeatured: authorFormIsFeatured,
+          sortOrder: authorFormSortOrder,
+        }),
+      });
+
+      if (res.ok) {
+        setFeedbackMessage(`Author '${authorFormName}' registered successfully!`);
+        setRegisterAuthorModalOpen(false);
+        setAuthorFormName("");
+        setAuthorFormEmail("");
+        setAuthorFormPhone("");
+        setAuthorFormBio("");
+        setAuthorFormAvatarFile(null);
+        setAuthorFormAvatarPreview(null);
+        setAuthorFormIsFeatured(false);
+        setAuthorFormSortOrder(0);
+        fetchDashboardData("authors", currentPage, searchQuery);
+        setTimeout(() => setFeedbackMessage(null), 3500);
+      } else {
+        const errData = await res.json();
+        alert(errData.message || "Failed to register author");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error registering author");
+    } finally {
+      setSavingAuthor(false);
+    }
+  };
+
   const handleOpenEditAuthor = (user: RosterUser) => {
     setEditingAuthorTarget(user);
     setAuthorEditName(user.name || "");
     setAuthorEditEmail(user.email || "");
+    setAuthorEditPhone(user.phone || "");
     setAuthorEditBio(user.bio || "");
     setAuthorEditRole(user.role === "ADMIN" ? "EDITOR" : user.role || "AUTHOR");
     setAuthorEditAvatarFile(null);
@@ -1940,6 +2182,7 @@ function EditorialDashboardContent() {
         body: JSON.stringify({
           name: authorEditName.trim(),
           email: authorEditEmail.trim(),
+          phone: authorEditPhone.trim() || null,
           bio: authorEditBio.trim(),
           role: authorEditRole,
           avatarUrl: avatarUrl || null,
@@ -1998,13 +2241,13 @@ function EditorialDashboardContent() {
   };
 
   const handleDeleteStory = async (storyId: string) => {
-    if (!confirm("Are you sure you want to delete this story?")) return;
+    if (!confirm("Are you sure you want to delete this content?")) return;
     try {
       const res = await apiFetch(`${API_BASE_URL}/stories/${storyId}`, {
         method: "DELETE",
       });
       if (res.ok) {
-        setFeedbackMessage("Story deleted successfully.");
+        setFeedbackMessage("Content deleted successfully.");
         fetch("/api/revalidate?path=/&tag=stories").catch(() => {});
         fetchDashboardData();
       }
@@ -2014,7 +2257,7 @@ function EditorialDashboardContent() {
   };
 
   const handleUnpublishStory = async (storyId: string) => {
-    if (!confirm("Are you sure you want to unpublish this story? It will move out of the public catalog.")) return;
+    if (!confirm("Are you sure you want to unpublish this content? It will move out of the public catalog.")) return;
     try {
       const res = await apiFetch(`${API_BASE_URL}/stories/${storyId}/review`, {
         method: "POST",
@@ -2022,17 +2265,17 @@ function EditorialDashboardContent() {
         body: JSON.stringify({ decision: "REJECTED", rejectionNote: "Unpublished from public catalog by Editorial Board." }),
       });
       if (res.ok) {
-        setFeedbackMessage("Story unpublished successfully.");
+        setFeedbackMessage("Content unpublished successfully.");
         fetch("/api/revalidate?path=/&tag=stories").catch(() => {});
         fetchDashboardData(activeTab, currentPage, searchQuery);
         setTimeout(() => setFeedbackMessage(null), 3000);
       } else {
         const err = await res.json();
-        alert(err.message || "Failed to unpublish story");
+        alert(err.message || "Failed to unpublish content");
       }
     } catch (err) {
       console.error(err);
-      alert("Error unpublishing story");
+      alert("Error unpublishing content");
     }
   };
 
@@ -2054,6 +2297,7 @@ function EditorialDashboardContent() {
         setNewCatMalName("");
         setNewCatDesc("");
         setFeedbackMessage(`Category "${newCatName.trim()}" created successfully!`);
+        fetchAllPlatformCategories();
         fetchDashboardData();
         setTimeout(() => setFeedbackMessage(null), 3000);
       } else {
@@ -2074,6 +2318,7 @@ function EditorialDashboardContent() {
       });
       if (res.ok) {
         setFeedbackMessage("Category deleted successfully.");
+        fetchAllPlatformCategories();
         fetchDashboardData();
         setTimeout(() => setFeedbackMessage(null), 3000);
       } else {
@@ -2087,7 +2332,7 @@ function EditorialDashboardContent() {
 
   const renderStoryContent = (contentStr: string) => {
     if (!contentStr || !contentStr.trim()) {
-      return <p className="text-gray-400 italic py-4">No narrative text content submitted for this story.</p>;
+      return <p className="text-gray-400 italic py-4">No narrative text content submitted.</p>;
     }
 
     // ── Markdown-to-HTML inline converter (same logic as submit page) ──────
@@ -2338,7 +2583,7 @@ function EditorialDashboardContent() {
               }`}
             >
               <Tag className="w-4 h-4 text-purple-500 shrink-0" />
-              <span>Story Categories</span>
+              <span>Categories & Taxonomy</span>
             </button>
 
             <button
@@ -2503,9 +2748,9 @@ function EditorialDashboardContent() {
               <h1 className="text-2xl sm:text-3xl font-bold text-gray-950 tracking-tight">
                 {activeTab === "queue" && "Pending Review Queue"}
                 {activeTab === "reports" && "Reported Content Moderation"}
-                {activeTab === "catalog" && "Published Story Catalog"}
+                {activeTab === "catalog" && "Published Content Catalog"}
                 {activeTab === "authors" && "User & Author Roster"}
-                {activeTab === "categories" && "Story Categories & Taxonomy"}
+                {activeTab === "categories" && "Categories & Taxonomy"}
                 {activeTab === "notifications" && "Editorial Alerts & Logs"}
                 {activeTab === "settings" && "Home Page Editor's Note"}
                 {activeTab === "communities" && "Community Moderation & Management"}
@@ -2532,11 +2777,11 @@ function EditorialDashboardContent() {
 
             <p className="text-xs sm:text-sm text-gray-500 font-medium leading-relaxed max-w-3xl">
               {activeTab === "queue" && "Review pending author submissions and approve or reject content."}
-              {activeTab === "reports" && "Investigate reader flag reports submitted against stories and comments."}
-              {activeTab === "catalog" && "Browse all active stories currently published on AKAM Digital."}
+              {activeTab === "reports" && "Investigate reader flag reports submitted against published content and comments."}
+              {activeTab === "catalog" && "Browse all active works (articles, paintings, videos) currently published on AKAM Digital."}
               {activeTab === "authors" && "Manage all registered platform users, writers, and role permissions."}
               {activeTab === "categories" && "Manage category labels, Malayalam translations, and genre classifications."}
-              {activeTab === "notifications" && "Event logs for story submissions, approvals, and rejections."}
+              {activeTab === "notifications" && "Event logs for content submissions, approvals, and rejections."}
               {activeTab === "settings" && "Update the featured Editor's Note title and message displayed on the main homepage."}
               {activeTab === "communities" && "Moderate community posts and comments, lock threads, pin posts, and inspect community rosters."}
               {activeTab === "events" && "Manage upcoming reading sessions, discussions, workshops, and past archives."}
@@ -2571,7 +2816,7 @@ function EditorialDashboardContent() {
                 <div className="text-center py-20 bg-white rounded-[28px] border border-gray-200 p-8 shadow-xs">
                   <ShieldCheck className="w-12 h-12 mx-auto text-emerald-500 mb-3" />
                   <h3 className="text-xl font-bold text-gray-900 mb-1">Queue Clean & Up to Date!</h3>
-                  <p className="text-sm text-gray-500">There are no pending story submissions matching your search criteria.</p>
+                  <p className="text-sm text-gray-500">There are no pending submissions matching your search criteria.</p>
                 </div>
               ) : (
                 <>
@@ -2626,16 +2871,16 @@ function EditorialDashboardContent() {
                               type="button"
                               onClick={() => setSelectedStory(story)}
                               className="flex-1 inline-flex items-center justify-center gap-1.5 py-2 px-2 bg-white hover:bg-gray-100 border border-gray-300 text-gray-900 text-xs font-semibold rounded-xl transition-all cursor-pointer shadow-2xs active:scale-95"
-                              title="Read story"
+                              title="Review submission"
                             >
                               <Eye className="w-3.5 h-3.5 text-gray-600 shrink-0" />
-                              <span>Read</span>
+                              <span>View</span>
                             </button>
                             <button
                               type="button"
                               onClick={() => handleReview(story.id, "APPROVED")}
                               className="flex-1 inline-flex items-center justify-center gap-1.5 py-2 px-2 bg-gray-950 hover:bg-black text-white text-xs font-semibold rounded-xl transition-all cursor-pointer shadow-2xs active:scale-95"
-                              title="Approve story"
+                              title="Approve submission"
                             >
                               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                               <span>Approve</span>
@@ -2644,7 +2889,7 @@ function EditorialDashboardContent() {
                               type="button"
                               onClick={() => setRejectingStory(story)}
                               className="flex-1 inline-flex items-center justify-center gap-1.5 py-2 px-2 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-600 text-xs font-semibold rounded-xl transition-all cursor-pointer shadow-2xs active:scale-95"
-                              title="Reject story"
+                              title="Reject submission"
                             >
                               <XCircle className="w-3.5 h-3.5 text-rose-500 shrink-0" />
                               <span>Reject</span>
@@ -3066,6 +3311,15 @@ function EditorialDashboardContent() {
                         {s.category && (
                           <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mt-0.5 block">Category: {s.category}</span>
                         )}
+                        <div className="mt-1.5">
+                          {s.submissionType === "PAINTING" ? (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-purple-700 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-lg">🎨 Painting</span>
+                          ) : s.submissionType === "VIDEO" ? (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-lg">🎬 Video</span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-gray-600 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded-lg">📝 Article / Story</span>
+                          )}
+                        </div>
                       </div>
                       <span className="bg-[#E4F953] text-[#040706] font-bold text-[10px] uppercase px-2.5 py-1 rounded-xl shrink-0 shadow-xs">
                         {s.status}
@@ -3113,10 +3367,11 @@ function EditorialDashboardContent() {
               {/* Desktop Table View (>= 640px) */}
               <div className="hidden sm:block bg-white border border-gray-200 rounded-[28px] overflow-hidden shadow-xs">
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs border-collapse min-w-[650px]">
+                  <table className="w-full text-left text-xs border-collapse min-w-[700px]">
                     <thead>
                       <tr className="bg-gray-50 border-b border-gray-200 text-gray-500 font-semibold uppercase tracking-wider">
-                        <th className="py-4 px-6">Story Title</th>
+                        <th className="py-4 px-6">Title</th>
+                        <th className="py-4 px-6">Type</th>
                         <th className="py-4 px-6">Category</th>
                         <th className="py-4 px-6">Author</th>
                         <th className="py-4 px-6">Status</th>
@@ -3128,6 +3383,15 @@ function EditorialDashboardContent() {
                       {allStories.map((s) => (
                         <tr key={s.id} className="hover:bg-gray-50/80 transition-colors">
                           <td className="py-4 px-6 font-semibold text-gray-900">{s.title}</td>
+                          <td className="py-4 px-6 whitespace-nowrap">
+                            {s.submissionType === "PAINTING" ? (
+                              <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-purple-700 bg-purple-50 border border-purple-200 px-2.5 py-1 rounded-xl">🎨 Painting</span>
+                            ) : s.submissionType === "VIDEO" ? (
+                              <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2.5 py-1 rounded-xl">🎬 Video</span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-gray-700 bg-gray-100 border border-gray-200 px-2.5 py-1 rounded-xl">📝 Article / Story</span>
+                            )}
+                          </td>
                           <td className="py-4 px-6 text-gray-600 font-medium">{s.category || "General"}</td>
                           <td className="py-4 px-6 text-gray-600">{s.authorName || s.authorEmail}</td>
                           <td className="py-4 px-6">
@@ -3224,6 +3488,18 @@ function EditorialDashboardContent() {
                         <div className="min-w-0">
                           <h4 className="font-bold text-gray-900 text-sm truncate">{u.name || "No name set"}</h4>
                           <p className="text-xs text-gray-500 truncate">{u.email}</p>
+                          {u.phone && <p className="text-xs text-gray-700 font-medium truncate mt-0.5">📞 {u.phone}</p>}
+                          <div className="mt-1">
+                            {u.privacyPolicyAccepted ? (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-lg">
+                                <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Terms Accepted
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-lg">
+                                <Clock className="w-3 h-3 text-amber-500" /> Terms Pending
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
                       <select
@@ -3276,10 +3552,46 @@ function EditorialDashboardContent() {
                             setStoryStudioCoverPreview(null);
                             setAuthorStoryStudioOpen(true);
                           }}
-                          className="text-xs px-2.5 py-1.5 border border-gray-300 font-semibold cursor-pointer shadow-2xs"
+                          className="text-xs px-2.5 py-1.5 border border-gray-300 font-semibold cursor-pointer shadow-2xs whitespace-nowrap"
                         >
-                          + Story
+                          + Article / Story
                         </Button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAddSubmissionAuthorTarget(u);
+                            setAddSubmissionType("PAINTING");
+                            setAddSubmissionTitle("");
+                            setAddSubmissionDescription("");
+                            setAddSubmissionVideoUrl("");
+                            setAddSubmissionPaintingFile(null);
+                            setAddSubmissionPaintingPreview(null);
+                            setAddSubmissionError(null);
+                            setAddSubmissionSuccess(null);
+                            setAddSubmissionModalOpen(true);
+                          }}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold text-purple-700 bg-purple-50 border border-purple-200 hover:bg-purple-100 shadow-xs cursor-pointer transition-all"
+                        >
+                          🎨 + Painting
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAddSubmissionAuthorTarget(u);
+                            setAddSubmissionType("VIDEO");
+                            setAddSubmissionTitle("");
+                            setAddSubmissionDescription("");
+                            setAddSubmissionVideoUrl("");
+                            setAddSubmissionPaintingFile(null);
+                            setAddSubmissionPaintingPreview(null);
+                            setAddSubmissionError(null);
+                            setAddSubmissionSuccess(null);
+                            setAddSubmissionModalOpen(true);
+                          }}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 hover:bg-blue-100 shadow-xs cursor-pointer transition-all"
+                        >
+                          🎬 + Video
+                        </button>
                         <button
                           type="button"
                           onClick={() => handleToggleFeaturedAuthor(u.id)}
@@ -3340,7 +3652,9 @@ function EditorialDashboardContent() {
                     <thead>
                       <tr className="bg-gray-50 border-b border-gray-200 text-gray-500 font-semibold uppercase tracking-wider whitespace-nowrap">
                         <th className="py-4 px-6 min-w-[200px]">User</th>
-                        <th className="py-4 px-6 min-w-[220px]">Email Address</th>
+                        <th className="py-4 px-6 min-w-[200px]">Email Address</th>
+                        <th className="py-4 px-6 min-w-[150px]">Phone Number</th>
+                        <th className="py-4 px-6 min-w-[140px]">Privacy Terms</th>
                         <th className="py-4 px-6 min-w-[140px]">Role Tier</th>
                         <th className="py-4 px-6 min-w-[170px]">Masika Featured</th>
                         <th className="py-4 px-6 min-w-[130px]">Priority (#)</th>
@@ -3364,6 +3678,26 @@ function EditorialDashboardContent() {
                             </div>
                           </td>
                           <td className="py-4 px-6 text-gray-600 font-medium">{u.email}</td>
+                          <td className="py-4 px-6 text-gray-700 font-medium whitespace-nowrap">
+                            {u.phone ? (
+                              <span className="font-medium text-gray-900">{u.phone}</span>
+                            ) : (
+                              <span className="text-gray-400 text-xs italic">—</span>
+                            )}
+                          </td>
+                          <td className="py-4 px-6 whitespace-nowrap">
+                            {u.privacyPolicyAccepted ? (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-xl">
+                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                                Accepted
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-xl">
+                                <Clock className="w-3.5 h-3.5 text-amber-500" />
+                                Pending
+                              </span>
+                            )}
+                          </td>
                           <td className="py-4 px-6 whitespace-nowrap">
                             <select
                               value={u.role}
@@ -3471,8 +3805,44 @@ function EditorialDashboardContent() {
                                 }}
                                 className="border border-gray-300 text-xs px-3 py-1.5 font-semibold cursor-pointer shadow-xs hover:bg-gray-100 inline-flex items-center gap-1.5 whitespace-nowrap"
                               >
-                                + Story
+                                + Article / Story
                               </Button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setAddSubmissionAuthorTarget(u);
+                                  setAddSubmissionType("PAINTING");
+                                  setAddSubmissionTitle("");
+                                  setAddSubmissionDescription("");
+                                  setAddSubmissionVideoUrl("");
+                                  setAddSubmissionPaintingFile(null);
+                                  setAddSubmissionPaintingPreview(null);
+                                  setAddSubmissionError(null);
+                                  setAddSubmissionSuccess(null);
+                                  setAddSubmissionModalOpen(true);
+                                }}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-purple-700 bg-purple-50 border border-purple-200 hover:bg-purple-100 shadow-xs cursor-pointer transition-all whitespace-nowrap"
+                              >
+                                🎨 + Painting
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setAddSubmissionAuthorTarget(u);
+                                  setAddSubmissionType("VIDEO");
+                                  setAddSubmissionTitle("");
+                                  setAddSubmissionDescription("");
+                                  setAddSubmissionVideoUrl("");
+                                  setAddSubmissionPaintingFile(null);
+                                  setAddSubmissionPaintingPreview(null);
+                                  setAddSubmissionError(null);
+                                  setAddSubmissionSuccess(null);
+                                  setAddSubmissionModalOpen(true);
+                                }}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 hover:bg-blue-100 shadow-xs cursor-pointer transition-all whitespace-nowrap"
+                              >
+                                🎬 + Video
+                              </button>
                             </div>
                           </td>
                         </tr>
@@ -3492,7 +3862,7 @@ function EditorialDashboardContent() {
               {/* Add Category Card */}
               <div className="bg-white border border-gray-200 rounded-[28px] p-6 shadow-xs">
                 <h3 className="text-lg font-bold text-gray-950 mb-1">Add New Platform Category</h3>
-                <p className="text-xs text-gray-500 mb-6">Create editorial taxonomy labels used across story submission and homepage filtering.</p>
+                <p className="text-xs text-gray-500 mb-6">Create editorial taxonomy labels used across content submissions (articles, paintings, videos) and homepage filtering.</p>
 
                 <form onSubmit={handleAddCategory} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
@@ -3572,7 +3942,7 @@ function EditorialDashboardContent() {
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-gray-500 mt-1">Real-time alerts triggered on story submission, approval, or rejection.</p>
+                  <p className="text-xs text-gray-500 mt-1">Real-time alerts triggered on content submission, approval, or rejection.</p>
                 </div>
                 <Button
                   type="button"
@@ -3916,6 +4286,8 @@ function EditorialDashboardContent() {
                     { id: "READING_SESSION", label: "Reading Sessions" },
                     { id: "DISCUSSION", label: "Discussions" },
                     { id: "WORKSHOP", label: "Workshops" },
+                    { id: "EXHIBITION", label: "Exhibitions" },
+                    { id: "FILM_SCREENING", label: "Film Screenings" },
                     { id: "PAST_ARCHIVE", label: "Past Archives" },
                   ].map((f) => (
                     <button
@@ -4005,6 +4377,7 @@ function EditorialDashboardContent() {
                                 setEventFormDay(ev.day || "");
                                 setEventFormMonthYear(ev.monthYear || "");
                                 setEventFormImage(ev.imageSrc || "");
+                                setEventFormImages(Array.isArray(ev.images) && ev.images.length > 0 ? ev.images : (ev.imageSrc ? [ev.imageSrc] : []));
                                 setEventFormRegisterHref(ev.registerHref || "");
                                 setEventFormPublished(ev.isPublished);
                                 setShowAddEventModal(true);
@@ -4139,10 +4512,18 @@ function EditorialDashboardContent() {
                       className="bg-white rounded-[24px] p-6 border border-gray-200/80 shadow-xs flex flex-col justify-between space-y-4 hover:shadow-md transition-shadow"
                     >
                       <div>
-                        <div className="flex items-start justify-between gap-2 mb-2">
-                          <span className="bg-[#F5EDFF] text-[#8122DB] text-[10px] font-bold px-2.5 py-1 rounded-full">
-                            {book.editionTag || "Print Edition"}
-                          </span>
+                        {book.coverImage && (
+                          <div className="relative w-full aspect-[3/4] rounded-2xl overflow-hidden mb-3 bg-gray-100 border border-gray-100">
+                            <Image
+                              src={formatAssetUrl(book.coverImage)}
+                              alt={book.title}
+                              fill
+                              className="object-cover"
+                              unoptimized
+                            />
+                          </div>
+                        )}
+                        <div className="flex items-center justify-end mb-2">
                           <button
                             onClick={() => handleTogglePublishBook(book.id)}
                             className={`text-[10px] font-bold px-2.5 py-1 rounded-full transition cursor-pointer ${
@@ -4156,18 +4537,7 @@ function EditorialDashboardContent() {
                         </div>
 
                         <h3 className="text-lg font-bold text-gray-950 tracking-tight leading-snug">{book.title}</h3>
-                        <p className="text-xs font-semibold text-gray-500 mb-3">{book.author}</p>
-                        <div className="border-b-2 border-[#EBE0FF] my-3" />
-                        <p className="text-xs text-gray-600 line-clamp-2 leading-relaxed font-normal">{book.description}</p>
-                        {book.description && book.description.length > 80 && (
-                          <button
-                            type="button"
-                            onClick={() => setViewingBookModal(book)}
-                            className="text-xs font-semibold text-[#8122DB] underline hover:text-[#6940AF] cursor-pointer mt-1 inline-block transition-colors"
-                          >
-                            Read more
-                          </button>
-                        )}
+                        <p className="text-xs font-semibold text-gray-500 mb-2">{book.author}</p>
                       </div>
 
                       <div className="pt-3 border-t border-gray-100 flex items-center justify-between gap-2">
@@ -4190,8 +4560,6 @@ function EditorialDashboardContent() {
                               setEditingBookId(book.id);
                               setBookFormTitle(book.title);
                               setBookFormAuthor(book.author);
-                              setBookFormEditionTag(book.editionTag || "Print Edition");
-                              setBookFormDesc(book.description);
                               setBookFormCoverImage(book.coverImage || "");
                               setBookFormPreorderLink(book.preorderLink || "");
                               setBookFormPublished(book.isPublished);
@@ -4717,72 +5085,42 @@ function EditorialDashboardContent() {
                 <div>
                   <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider inline-flex items-center gap-1.5 shadow-2xs">
                     <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-                    Reader Curation & Testimonials
+                    Homepage Testimonials & Reviews
                   </span>
-                  <h2 className="text-2xl font-bold text-gray-950 mt-2 tracking-tight">Reader Reviews & Comments</h2>
+                  <h2 className="text-2xl font-bold text-gray-950 mt-2 tracking-tight">Reader Reviews & Testimonials</h2>
                   <p className="text-xs text-gray-500 mt-1 max-w-xl">
-                    Curate reader comments and feature select reviews on the main website homepage slider.
+                    Create, edit, and curate testimonials displayed in the &ldquo;How Akam Makes A Difference&rdquo; section on the homepage.
                   </p>
                 </div>
 
                 <div className="flex items-center gap-3 shrink-0">
-                  <span className="text-xs font-semibold text-gray-700 bg-gray-50 border border-gray-200/80 px-4 py-2.5 rounded-2xl shadow-xs">
-                    Total Reviews: <strong className="text-gray-900">{reviewsMeta.total || reviewsList.length}</strong>
-                  </span>
+                  <Button
+                    type="button"
+                    variant="primary"
+                    size="md"
+                    onClick={() => {
+                      resetReviewForm();
+                      setShowAddReviewModal(true);
+                    }}
+                    className="bg-black hover:bg-gray-800 text-white px-5 py-2.5 rounded-full text-xs font-semibold inline-flex items-center gap-2 shadow-md cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Add New Review</span>
+                  </Button>
                 </div>
               </div>
 
-              {/* Search & Filter Toolbar */}
+              {/* Search & Toolbar */}
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
                 <div className="relative max-w-md w-full">
                   <Search className="absolute left-3.5 top-3 w-4 h-4 text-gray-400" />
                   <input
                     type="text"
-                    placeholder="Search reader reviews by content, story title, or reviewer..."
+                    placeholder="Search reviews by name, role, or quote content..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-2xl text-xs font-medium outline-none focus:border-black shadow-xs transition-all"
                   />
-                </div>
-
-                {/* Status Filter Segment Control */}
-                <div className="flex items-center gap-1.5 bg-gray-100/90 p-1.5 rounded-2xl border border-gray-200/80 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setReviewFeaturedFilter("ALL");
-                      setCurrentPage(1);
-                    }}
-                    className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                      reviewFeaturedFilter === "ALL" ? "bg-white text-gray-950 shadow-xs" : "text-gray-600 hover:text-gray-950"
-                    }`}
-                  >
-                    All Reviews
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setReviewFeaturedFilter("FEATURED");
-                      setCurrentPage(1);
-                    }}
-                    className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                      reviewFeaturedFilter === "FEATURED" ? "bg-emerald-600 text-white shadow-xs" : "text-gray-600 hover:text-gray-950"
-                    }`}
-                  >
-                    <Sparkles className="w-3.5 h-3.5" /> Featured
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setReviewFeaturedFilter("HIDDEN");
-                      setCurrentPage(1);
-                    }}
-                    className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                      reviewFeaturedFilter === "HIDDEN" ? "bg-white text-gray-950 shadow-xs" : "text-gray-600 hover:text-gray-950"
-                    }`}
-                  >
-                    Hidden
-                  </button>
                 </div>
               </div>
 
@@ -4795,82 +5133,86 @@ function EditorialDashboardContent() {
                 <div className="bg-white rounded-[28px] p-12 text-center border border-gray-200/80 shadow-xs">
                   <MessageSquare className="w-10 h-10 text-gray-300 mx-auto mb-3" />
                   <h3 className="text-base font-bold text-gray-900">No Reader Reviews Found</h3>
-                  <p className="text-xs text-gray-500 max-w-sm mx-auto mt-1">
-                    Reader comments posted on stories will appear here for editorial curation and homepage featuring.
+                  <p className="text-xs text-gray-500 max-w-sm mx-auto mt-1 mb-4">
+                    Create testimonials to display on the homepage &ldquo;How Akam Makes A Difference&rdquo; section.
                   </p>
+                  <Button
+                    type="button"
+                    variant="primary"
+                    size="sm"
+                    onClick={() => {
+                      resetReviewForm();
+                      setShowAddReviewModal(true);
+                    }}
+                    className="bg-black text-white"
+                  >
+                    Create First Review
+                  </Button>
                 </div>
               ) : (
                 <div className="space-y-4">
                   {/* Mobile Card List View (< 640px) */}
                   <div className="block sm:hidden space-y-4">
-                    {reviewsList.map((rev) => (
-                      <div key={rev.id} className="bg-white border border-gray-200 rounded-2xl p-4 shadow-xs space-y-3">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex items-center gap-2.5 min-w-0">
-                            <div className="relative w-8 h-8 rounded-full overflow-hidden bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-xs shrink-0 border border-emerald-200">
-                              {rev.userAvatarUrl ? (
-                                <img
-                                  src={rev.userAvatarUrl}
-                                  alt="Avatar"
-                                  className="w-full h-full object-cover rounded-full"
-                                  onError={(e) => {
-                                    const el = e.currentTarget;
-                                    el.style.display = "none";
-                                    const parent = el.parentElement;
-                                    if (parent && !parent.querySelector("span")) {
-                                      const sp = document.createElement("span");
-                                      sp.textContent = (rev.userName || rev.userEmail || "R")[0].toUpperCase();
-                                      parent.appendChild(sp);
-                                    }
-                                  }}
-                                />
-                              ) : (
-                                <span>{(rev.userName || rev.userEmail || "R")[0].toUpperCase()}</span>
-                              )}
+                    {reviewsList.map((rev) => {
+                      const photo = rev.image ? formatAssetUrl(rev.image) : null;
+                      return (
+                        <div key={rev.id} className="bg-white border border-gray-200 rounded-2xl p-4 shadow-xs space-y-3">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="relative w-10 h-10 rounded-full overflow-hidden bg-gray-100 shrink-0 border border-gray-200">
+                                {photo ? (
+                                  <img src={photo} alt={rev.name} className="w-full h-full object-cover" />
+                                ) : (
+                                  <div className="w-full h-full flex items-center justify-center bg-emerald-100 text-emerald-800 font-bold text-sm">
+                                    {rev.name[0]}
+                                  </div>
+                                )}
+                              </div>
+                              <div className="min-w-0">
+                                <h4 className="font-bold text-gray-900 text-xs truncate">{rev.name}</h4>
+                                {rev.role && <p className="text-[10px] text-gray-500 truncate">{rev.role}</p>}
+                              </div>
                             </div>
-                            <div className="min-w-0">
-                              <h4 className="font-bold text-gray-900 text-xs truncate">{rev.userName || rev.userEmail}</h4>
-                              <p className="text-[10px] text-gray-500 truncate">{rev.storyTitle}</p>
-                            </div>
+                            <span
+                              className={`px-2.5 py-1 rounded-xl text-[10px] font-bold ${
+                                rev.isPublished ? "bg-emerald-100 text-emerald-800" : "bg-gray-100 text-gray-600"
+                              }`}
+                            >
+                              {rev.isPublished ? "Published" : "Draft"}
+                            </span>
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => handleToggleFeaturedReview(rev.id)}
-                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[10px] font-semibold shadow-xs shrink-0 transition-all cursor-pointer ${
-                              rev.isFeatured
-                                ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
-                                : "bg-gray-100 text-gray-600 border border-gray-200"
-                            }`}
-                          >
-                            <Sparkles className={`w-3 h-3 ${rev.isFeatured ? "text-emerald-600 fill-emerald-600" : "text-gray-400"}`} />
-                            {rev.isFeatured ? "Featured" : "Hidden"}
-                          </button>
-                        </div>
 
-                        <div
-                          onClick={() => setSelectedReview(rev)}
-                          className="text-xs italic text-gray-800 bg-gray-50 p-3 rounded-xl border border-gray-100 cursor-pointer hover:bg-gray-100/70 transition"
-                        >
-                          &ldquo;{rev.content}&rdquo;
-                        </div>
+                          <div className="text-xs italic text-gray-800 bg-gray-50 p-3 rounded-xl border border-gray-100">
+                            &ldquo;{rev.quote}&rdquo;
+                          </div>
 
-                        <div className="pt-2 border-t border-gray-100 flex items-center justify-between text-[11px] text-gray-500">
-                          <span>{new Date(rev.createdAt).toLocaleDateString()}</span>
-                          <div className="flex items-center gap-3">
-                            <button type="button" onClick={() => setSelectedReview(rev)} className="text-gray-700 hover:text-black font-semibold">
-                              View
+                          <div className="pt-2 border-t border-gray-100 flex items-center justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingReviewId(rev.id);
+                                setReviewFormName(rev.name || "");
+                                setReviewFormRole(rev.role || "");
+                                setReviewFormQuote(rev.quote || "");
+                                setReviewFormImage(rev.image || "");
+                                setReviewFormPublished(rev.isPublished ?? true);
+                                setShowAddReviewModal(true);
+                              }}
+                              className="text-xs font-bold text-gray-700 hover:text-black"
+                            >
+                              Edit
                             </button>
                             <button
                               type="button"
-                              onClick={() => handleDeleteReviewComment(rev.id)}
-                              className="text-rose-600 hover:underline font-semibold"
+                              onClick={() => handleDeleteReview(rev.id)}
+                              className="text-xs font-bold text-rose-600 hover:underline"
                             >
                               Delete
                             </button>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
 
                   {/* Desktop Table View (>= 640px) */}
@@ -4880,109 +5222,238 @@ function EditorialDashboardContent() {
                         <thead>
                           <tr className="bg-gray-50 border-b border-gray-200 text-gray-500 font-semibold uppercase tracking-wider">
                             <th className="py-4 px-6">Reviewer</th>
-                            <th className="py-4 px-6">Story Title</th>
-                            <th className="py-4 px-6">Comment / Review Content</th>
+                            <th className="py-4 px-6">Quote Content</th>
                             <th className="py-4 px-6">Homepage Status</th>
-                            <th className="py-4 px-6">Date</th>
                             <th className="py-4 px-6 text-right">Actions</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100 text-gray-800">
-                          {reviewsList.map((rev) => (
-                            <tr key={rev.id} className="hover:bg-gray-50/80 transition-colors">
-                              <td className="py-4 px-6 font-semibold text-gray-900">
-                                <div className="flex items-center gap-3">
-                                  <div className="relative w-8 h-8 rounded-full overflow-hidden bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-xs shrink-0 border border-emerald-200">
-                                    {rev.userAvatarUrl ? (
-                                      <img
-                                        src={rev.userAvatarUrl}
-                                        alt="Avatar"
-                                        className="w-full h-full object-cover rounded-full"
-                                        onError={(e) => {
-                                          const el = e.currentTarget;
-                                          el.style.display = "none";
-                                          const parent = el.parentElement;
-                                          if (parent && !parent.querySelector("span")) {
-                                            const sp = document.createElement("span");
-                                            sp.textContent = (rev.userName || rev.userEmail || "R")[0].toUpperCase();
-                                            parent.appendChild(sp);
-                                          }
-                                        }}
-                                      />
-                                    ) : (
-                                      <span>{(rev.userName || rev.userEmail || "R")[0].toUpperCase()}</span>
-                                    )}
+                          {reviewsList.map((rev) => {
+                            const photo = rev.image ? formatAssetUrl(rev.image) : null;
+                            return (
+                              <tr key={rev.id} className="hover:bg-gray-50/80 transition-colors">
+                                <td className="py-4 px-6 font-semibold text-gray-900">
+                                  <div className="flex items-center gap-3">
+                                    <div className="relative w-10 h-10 rounded-full overflow-hidden bg-gray-100 shrink-0 border border-gray-200">
+                                      {photo ? (
+                                        <img src={photo} alt={rev.name} className="w-full h-full object-cover" />
+                                      ) : (
+                                        <div className="w-full h-full flex items-center justify-center bg-emerald-100 text-emerald-800 font-bold text-sm">
+                                          {rev.name[0]}
+                                        </div>
+                                      )}
+                                    </div>
+                                    <div className="min-w-0 max-w-[180px]">
+                                      <p className="truncate font-bold text-gray-900">{rev.name}</p>
+                                      {rev.role && <p className="truncate text-[11px] text-gray-500 font-normal">{rev.role}</p>}
+                                    </div>
                                   </div>
-                                  <div className="min-w-0 max-w-[150px]">
-                                    <p className="truncate font-bold text-gray-900">{rev.userName || "Reader"}</p>
-                                    <p className="truncate text-[10px] text-gray-500 font-normal">{rev.userEmail}</p>
+                                </td>
+                                <td className="py-4 px-6 max-w-[380px]">
+                                  <div className="italic text-gray-800 line-clamp-2 leading-relaxed bg-gray-50/80 p-2.5 rounded-xl border border-gray-100">
+                                    &ldquo;{rev.quote}&rdquo;
                                   </div>
-                                </div>
-                              </td>
-                              <td className="py-4 px-6 font-medium text-gray-700 max-w-[180px]">
-                                <Link
-                                  href={`/stories/${rev.storySlug || rev.storyId}`}
-                                  target="_blank"
-                                  className="font-semibold text-gray-900 hover:text-emerald-700 transition flex items-center gap-1 group/link"
-                                >
-                                  <span className="line-clamp-2 leading-snug">{rev.storyTitle}</span>
-                                  <ExternalLink className="w-3 h-3 text-gray-400 opacity-0 group-hover/link:opacity-100 transition-opacity shrink-0" />
-                                </Link>
-                              </td>
-                              <td className="py-4 px-6 max-w-[320px]">
-                                <div
-                                  onClick={() => setSelectedReview(rev)}
-                                  className="italic text-gray-800 line-clamp-2 leading-relaxed bg-gray-50/80 p-2.5 rounded-xl border border-gray-100 cursor-pointer hover:bg-gray-100/80 transition"
-                                  title="Click to view full comment"
-                                >
-                                  &ldquo;{rev.content}&rdquo;
-                                </div>
-                              </td>
-                              <td className="py-4 px-6 whitespace-nowrap">
-                                <button
-                                  type="button"
-                                  onClick={() => handleToggleFeaturedReview(rev.id)}
-                                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer shadow-xs ${
-                                    rev.isFeatured
-                                      ? "bg-emerald-100 text-emerald-800 border border-emerald-300 hover:bg-emerald-200"
-                                      : "bg-gray-100 text-gray-600 border border-gray-200 hover:bg-gray-200"
-                                  }`}
-                                >
-                                  <Sparkles className={`w-3.5 h-3.5 ${rev.isFeatured ? "text-emerald-600 fill-emerald-600" : "text-gray-400"}`} />
-                                  {rev.isFeatured ? "★ Featured" : "☆ Hidden"}
-                                </button>
-                              </td>
-                              <td className="py-4 px-6 text-gray-500 whitespace-nowrap font-medium">
-                                {new Date(rev.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-                              </td>
-                              <td className="py-4 px-6 text-right whitespace-nowrap">
-                                <div className="flex items-center justify-end gap-1">
+                                </td>
+                                <td className="py-4 px-6 whitespace-nowrap">
                                   <button
                                     type="button"
-                                    onClick={() => setSelectedReview(rev)}
-                                    className="p-2 text-gray-500 hover:text-black hover:bg-gray-100 rounded-xl transition cursor-pointer"
-                                    title="View Comment Details"
+                                    onClick={() => handleTogglePublishReview(rev.id)}
+                                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer shadow-xs ${
+                                      rev.isPublished
+                                        ? "bg-emerald-100 text-emerald-800 border border-emerald-300 hover:bg-emerald-200"
+                                        : "bg-gray-100 text-gray-600 border border-gray-200 hover:bg-gray-200"
+                                    }`}
                                   >
-                                    <Eye className="w-4 h-4" />
+                                    {rev.isPublished ? "Published" : "Draft / Hidden"}
                                   </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDeleteReviewComment(rev.id)}
-                                    className="p-2 text-rose-500 hover:bg-rose-50 rounded-xl transition cursor-pointer"
-                                    title="Delete Comment"
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
+                                </td>
+                                <td className="py-4 px-6 text-right whitespace-nowrap">
+                                  <div className="flex items-center justify-end gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setEditingReviewId(rev.id);
+                                        setReviewFormName(rev.name || "");
+                                        setReviewFormRole(rev.role || "");
+                                        setReviewFormQuote(rev.quote || "");
+                                        setReviewFormImage(rev.image || "");
+                                        setReviewFormPublished(rev.isPublished ?? true);
+                                        setShowAddReviewModal(true);
+                                      }}
+                                      className="p-2 text-gray-600 hover:text-black hover:bg-gray-100 rounded-xl transition cursor-pointer"
+                                      title="Edit Review"
+                                    >
+                                      <Edit3 className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteReview(rev.id)}
+                                      className="p-2 text-rose-500 hover:bg-rose-50 rounded-xl transition cursor-pointer"
+                                      title="Delete Review"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>
                   </div>
 
                   <PaginationFooter meta={reviewsMeta} onPageChange={handlePageChange} />
+                </div>
+              )}
+
+              {/* Add / Edit Review Modal */}
+              {showAddReviewModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs animate-in fade-in">
+                  <div className="relative w-full max-w-lg bg-white rounded-[32px] p-6 sm:p-8 shadow-2xl font-poppins">
+                    <div className="flex items-center justify-between pb-4 border-b border-gray-100 mb-6">
+                      <h3 className="text-xl font-bold text-gray-900">
+                        {editingReviewId ? "Edit Reader Review" : "Add New Reader Review"}
+                      </h3>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowAddReviewModal(false);
+                          resetReviewForm();
+                        }}
+                        className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-full transition cursor-pointer"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
+
+                    <form onSubmit={handleSaveReview} className="space-y-4">
+                      {/* Reviewer Name */}
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-700 mb-1">
+                          Reviewer Name <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="e.g. Rohan V."
+                          value={reviewFormName}
+                          onChange={(e) => setReviewFormName(e.target.value)}
+                          className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-black"
+                        />
+                      </div>
+
+                      {/* Designation / Role */}
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-700 mb-1">
+                          Designation / Role <span className="text-gray-400 font-normal">(optional)</span>
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Doctor, Architect & Writer"
+                          value={reviewFormRole}
+                          onChange={(e) => setReviewFormRole(e.target.value)}
+                          className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-black"
+                        />
+                      </div>
+
+                      {/* Reviewer Photo Upload */}
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-700 mb-1">
+                          Reviewer Photo <span className="text-gray-400 font-normal">(optional)</span>
+                        </label>
+                        <div className="flex items-center gap-3">
+                          {reviewFormImage ? (
+                            <div className="relative w-14 h-14 rounded-2xl overflow-hidden border border-gray-200 shrink-0">
+                              <img src={formatAssetUrl(reviewFormImage)} alt="Preview" className="w-full h-full object-cover" />
+                              <button
+                                type="button"
+                                onClick={() => setReviewFormImage("")}
+                                className="absolute top-0.5 right-0.5 p-1 bg-black/70 text-white rounded-full hover:bg-black"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          ) : null}
+
+                          <label className="flex-1 flex flex-col items-center justify-center p-3 border-2 border-dashed border-gray-200 hover:border-black rounded-xl cursor-pointer transition">
+                            <span className="text-xs font-semibold text-gray-700">
+                              {uploadingReviewImage ? "Uploading Photo..." : "Upload Photo"}
+                            </span>
+                            <span className="text-[10px] text-gray-400">JPG, PNG, WebP</span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={handleReviewImageUpload}
+                              disabled={uploadingReviewImage}
+                            />
+                          </label>
+                        </div>
+                      </div>
+
+                      {/* Quote Content */}
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-700 mb-1">
+                          Quote / Testimonial Content <span className="text-rose-500">*</span>
+                        </label>
+                        <textarea
+                          required
+                          rows={4}
+                          placeholder="Enter reader testimonial quote..."
+                          value={reviewFormQuote}
+                          onChange={(e) => setReviewFormQuote(e.target.value)}
+                          className="w-full border border-gray-200 rounded-xl p-3 text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-black"
+                        />
+                      </div>
+
+                      {/* Published Toggle */}
+                      <div className="flex items-center justify-between p-3.5 bg-gray-50 rounded-xl">
+                        <div>
+                          <p className="text-xs font-semibold text-gray-800">Published</p>
+                          <p className="text-[10px] text-gray-500">Show this review on homepage carousel</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setReviewFormPublished(!reviewFormPublished)}
+                          className={`w-11 h-6 rounded-full transition-colors cursor-pointer relative ${
+                            reviewFormPublished ? "bg-emerald-500" : "bg-gray-300"
+                          }`}
+                        >
+                          <span
+                            className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
+                              reviewFormPublished ? "translate-x-5" : "translate-x-0"
+                            }`}
+                          />
+                        </button>
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="flex gap-3 pt-2">
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="md"
+                          onClick={() => {
+                            setShowAddReviewModal(false);
+                            resetReviewForm();
+                          }}
+                          className="flex-1 border border-gray-200"
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          type="submit"
+                          variant="primary"
+                          size="md"
+                          disabled={submittingReview || !reviewFormName.trim() || !reviewFormQuote.trim()}
+                          className="flex-1 bg-black hover:bg-gray-800 text-white"
+                        >
+                          {submittingReview ? "Saving…" : editingReviewId ? "Update Review" : "Save Review"}
+                        </Button>
+                      </div>
+                    </form>
+                  </div>
                 </div>
               )}
             </div>
@@ -5084,7 +5555,7 @@ function EditorialDashboardContent() {
       {rejectingStory && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs animate-in fade-in">
           <div className="relative w-full max-w-md bg-white rounded-[28px] p-5 sm:p-8 shadow-2xl font-poppins">
-            <h3 className="text-xl font-bold text-gray-900 mb-2">Reject Story</h3>
+            <h3 className="text-xl font-bold text-gray-900 mb-2">Reject Submission</h3>
             <p className="text-xs text-gray-600 mb-4">
               Provide feedback for <span className="font-semibold">{rejectingStory.title}</span> author.
             </p>
@@ -5226,11 +5697,13 @@ function EditorialDashboardContent() {
                 <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider">
                   Event Category / Type <span className="text-rose-500">*</span>
                 </label>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   {[
                     { id: "READING_SESSION", label: "Reading Session" },
                     { id: "DISCUSSION", label: "Discussion" },
                     { id: "WORKSHOP", label: "Workshop" },
+                    { id: "EXHIBITION", label: "Exhibition" },
+                    { id: "FILM_SCREENING", label: "Film Screening" },
                   ].map((t) => (
                     <button
                       key={t.id}
@@ -5340,41 +5813,59 @@ function EditorialDashboardContent() {
                 )}
               </div>
 
-              {/* Cover Image Upload (Only for Workshop and Past Archive) */}
-              {["WORKSHOP", "PAST_ARCHIVE"].includes(eventFormType) && (
-                <div>
-                  <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider">
-                    {eventFormType === "PAST_ARCHIVE" ? "Archive Cover Image" : "Workshop Cover Image"} <span className="text-rose-500">*</span>
-                  </label>
-                  {eventFormImage ? (
-                    <div className="relative rounded-2xl overflow-hidden border border-gray-200 h-40 bg-gray-50 flex items-center justify-center group">
-                      <img
-                        src={eventFormImage.startsWith("/") ? `${API_BASE_URL.replace(/\/api$/, "")}${eventFormImage}` : eventFormImage}
-                        alt="Event Cover"
-                        className="w-full h-full object-cover"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setEventFormImage("")}
-                        className="absolute top-2 right-2 p-1.5 bg-black/70 hover:bg-rose-600 text-white rounded-full transition-colors cursor-pointer"
-                        title="Remove image"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-                  ) : (
-                    <label className="border-2 border-dashed border-gray-200 hover:border-black rounded-2xl p-4 flex flex-col items-center justify-center cursor-pointer transition-colors bg-gray-50/50 hover:bg-gray-50">
-                      <input type="file" accept="image/*" onChange={handleEventImageUpload} disabled={uploadingEventImage} className="hidden" />
-                      <div className="text-center">
-                        <span className="text-xs font-bold text-gray-900">
-                          {uploadingEventImage ? "Uploading Image..." : "📁 Select Cover Image from Device"}
-                        </span>
-                        <p className="text-[10px] text-gray-500 mt-1">PNG, JPG, WEBP up to 5MB</p>
+              {/* Cover & Gallery Images Upload */}
+              <div>
+                <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider">
+                  Event Images Gallery {["WORKSHOP", "PAST_ARCHIVE"].includes(eventFormType) && <span className="text-rose-500">*</span>}
+                </label>
+
+                {/* Uploaded Thumbnails Grid */}
+                {eventFormImages.length > 0 && (
+                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5 mb-3">
+                    {eventFormImages.map((imgUrl, idx) => (
+                      <div key={idx} className="relative rounded-xl overflow-hidden border border-gray-200 h-24 bg-gray-50 group">
+                        <img
+                          src={imgUrl.startsWith("/") ? `${API_BASE_URL.replace(/\/api$/, "")}${imgUrl}` : imgUrl}
+                          alt={`Event image ${idx + 1}`}
+                          className="w-full h-full object-cover"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const updated = eventFormImages.filter((_, i) => i !== idx);
+                            setEventFormImages(updated);
+                            if (eventFormImage === imgUrl) {
+                              setEventFormImage(updated[0] || "");
+                            }
+                          }}
+                          className="absolute top-1 right-1 p-1 bg-black/70 hover:bg-rose-600 text-white rounded-full transition-colors cursor-pointer"
+                          title="Remove image"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
                       </div>
-                    </label>
-                  )}
-                </div>
-              )}
+                    ))}
+                  </div>
+                )}
+
+                {/* File Drop Area */}
+                <label className="border-2 border-dashed border-gray-200 hover:border-black rounded-2xl p-4 flex flex-col items-center justify-center cursor-pointer transition-colors bg-gray-50/50 hover:bg-gray-50">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handleEventImageUpload}
+                    disabled={uploadingEventImage}
+                    className="hidden"
+                  />
+                  <div className="text-center">
+                    <span className="text-xs font-bold text-gray-900">
+                      {uploadingEventImage ? "Uploading Images..." : "📁 Select Images from Device (Multiple Allowed)"}
+                    </span>
+                    <p className="text-[10px] text-gray-500 mt-1">PNG, JPG, WEBP up to 5MB each</p>
+                  </div>
+                </label>
+              </div>
 
               {/* Stream / Meeting Link (Optional) - Commented out as requested
               <div>
@@ -5680,28 +6171,55 @@ function EditorialDashboardContent() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider">Edition Tag</label>
-                <input
-                  type="text"
-                  value={bookFormEditionTag}
-                  onChange={(e) => setBookFormEditionTag(e.target.value)}
-                  placeholder="e.g. Print Edition, Hardcover, Collector Edition"
-                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium text-gray-900 outline-none focus:border-black shadow-xs"
-                />
-              </div>
-
-              <div>
                 <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider">
-                  Description <span className="text-rose-500">*</span>
+                  Book Cover Image
                 </label>
-                <textarea
-                  rows={3}
-                  required
-                  value={bookFormDesc}
-                  onChange={(e) => setBookFormDesc(e.target.value)}
-                  placeholder="The novel published on Akam is now available as a book..."
-                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium text-gray-900 outline-none focus:border-black shadow-xs"
-                />
+                <div className="space-y-2">
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="file"
+                      id="book-cover-upload"
+                      accept="image/*"
+                      onChange={handleBookCoverUpload}
+                      className="hidden"
+                    />
+                    <label
+                      htmlFor="book-cover-upload"
+                      className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-xl text-xs font-semibold cursor-pointer transition-colors flex items-center gap-2 border border-gray-200"
+                    >
+                      {uploadingBookCover ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin text-gray-600" />
+                          <span>Uploading...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="w-4 h-4 text-gray-600" />
+                          <span>Upload Cover Image</span>
+                        </>
+                      )}
+                    </label>
+                    <span className="text-xs text-gray-400">or paste URL below</span>
+                  </div>
+                  <input
+                    type="url"
+                    value={bookFormCoverImage}
+                    onChange={(e) => setBookFormCoverImage(e.target.value)}
+                    placeholder="https://example.com/cover.jpg or /uploads/..."
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium text-gray-900 outline-none focus:border-black shadow-xs"
+                  />
+                  {bookFormCoverImage && (
+                    <div className="relative w-20 h-28 rounded-xl overflow-hidden border border-gray-200 shadow-xs mt-2 bg-gray-100">
+                      <Image
+                        src={formatAssetUrl(bookFormCoverImage)}
+                        alt="Cover Preview"
+                        fill
+                        className="object-cover"
+                        unoptimized
+                      />
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div>
@@ -5745,7 +6263,7 @@ function EditorialDashboardContent() {
                   type="submit"
                   variant="primary"
                   size="sm"
-                  disabled={submittingBook || !bookFormTitle.trim() || !bookFormAuthor.trim() || !bookFormDesc.trim()}
+                  disabled={submittingBook || uploadingBookCover || !bookFormTitle.trim() || !bookFormAuthor.trim()}
                   className="px-6 py-2"
                 >
                   {submittingBook ? "Saving..." : editingBookId ? "Update Book" : "Create Book"}
@@ -5961,96 +6479,6 @@ function EditorialDashboardContent() {
         </div>
       )}
 
-      {/* Reader Review Detail Modal */}
-      {selectedReview && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-white rounded-[28px] max-w-lg w-full p-6 sm:p-8 space-y-6 shadow-2xl relative border border-gray-200">
-            <div className="flex items-start justify-between gap-4 border-b border-gray-100 pb-4">
-              <div className="flex items-center gap-3">
-                <div className="relative w-10 h-10 rounded-full overflow-hidden bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-sm shrink-0 border border-emerald-200">
-                  {selectedReview.userAvatarUrl ? (
-                    <Image src={selectedReview.userAvatarUrl} alt="Avatar" fill className="object-cover" unoptimized />
-                  ) : (
-                    <span>{(selectedReview.userName || selectedReview.userEmail || "R")[0].toUpperCase()}</span>
-                  )}
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-gray-950">{selectedReview.userName || "Reader Reviewer"}</h3>
-                  <p className="text-xs text-gray-500">{selectedReview.userEmail}</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setSelectedReview(null)}
-                className="p-1.5 text-gray-400 hover:text-black hover:bg-gray-100 rounded-full transition cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Associated Story</span>
-                <Link
-                  href={`/stories/${selectedReview.storySlug || selectedReview.storyId}`}
-                  target="_blank"
-                  className="flex items-center gap-1.5 text-sm font-bold text-gray-900 hover:text-emerald-700 hover:underline"
-                >
-                  <BookOpen className="w-4 h-4 text-emerald-600 shrink-0" />
-                  <span>{selectedReview.storyTitle}</span>
-                  <ExternalLink className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                </Link>
-              </div>
-
-              <div>
-                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1.5">Review / Comment Content</span>
-                <div className="p-4 bg-gray-50 border border-gray-200 rounded-2xl text-xs sm:text-sm text-gray-900 leading-relaxed italic whitespace-pre-wrap">
-                  &ldquo;{selectedReview.content}&rdquo;
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between text-xs text-gray-500 pt-1">
-                <span>
-                  Submitted on:{" "}
-                  <strong className="text-gray-700">
-                    {new Date(selectedReview.createdAt).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
-                  </strong>
-                </span>
-              </div>
-            </div>
-
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-gray-100">
-              <button
-                type="button"
-                onClick={() => {
-                  handleToggleFeaturedReview(selectedReview.id);
-                  setSelectedReview((prev: any) => (prev ? { ...prev, isFeatured: !prev.isFeatured } : null));
-                }}
-                className={`w-full sm:w-auto px-4 py-2.5 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer shadow-xs ${
-                  selectedReview.isFeatured
-                    ? "bg-emerald-100 text-emerald-800 border border-emerald-300 hover:bg-emerald-200"
-                    : "bg-gray-100 text-gray-700 border border-gray-200 hover:bg-gray-200"
-                }`}
-              >
-                <Sparkles className={`w-3.5 h-3.5 ${selectedReview.isFeatured ? "text-emerald-600 fill-emerald-600" : "text-gray-400"}`} />
-                {selectedReview.isFeatured ? "★ Featured on Homepage" : "+ Feature on Homepage"}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  handleDeleteReviewComment(selectedReview.id);
-                  setSelectedReview(null);
-                }}
-                className="w-full sm:w-auto px-4 py-2.5 bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-200 rounded-xl text-xs font-semibold transition cursor-pointer"
-              >
-                Delete Review
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Masika Edition Flipbook Modal */}
       {openFlipbookEdition && (
         <EditionFlipbook pdfUrl={openFlipbookEdition.pdfUrl} title={openFlipbookEdition.title} onClose={() => setOpenFlipbookEdition(null)} />
@@ -6104,6 +6532,17 @@ function EditorialDashboardContent() {
                   value={authorFormEmail}
                   onChange={(e) => setAuthorFormEmail(e.target.value)}
                   placeholder="author@akamdigital.com"
+                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-900 outline-none focus:border-black shadow-xs"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-900 mb-1.5 uppercase tracking-wider">Phone Number</label>
+                <input
+                  type="tel"
+                  value={authorFormPhone}
+                  onChange={(e) => setAuthorFormPhone(e.target.value)}
+                  placeholder="+91 98765 43210"
                   className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-900 outline-none focus:border-black shadow-xs"
                 />
               </div>
@@ -6250,7 +6689,7 @@ function EditorialDashboardContent() {
                 />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-gray-900 mb-1.5 uppercase tracking-wider">
                     Email Address <span className="text-rose-500">*</span>
@@ -6261,6 +6700,17 @@ function EditorialDashboardContent() {
                     value={authorEditEmail}
                     onChange={(e) => setAuthorEditEmail(e.target.value)}
                     placeholder="author@akamdigital.com"
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-900 outline-none focus:border-black shadow-xs"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-900 mb-1.5 uppercase tracking-wider">Phone Number</label>
+                  <input
+                    type="tel"
+                    value={authorEditPhone}
+                    onChange={(e) => setAuthorEditPhone(e.target.value)}
+                    placeholder="+91 98765 43210"
                     className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-900 outline-none focus:border-black shadow-xs"
                   />
                 </div>
@@ -6478,13 +6928,13 @@ function EditorialDashboardContent() {
             <div className="flex items-center justify-between pb-4 border-b border-gray-200">
               <div>
                 <span className="bg-[#E4F953] text-[#040706] font-bold text-[10px] uppercase tracking-wider px-3 py-1 rounded-xl shadow-xs">
-                  AUTHORING STUDIO
+                  WRITING STUDIO
                 </span>
                 <h2 className="text-2xl sm:text-3xl font-bold text-gray-950 mt-1">
-                  Write a Story for {storyAuthorTarget.name || storyAuthorTarget.email}
+                  Write Article / Story for {storyAuthorTarget.name || storyAuthorTarget.email}
                 </h2>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  Write narrative, format paragraphs, upload cover art, and publish on behalf of {storyAuthorTarget.name || storyAuthorTarget.email}.
+                  Write articles, blogs, essays, or stories with rich text formatting, upload cover art, and publish on behalf of {storyAuthorTarget.name || storyAuthorTarget.email}.
                 </p>
               </div>
               <button
@@ -6499,7 +6949,7 @@ function EditorialDashboardContent() {
             {/* Cover Dropzone */}
             <div>
               <label className="block text-xs font-bold text-gray-900 uppercase tracking-wider mb-2">
-                Main Story Cover Image <span className="text-rose-500">*</span>
+                Cover Image <span className="text-rose-500">*</span>
               </label>
               <div
                 className="relative border-2 border-dashed border-gray-200 hover:border-gray-400 rounded-2xl p-4 bg-gray-50/50 flex flex-col items-center justify-center text-center cursor-pointer min-h-[160px] transition-all"
@@ -6526,7 +6976,7 @@ function EditorialDashboardContent() {
                 ) : (
                   <div className="flex flex-col items-center justify-center">
                     <Upload className="w-6 h-6 text-gray-400 mb-2" />
-                    <span className="text-xs font-semibold text-gray-900 mb-0.5">Click to upload story cover image</span>
+                    <span className="text-xs font-semibold text-gray-900 mb-0.5">Click to upload cover image</span>
                     <span className="text-[11px] text-gray-400">PNG, JPG or WebP up to 5MB</span>
                   </div>
                 )}
@@ -6550,7 +7000,7 @@ function EditorialDashboardContent() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="md:col-span-2">
                 <label className="block text-xs font-bold text-gray-900 uppercase tracking-wider mb-1.5">
-                  Story Title <span className="text-rose-500">*</span>
+                  Title <span className="text-rose-500">*</span>
                 </label>
                 <input
                   type="text"
@@ -6564,21 +7014,29 @@ function EditorialDashboardContent() {
 
               <div>
                 <label className="block text-xs font-bold text-gray-900 uppercase tracking-wider mb-1.5">
-                  Story Category <span className="text-rose-500">*</span>
+                  Category <span className="text-rose-500">*</span>
                 </label>
                 <select
                   value={storyStudioCategory}
                   onChange={(e) => setStoryStudioCategory(e.target.value)}
                   className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-900 outline-none focus:border-black cursor-pointer shadow-xs"
                 >
-                  <option value="Fiction">Fiction</option>
-                  <option value="Non-Fiction">Non-Fiction</option>
-                  <option value="Poetry">Poetry</option>
-                  <option value="Culture">Culture</option>
-                  <option value="Technology">Technology</option>
-                  <option value="Opinion">Opinion</option>
-                  <option value="Literature">Literature</option>
-                  <option value="General">General</option>
+                  {(allPlatformCategories.length > 0 ? allPlatformCategories : categoriesList).length > 0 ? (
+                    (allPlatformCategories.length > 0 ? allPlatformCategories : categoriesList).map((cat) => (
+                      <option key={cat.id} value={cat.name}>{cat.name}</option>
+                    ))
+                  ) : (
+                    <>
+                      <option value="Culture">Culture</option>
+                      <option value="Fiction">Fiction</option>
+                      <option value="Literature">Literature</option>
+                      <option value="Non-Fiction">Non-Fiction</option>
+                      <option value="Opinion">Opinion</option>
+                      <option value="Poetry">Poetry</option>
+                      <option value="Technology">Technology</option>
+                      <option value="General">General</option>
+                    </>
+                  )}
                 </select>
               </div>
             </div>
@@ -6872,7 +7330,7 @@ function EditorialDashboardContent() {
 
               {storyStudioActiveTab === "preview" && (
                 <div className="bg-gray-50 p-6 rounded-[24px] border border-gray-200 text-gray-900 leading-relaxed font-poppins animate-in fade-in">
-                  <h2 className="text-2xl font-bold mb-4 text-gray-950">{storyStudioTitle || "Untitled Story"}</h2>
+                  <h2 className="text-2xl font-bold mb-4 text-gray-950">{storyStudioTitle || "Untitled"}</h2>
                   <div className="prose max-w-none text-base">
                     {renderStoryContent(convertHtmlToMarkdown(authorEditorRef.current ? authorEditorRef.current.innerHTML : storyStudioContent))}
                   </div>
@@ -6915,7 +7373,7 @@ function EditorialDashboardContent() {
                   onClick={() => handleAuthorStorySubmit(true)}
                   className="w-full sm:w-auto font-semibold text-xs cursor-pointer"
                 >
-                  {savingAuthorStory ? "Publishing..." : "Publish Story Directly"}
+                  {savingAuthorStory ? "Publishing..." : "Publish Article / Story Directly"}
                 </Button>
               </div>
             </div>
@@ -6989,6 +7447,349 @@ function EditorialDashboardContent() {
               <Button type="button" variant="primary" size="sm" onClick={handleAuthorApplyLink} className="px-5 py-2 text-xs cursor-pointer">
                 Apply Hyperlink
               </Button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Author Painting / Video Submission Modal */}
+      {addSubmissionModalOpen && addSubmissionAuthorTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/75 backdrop-blur-xs animate-in fade-in font-poppins">
+          <div className="relative w-full max-w-2xl bg-white rounded-[32px] p-5 sm:p-8 shadow-2xl max-h-[92vh] overflow-y-auto flex flex-col space-y-5">
+            {/* Header */}
+            <div className="flex items-center justify-between pb-4 border-b border-gray-100">
+              <div className="flex items-center gap-3">
+                <div className={`w-11 h-11 rounded-2xl flex items-center justify-center font-bold shadow-xs ${
+                  addSubmissionType === "PAINTING"
+                    ? "bg-purple-100 text-purple-800"
+                    : "bg-blue-100 text-blue-800"
+                }`}>
+                  {addSubmissionType === "PAINTING" ? "🎨" : "🎬"}
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-lg ${
+                      addSubmissionType === "PAINTING"
+                        ? "bg-purple-100 text-purple-800 border border-purple-200"
+                        : "bg-blue-100 text-blue-800 border border-blue-200"
+                    }`}>
+                      {addSubmissionType === "PAINTING" ? "Painting Artwork" : "Video Feature"}
+                    </span>
+                  </div>
+                  <h2 className="text-xl sm:text-2xl font-bold text-gray-950 mt-0.5">
+                    Add {addSubmissionType === "PAINTING" ? "Painting" : "Video"} for {addSubmissionAuthorTarget.name || addSubmissionAuthorTarget.email}
+                  </h2>
+                  <p className="text-xs text-gray-500">
+                    Publish or save a {addSubmissionType.toLowerCase()} submission on behalf of this author.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAddSubmissionModalOpen(false)}
+                className="p-2 text-gray-400 hover:text-black rounded-full hover:bg-gray-100 cursor-pointer"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            {/* Type Switcher */}
+            <div className="grid grid-cols-2 gap-2 p-1.5 bg-gray-100 rounded-2xl">
+              <button
+                type="button"
+                onClick={() => {
+                  setAddSubmissionType("PAINTING");
+                  setAddSubmissionCategory("Art");
+                  setAddSubmissionError(null);
+                }}
+                className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  addSubmissionType === "PAINTING"
+                    ? "bg-white text-purple-700 shadow-xs"
+                    : "text-gray-600 hover:text-gray-900"
+                }`}
+              >
+                🎨 Painting
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAddSubmissionType("VIDEO");
+                  setAddSubmissionCategory("Cinema");
+                  setAddSubmissionError(null);
+                }}
+                className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  addSubmissionType === "VIDEO"
+                    ? "bg-white text-blue-700 shadow-xs"
+                    : "text-gray-600 hover:text-gray-900"
+                }`}
+              >
+                🎬 Video
+              </button>
+            </div>
+
+            {/* Error banner */}
+            {addSubmissionError && (
+              <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-2xl text-xs font-semibold text-rose-700 flex items-center gap-2">
+                <XCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                <span>{addSubmissionError}</span>
+              </div>
+            )}
+
+            {/* Form Fields */}
+            <div className="space-y-4">
+              {/* Title & Category row */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-bold text-gray-900 mb-1.5 uppercase tracking-wider">
+                    Title <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={addSubmissionTitle}
+                    onChange={(e) => setAddSubmissionTitle(e.target.value)}
+                    placeholder={addSubmissionType === "PAINTING" ? "Title of painting / artwork..." : "Title of video..."}
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-900 outline-none focus:border-black focus:bg-white transition-all shadow-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-900 mb-1.5 uppercase tracking-wider">
+                    Category
+                  </label>
+                  <select
+                    value={addSubmissionCategory}
+                    onChange={(e) => setAddSubmissionCategory(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-900 outline-none focus:border-black focus:bg-white transition-all shadow-xs cursor-pointer"
+                  >
+                    {(allPlatformCategories.length > 0 ? allPlatformCategories : categoriesList).length > 0 ? (
+                      (allPlatformCategories.length > 0 ? allPlatformCategories : categoriesList).map((cat) => (
+                        <option key={cat.id} value={cat.name}>{cat.name}</option>
+                      ))
+                    ) : (
+                      <>
+                        <option value="Culture">Culture</option>
+                        <option value="Literature">Literature</option>
+                        <option value="Fiction">Fiction</option>
+                        <option value="Art">Art</option>
+                        <option value="General">General</option>
+                      </>
+                    )}
+                  </select>
+                </div>
+              </div>
+
+              {/* Description (Required) */}
+              <div>
+                <label className="block text-xs font-bold text-gray-900 mb-1.5 uppercase tracking-wider">
+                  Description <span className="text-rose-500">*</span>
+                </label>
+                <textarea
+                  rows={3}
+                  required
+                  value={addSubmissionDescription}
+                  onChange={(e) => setAddSubmissionDescription(e.target.value)}
+                  placeholder={
+                    addSubmissionType === "PAINTING"
+                      ? "Describe the painting, medium (oil, acrylic, watercolor), inspiration, dimensions..."
+                      : "Describe what this video is about, creators, background..."
+                  }
+                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium text-gray-900 outline-none focus:border-black focus:bg-white transition-all shadow-xs resize-none"
+                />
+              </div>
+
+              {/* PAINTING Type Specifics */}
+              {addSubmissionType === "PAINTING" && (
+                <div>
+                  <label className="block text-xs font-bold text-gray-900 mb-1.5 uppercase tracking-wider">
+                    Painting Artwork Image <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="file"
+                    ref={addSubmissionPaintingRef}
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        const file = e.target.files[0];
+                        setAddSubmissionPaintingFile(file);
+                        setAddSubmissionPaintingPreview(URL.createObjectURL(file));
+                      }
+                    }}
+                  />
+                  <div
+                    onClick={() => addSubmissionPaintingRef.current?.click()}
+                    className="relative border-2 border-dashed border-gray-200 hover:border-gray-400 rounded-2xl p-4 bg-gray-50/50 flex flex-col items-center justify-center text-center cursor-pointer min-h-[160px] transition-all group"
+                  >
+                    {addSubmissionPaintingPreview ? (
+                      <div className="relative w-full max-w-sm h-48 rounded-xl overflow-hidden shadow-xs border border-gray-200 bg-gray-100 flex items-center justify-center">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={addSubmissionPaintingPreview}
+                          alt="Artwork Preview"
+                          className="w-full h-full object-contain"
+                        />
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setAddSubmissionPaintingFile(null);
+                            setAddSubmissionPaintingPreview(null);
+                          }}
+                          className="absolute top-2 right-2 text-xs py-1 px-2.5 rounded-lg shadow-md bg-white/90 hover:bg-white text-rose-600 font-semibold cursor-pointer border border-gray-200"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center gap-2 py-4">
+                        <div className="w-12 h-12 rounded-2xl bg-purple-50 border border-purple-200 flex items-center justify-center text-purple-600 group-hover:scale-105 transition-transform">
+                          <Upload className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-gray-900">Click to upload artwork image</p>
+                          <p className="text-[11px] text-gray-400 mt-0.5">PNG, JPG, or WEBP up to 25MB</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* VIDEO Type Specifics */}
+              {addSubmissionType === "VIDEO" && (
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-900 mb-1.5 uppercase tracking-wider">
+                      YouTube or Vimeo Video URL <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="url"
+                      required
+                      value={addSubmissionVideoUrl}
+                      onChange={(e) => setAddSubmissionVideoUrl(e.target.value)}
+                      placeholder="https://www.youtube.com/watch?v=... or https://vimeo.com/..."
+                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-900 outline-none focus:border-black focus:bg-white transition-all shadow-xs"
+                    />
+                  </div>
+
+                  {/* Video Live Preview */}
+                  {addSubmissionVideoUrl && (() => {
+                    const embed = getAddSubmissionVideoEmbed(addSubmissionVideoUrl);
+                    if (!embed) return (
+                      <p className="text-[11px] text-amber-600 font-medium">Please enter a valid YouTube or Vimeo URL to preview.</p>
+                    );
+                    return (
+                      <div className="rounded-2xl overflow-hidden border border-gray-200 shadow-xs bg-black aspect-video max-h-56">
+                        {embed.type === "youtube" ? (
+                          <iframe
+                            src={`https://www.youtube-nocookie.com/embed/${embed.id}`}
+                            title="YouTube preview"
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                            allowFullScreen
+                            className="w-full h-full border-0"
+                          />
+                        ) : (
+                          <iframe
+                            src={`https://player.vimeo.com/video/${embed.id}`}
+                            title="Vimeo preview"
+                            allow="autoplay; fullscreen; picture-in-picture"
+                            allowFullScreen
+                            className="w-full h-full border-0"
+                          />
+                        )}
+                      </div>
+                    );
+                  })()}
+
+                  {/* Optional Video Thumbnail */}
+                  <div>
+                    <label className="block text-xs font-bold text-gray-900 mb-1.5 uppercase tracking-wider">
+                      Custom Thumbnail Cover <span className="text-gray-400 font-normal lowercase">(optional)</span>
+                    </label>
+                    <input
+                      type="file"
+                      ref={addSubmissionPaintingRef}
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        if (e.target.files && e.target.files[0]) {
+                          const file = e.target.files[0];
+                          setAddSubmissionPaintingFile(file);
+                          setAddSubmissionPaintingPreview(URL.createObjectURL(file));
+                        }
+                      }}
+                    />
+                    <div
+                      onClick={() => addSubmissionPaintingRef.current?.click()}
+                      className="relative border-2 border-dashed border-gray-200 hover:border-gray-400 rounded-2xl p-3 bg-gray-50/50 flex flex-col items-center justify-center text-center cursor-pointer min-h-[100px] transition-all group"
+                    >
+                      {addSubmissionPaintingPreview ? (
+                        <div className="relative w-full max-w-xs h-28 rounded-xl overflow-hidden shadow-xs border border-gray-200 bg-gray-100 flex items-center justify-center">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={addSubmissionPaintingPreview}
+                            alt="Cover Preview"
+                            className="w-full h-full object-cover"
+                          />
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setAddSubmissionPaintingFile(null);
+                              setAddSubmissionPaintingPreview(null);
+                            }}
+                            className="absolute top-2 right-2 text-[10px] py-0.5 px-2 rounded-lg shadow-md bg-white text-rose-600 font-semibold cursor-pointer border border-gray-200"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 py-2">
+                          <ImageIcon className="w-4 h-4 text-gray-400" />
+                          <p className="text-xs font-semibold text-gray-600">Upload custom thumbnail image (optional)</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Action Bar */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-gray-100">
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => setAddSubmissionModalOpen(false)}
+                className="w-full sm:w-auto border border-gray-300 font-medium text-xs cursor-pointer"
+              >
+                Cancel
+              </Button>
+
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  disabled={savingAddSubmission || !addSubmissionTitle.trim() || !addSubmissionDescription.trim()}
+                  onClick={() => handleAuthorSubmissionSubmit(false)}
+                  className="w-full sm:w-auto border border-gray-300 font-semibold text-xs cursor-pointer"
+                >
+                  {savingAddSubmission ? "Saving..." : "Save as Draft"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="primary"
+                  size="sm"
+                  icon={<Sparkles className="w-3.5 h-3.5" />}
+                  iconPosition="left"
+                  disabled={savingAddSubmission || !addSubmissionTitle.trim() || !addSubmissionDescription.trim()}
+                  onClick={() => handleAuthorSubmissionSubmit(true)}
+                  className="w-full sm:w-auto font-semibold text-xs cursor-pointer"
+                >
+                  {savingAddSubmission ? "Publishing..." : `Publish ${addSubmissionType === "PAINTING" ? "Painting" : "Video"} Directly`}
+                </Button>
+              </div>
             </div>
           </div>
         </div>

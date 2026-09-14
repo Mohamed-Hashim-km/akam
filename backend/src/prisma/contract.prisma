@@ -18,22 +18,27 @@ namespace public {
   }
 
   model Story {
-    id            String               @id(map: "Story_pkey") @default(dbgenerated("(gen_random_uuid())::text"))
-    title         String
-    slug          String
-    content       String
-    coverImageUrl String?
-    status        pg.enum(StoryStatus) @default("DRAFT")
-    rejectionNote String?
-    authorId      String
-    createdAt     Timestamptz          @default(now())
-    updatedAt     Timestamptz          @default(now())
-    notifications Notification[]
-    author        User                 @relation(fields: [authorId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "Story_authorId_fkey")
+    id             String                    @id(map: "Story_pkey") @default(dbgenerated("(gen_random_uuid())::text"))
+    title          String
+    slug           String
+    description    String?
+    content        String                    @default("")
+    coverImageUrl  String?
+    submissionType pg.enum(SubmissionType)   @default("STORY")
+    mediaUrl       String?
+    category       String?
+    status         pg.enum(StoryStatus)      @default("DRAFT")
+    rejectionNote  String?
+    authorId       String
+    createdAt      Timestamptz               @default(now())
+    updatedAt      Timestamptz               @default(now())
+    notifications  Notification[]
+    author         User                      @relation(fields: [authorId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "Story_authorId_fkey")
 
     @@index([authorId], map: "Story_authorId_idx")
     @@index([slug], map: "Story_slug_key", unique: true)
     @@index([status], map: "Story_status_idx")
+    @@index([submissionType], map: "Story_submissionType_idx")
     @@map("story")
   }
 
@@ -83,5 +88,11 @@ namespace public {
     PENDING = "PENDING"
     APPROVED = "APPROVED"
     REJECTED = "REJECTED"
+  }
+
+  native_enum SubmissionType {
+    STORY = "STORY"
+    PAINTING = "PAINTING"
+    VIDEO = "VIDEO"
   }
 }

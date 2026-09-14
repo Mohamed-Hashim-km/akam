@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "cross-env NODE_OPTIONS=--no-deprecation next dev -p 3001",
+    "dev": "cross-env NODE_OPTIONS=--no-deprecation next dev -p 3002",
     "build": "next build",
-    "start": "cross-env NODE_OPTIONS=--no-deprecation next start -p 3001",
+    "start": "cross-env NODE_OPTIONS=--no-deprecation next start -p 3002",
     "lint": "eslint"
   },
   "dependencies": {

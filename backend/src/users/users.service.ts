@@ -8,6 +8,8 @@ export type UserRow = {
   id: string;
   email: string;
   name: string | null;
+  phone?: string | null;
+  privacyPolicyAccepted?: boolean;
   bio: string | null;
   avatarUrl: string | null;
   role: string;
@@ -33,7 +35,7 @@ export class UsersService {
 
     if (search && search.trim()) {
       params.push(`%${search.trim()}%`);
-      whereSql = `WHERE email ILIKE $1 OR name ILIKE $1`;
+      whereSql = `WHERE email ILIKE $1 OR name ILIKE $1 OR phone ILIKE $1`;
     }
 
     const countRow = await this.prisma.queryOne<{ count: string }>(
@@ -44,7 +46,7 @@ export class UsersService {
 
     const queryParams = [...params, limit, offset];
     const data = await this.prisma.query<UserRow>(
-      `SELECT id, email, name, bio, "avatarUrl", role, "isFeatured", "sortOrder", "createdAt"
+      `SELECT id, email, name, phone, "privacyPolicyAccepted", bio, "avatarUrl", role, "isFeatured", "sortOrder", "createdAt"
        FROM "user"
        ${whereSql}
        ORDER BY "createdAt" DESC
@@ -65,7 +67,7 @@ export class UsersService {
 
   async findById(id: string): Promise<UserRow> {
     const user = await this.prisma.queryOne<UserRow>(
-      `SELECT id, email, name, bio, "avatarUrl", role, "isFeatured", "sortOrder", "createdAt"
+      `SELECT id, email, name, phone, "privacyPolicyAccepted", bio, "avatarUrl", role, "isFeatured", "sortOrder", "createdAt"
        FROM "user" WHERE id = $1`,
       [id],
     );
@@ -263,16 +265,18 @@ export class UsersService {
     }
 
     const nameVal = dto.name.trim();
+    const phoneVal = dto.phone?.trim() || null;
+    const privacyVal = dto.privacyPolicyAccepted ?? true;
     const bioVal = dto.bio?.trim() || null;
     const avatarVal = dto.avatarUrl?.trim() || null;
     const isFeaturedVal = dto.isFeatured ?? false;
     const sortOrderVal = dto.sortOrder ?? 0;
 
     const user = await this.prisma.queryOne<UserRow>(
-      `INSERT INTO "user" (id, email, name, bio, "avatarUrl", role, "isFeatured", "sortOrder", "createdAt", "updatedAt")
-       VALUES (gen_random_uuid()::text, $1, $2, $3, $4, 'AUTHOR'::"Role", $5, $6, now(), now())
-       RETURNING id, email, name, bio, "avatarUrl", role, "isFeatured", "sortOrder", "createdAt"`,
-      [emailVal, nameVal, bioVal, avatarVal, isFeaturedVal, sortOrderVal],
+      `INSERT INTO "user" (id, email, name, phone, "privacyPolicyAccepted", bio, "avatarUrl", role, "isFeatured", "sortOrder", "createdAt", "updatedAt")
+       VALUES (gen_random_uuid()::text, $1, $2, $3, $4, $5, $6, 'AUTHOR'::"Role", $7, $8, now(), now())
+       RETURNING id, email, name, phone, "privacyPolicyAccepted", bio, "avatarUrl", role, "isFeatured", "sortOrder", "createdAt"`,
+      [emailVal, nameVal, phoneVal, privacyVal, bioVal, avatarVal, isFeaturedVal, sortOrderVal],
     );
 
     return user!;
@@ -306,6 +310,16 @@ export class UsersService {
     if (dto.email !== undefined) {
       params.push(dto.email.toLowerCase().trim());
       updates.push(`email = $${params.length}`);
+    }
+
+    if (dto.phone !== undefined) {
+      params.push(dto.phone ? dto.phone.trim() : null);
+      updates.push(`phone = $${params.length}`);
+    }
+
+    if (dto.privacyPolicyAccepted !== undefined) {
+      params.push(dto.privacyPolicyAccepted);
+      updates.push(`"privacyPolicyAccepted" = $${params.length}`);
     }
 
     if (dto.bio !== undefined) {
@@ -343,7 +357,7 @@ export class UsersService {
       `UPDATE "user"
        SET ${updates.join(', ')}
        WHERE id = $${params.length}
-       RETURNING id, email, name, bio, "avatarUrl", role, "isFeatured", "sortOrder", "createdAt"`,
+       RETURNING id, email, name, phone, "privacyPolicyAccepted", bio, "avatarUrl", role, "isFeatured", "sortOrder", "createdAt"`,
       params,
     );
 
