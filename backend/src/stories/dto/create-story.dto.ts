@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, MaxLength, IsOptional } from 'class-validator';
+import { IsString, IsNotEmpty, MaxLength, IsOptional, IsIn } from 'class-validator';
 
 export class CreateStoryDto {
   @IsString()
@@ -10,9 +10,9 @@ export class CreateStoryDto {
   @IsString()
   description?: string;
 
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  content: string; // JSON string from Tiptap/rich-text editor
+  content?: string; // Text content for STORY type; optional for PAINTING/VIDEO
 
   @IsOptional()
   @IsString()
@@ -25,6 +25,18 @@ export class CreateStoryDto {
   @IsOptional()
   @IsString()
   status?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['STORY', 'PAINTING', 'VIDEO'])
+  submissionType?: string;
+
+  @IsOptional()
+  @IsString()
+  mediaUrl?: string; // For VIDEO: YouTube/Vimeo URL
 }
+
+
+
 
 

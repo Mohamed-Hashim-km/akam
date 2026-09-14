@@ -11,6 +11,14 @@ export class UpdateUserDto {
 
   @IsString()
   @IsOptional()
+  phone?: string | null;
+
+  @IsBoolean()
+  @IsOptional()
+  privacyPolicyAccepted?: boolean;
+
+  @IsString()
+  @IsOptional()
   bio?: string;
 
   @IsString()

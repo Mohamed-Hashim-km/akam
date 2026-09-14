@@ -24,6 +24,12 @@ enum StoryStatus {
   REJECTED
 }
 
+enum SubmissionType {
+  STORY
+  PAINTING
+  VIDEO
+}
+
 enum NotificationType {
   STORY_SUBMITTED
   STORY_APPROVED
@@ -58,23 +64,27 @@ model OtpCode {
 }
 
 model Story {
-  id            String      @id @default(uuid())
-  title         String
-  slug          String      @unique
-  description   String?     @db.Text
-  content       String      @db.Text
-  coverImageUrl String?
-  status        StoryStatus @default(DRAFT)
-  rejectionNote String?
-  authorId      String
-  author        User        @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  id             String         @id @default(uuid())
+  title          String
+  slug           String         @unique
+  description    String?        @db.Text
+  content        String         @default("") @db.Text
+  coverImageUrl  String?
+  submissionType SubmissionType @default(STORY)
+  mediaUrl       String?        // for VIDEO type: YouTube/Vimeo URL; for PAINTING: alternate image URL
+  category       String?
+  status         StoryStatus    @default(DRAFT)
+  rejectionNote  String?
+  authorId       String
+  author         User           @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
 
   notifications Notification[]
 
   @@index([status])
   @@index([authorId])
+  @@index([submissionType])
 }
 
 model Notification {

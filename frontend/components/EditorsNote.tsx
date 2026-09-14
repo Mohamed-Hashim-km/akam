@@ -119,16 +119,23 @@ const ScrolledWord: React.FC<{
   total: number;
   progress: MotionValue<number>;
 }> = ({ word, index, total, progress }) => {
-  const start = 0.05 + (index / total) * 0.8;
-  const end = start + 0.8 / total;
-  const opacity = useTransform(progress, [start, end], [0.25, 1]);
-  const color = useTransform(progress, [start, end], ["#4B5563", "#111827"]);
+  const start = 0.05 + (index / total) * 0.75;
+  const end = Math.min(0.95, start + 1.2 / total);
+
+  // Smooth width fill animation (0% -> 100%) as user scrolls
+  const width = useTransform(progress, [start, end], ["0%", "100%"]);
 
   return (
     <span className="relative inline-block mr-[0.25em] my-[0.08em] select-none">
+      {/* Base unfilled text (faint muted ghost color) */}
+      <span className="text-[#111827]/25 font-medium sm:font-semibold">
+        {word}
+      </span>
+
+      {/* Solid filled text overlay (wipes left-to-right and remains 100% filled once passed) */}
       <motion.span
-        style={{ opacity, color }}
-        className="font-medium sm:font-semibold"
+        style={{ width }}
+        className="absolute left-0 top-0 overflow-hidden whitespace-nowrap text-[#111827] font-medium sm:font-semibold pointer-events-none"
       >
         {word}
       </motion.span>
