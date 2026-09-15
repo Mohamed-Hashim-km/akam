@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { User, Edit2, Upload, BookOpen, Clock, FileCheck, Shield, ChevronRight, LogOut, Send, FileText, CheckCircle2, Filter, Trash2, X } from "lucide-react";
+import { User, Edit2, Upload, BookOpen, Clock, FileCheck, Shield, ChevronRight, LogOut, Send, FileText, CheckCircle2, Filter, Trash2, X, Eye } from "lucide-react";
 import Button from "@/components/ui/Button";
 import { API_BASE_URL, apiFetch, formatAssetUrl } from "@/lib/config";
 
@@ -22,7 +22,7 @@ interface AuthorStory {
   title: string;
   slug: string;
   coverImageUrl: string | null;
-  status: "DRAFT" | "PENDING" | "APPROVED" | "REJECTED";
+  status: "DRAFT" | "PENDING" | "APPROVED" | "REJECTED" | "APPROVED_EMAGAZINE";
   createdAt: string;
   updatedAt: string;
 }
@@ -196,6 +196,7 @@ export default function ProfilePage() {
   const draftCount = stories.filter((s) => s.status === "DRAFT").length;
   const pendingCount = stories.filter((s) => s.status === "PENDING").length;
   const approvedCount = stories.filter((s) => s.status === "APPROVED").length;
+  const emagazineCount = stories.filter((s) => s.status === "APPROVED_EMAGAZINE").length;
 
   if (loading) {
     return (
@@ -345,11 +346,11 @@ export default function ProfilePage() {
             <div className="flex flex-wrap items-center justify-between gap-4">
               <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
                 <BookOpen className="w-5 h-5 text-gray-700" />
-                <span>My Stories & Drafts</span>
+                <span>My Works & Submissions</span>
               </h2>
               <Link href="/submit">
                 <Button variant="primary" size="md" className="text-xs font-semibold shadow-xs">
-                  Write New Story
+                  Submit New Work
                 </Button>
               </Link>
             </div>
@@ -366,7 +367,7 @@ export default function ProfilePage() {
                       : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                   }`}
                 >
-                  All Stories ({stories.length})
+                  All Works ({stories.length})
                 </button>
                 <button
                   onClick={() => setStatusFilter("DRAFT")}
@@ -398,6 +399,16 @@ export default function ProfilePage() {
                 >
                   Published ({approvedCount})
                 </button>
+                <button
+                  onClick={() => setStatusFilter("APPROVED_EMAGAZINE")}
+                  className={`px-4 py-2 rounded-full text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
+                    statusFilter === "APPROVED_EMAGAZINE"
+                      ? "bg-black text-white shadow-xs"
+                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  }`}
+                >
+                  E-Magazine ({emagazineCount})
+                </button>
               </div>
 
               {/* Mobile & Tablet Filter Select Dropdown (< 768px) */}
@@ -409,10 +420,11 @@ export default function ProfilePage() {
                     onChange={(e) => setStatusFilter(e.target.value)}
                     className="w-full bg-transparent text-xs font-semibold text-gray-900 outline-none cursor-pointer"
                   >
-                    <option value="ALL">All Stories ({stories.length})</option>
+                    <option value="ALL">All Works ({stories.length})</option>
                     <option value="DRAFT">Drafts ({draftCount})</option>
                     <option value="PENDING">Pending Queue ({pendingCount})</option>
                     <option value="APPROVED">Published ({approvedCount})</option>
+                    <option value="APPROVED_EMAGAZINE">E-Magazine ({emagazineCount})</option>
                   </select>
                 </div>
               </div>
@@ -421,10 +433,10 @@ export default function ProfilePage() {
             {filteredStories.length === 0 ? (
               <div className="p-12 bg-gray-50 border border-gray-200 rounded-[28px] text-center">
                 <FileText className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-                <p className="text-sm text-gray-500 mb-4">No stories found under this filter.</p>
+                <p className="text-sm text-gray-500 mb-4">No works found under this filter.</p>
                 <Link href="/submit">
                   <Button variant="secondary" size="md" className="border border-gray-300">
-                    Create New Story
+                    Submit New Work
                   </Button>
                 </Link>
               </div>
@@ -455,6 +467,8 @@ export default function ProfilePage() {
                         className={`font-bold text-[10px] uppercase tracking-wider px-3 py-1 rounded-xl shrink-0 ${
                           story.status === "APPROVED"
                             ? "bg-emerald-100 text-emerald-800"
+                            : story.status === "APPROVED_EMAGAZINE"
+                            ? "bg-purple-100 text-purple-800 border border-purple-200"
                             : story.status === "PENDING"
                             ? "bg-amber-100 text-amber-800"
                             : story.status === "REJECTED"
@@ -462,9 +476,29 @@ export default function ProfilePage() {
                             : "bg-gray-200 text-gray-800"
                         }`}
                       >
-                        {story.status}
+                        {story.status === "APPROVED_EMAGAZINE" ? "E-Magazine" : story.status}
                       </span>
                     </div>
+
+                    {story.status === "APPROVED_EMAGAZINE" && (
+                      <div className="pt-3 border-t border-gray-100 flex items-center justify-between gap-2 flex-wrap text-xs">
+                        <span className="text-gray-600 font-medium flex items-center gap-1.5">
+                          <BookOpen className="w-3.5 h-3.5 text-gray-500 shrink-0" />
+                          <span>Approved for AKAM E-Magazine edition (stored for periodical)</span>
+                        </span>
+                        <Link href={`/works/${story.slug || story.id}`}>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            icon={<Eye className="w-3 h-3" />}
+                            iconPosition="left"
+                            className="text-xs px-3 py-1.5 cursor-pointer border border-gray-300 shadow-xs"
+                          >
+                            Preview
+                          </Button>
+                        </Link>
+                      </div>
+                    )}
 
                     {/* Draft Actions Bar */}
                     {(story.status === "DRAFT" || story.status === "REJECTED") && (

@@ -46,6 +46,7 @@ export class StoriesController {
   @ApiQuery({ name: 'search', required: false, description: 'Search term' })
   @ApiQuery({ name: 'category', required: false, description: 'Category filter' })
   @ApiQuery({ name: 'authorId', required: false, description: 'Filter by authorId' })
+  @ApiQuery({ name: 'featured', required: false, description: 'Filter by featured flag (true/false)' })
   async findAll(
     @Query('status') status?: string,
     @Query('page') page?: string,
@@ -53,10 +54,11 @@ export class StoriesController {
     @Query('search') search?: string,
     @Query('category') category?: string,
     @Query('authorId') authorId?: string,
+    @Query('featured') featured?: string,
   ) {
     const pageNum = page ? parseInt(page, 10) : undefined;
     const limitNum = limit ? parseInt(limit, 10) : undefined;
-    return this.storiesService.findAll(status, pageNum, limitNum, search, category, authorId);
+    return this.storiesService.findAll(status, pageNum, limitNum, search, category, authorId, featured);
   }
 
   @Get('published')
@@ -66,16 +68,18 @@ export class StoriesController {
   @ApiQuery({ name: 'search', required: false, description: 'Search term' })
   @ApiQuery({ name: 'category', required: false, description: 'Category filter' })
   @ApiQuery({ name: 'authorId', required: false, description: 'Filter by authorId' })
+  @ApiQuery({ name: 'featured', required: false, description: 'Filter by featured flag (true/false)' })
   async findPublished(
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('search') search?: string,
     @Query('category') category?: string,
     @Query('authorId') authorId?: string,
+    @Query('featured') featured?: string,
   ) {
     const pageNum = page ? parseInt(page, 10) : undefined;
     const limitNum = limit ? parseInt(limit, 10) : undefined;
-    return this.storiesService.findAll('APPROVED', pageNum, limitNum, search, category, authorId);
+    return this.storiesService.findAll('APPROVED', pageNum, limitNum, search, category, authorId, featured);
   }
 
   @Get(':id')
@@ -177,5 +181,15 @@ export class StoriesController {
     @Body() dto: ReviewStoryDto,
   ) {
     return this.storiesService.reviewStory(id, user.id, dto);
+  }
+
+  @Patch(':id/toggle-featured')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('EDITOR', 'ADMIN')
+  @ApiOperation({ summary: '[Editor/Admin] Toggle story featured status' })
+  async toggleFeatured(@Param('id') id: string) {
+    return this.storiesService.toggleFeatured(id);
   }
 }

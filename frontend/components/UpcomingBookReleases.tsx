@@ -158,7 +158,7 @@ export const UpcomingBookReleases: React.FC<UpcomingBookReleasesProps> = ({
               1024: { slidesPerView: 4.2, spaceBetween: 24 },
               1280: { slidesPerView: 5, spaceBetween: 24 },
             }}
-            className="w-full [&_.swiper-wrapper]:!items-stretch [&_.swiper-slide]:!h-auto [&_.swiper-slide]:!flex [&_.swiper-slide]:!flex-col"
+            className="upcoming-books-swiper w-full [&_.swiper-wrapper]:!items-stretch [&_.swiper-slide]:!h-auto [&_.swiper-slide]:!flex [&_.swiper-slide]:!flex-col"
           >
             {releasesList.map((item) => (
               <SwiperSlide key={item.id} className="!h-auto !flex !flex-col">

@@ -31,6 +31,7 @@ type StoryRow = {
   submissionType?: string;
   mediaUrl?: string | null;
   status: string;
+  isFeatured?: boolean;
   rejectionNote?: string | null;
   authorId: string;
   authorName?: string | null;
@@ -56,6 +57,7 @@ export class StoriesService {
     search?: string,
     category?: string,
     authorId?: string,
+    featured?: string,
   ) {
     const storyStatus = status ?? 'APPROVED';
     const page = pageVal && pageVal > 0 ? pageVal : 1;
@@ -64,6 +66,10 @@ export class StoriesService {
 
     let whereSql = `WHERE s.status = $1::"StoryStatus"`;
     const params: any[] = [storyStatus];
+
+    if (featured === 'true' || featured === '1') {
+      whereSql += ` AND s."isFeatured" = true`;
+    }
 
     if (authorId && authorId.trim()) {
       params.push(authorId.trim());
@@ -94,14 +100,14 @@ export class StoriesService {
       `SELECT
          s.id, s.title, s.slug, s.description, s.content, s.category, s."coverImageUrl",
          s."submissionType", s."mediaUrl",
-         s.status, s."createdAt",
+         s.status, s."isFeatured", s."createdAt",
          s."authorId",
          u.name AS "authorName",
          u."avatarUrl" AS "authorAvatarUrl"
        FROM story s
        JOIN "user" u ON u.id = s."authorId"
        ${whereSql}
-       ORDER BY s."createdAt" DESC
+       ORDER BY s."isFeatured" DESC NULLS LAST, s."createdAt" DESC
        LIMIT $${queryParams.length - 1} OFFSET $${queryParams.length}`,
       queryParams,
     );
@@ -359,6 +365,25 @@ export class StoriesService {
         id,
       );
       return { id, status: 'APPROVED' };
+    } else if (dto.decision === 'APPROVED_EMAGAZINE') {
+      await this.prisma.execute(
+        `UPDATE story SET status = 'APPROVED_EMAGAZINE'::"StoryStatus", "rejectionNote" = null, "updatedAt" = now()
+         WHERE id = $1`,
+        [id],
+      );
+      await this.notificationsService.notifyAuthorOfEmagazineApproval(
+        story.authorId,
+        story.title,
+        id,
+      );
+      return { id, status: 'APPROVED_EMAGAZINE' };
+    } else if (dto.decision === 'PENDING') {
+      await this.prisma.execute(
+        `UPDATE story SET status = 'PENDING'::"StoryStatus", "rejectionNote" = null, "updatedAt" = now()
+         WHERE id = $1`,
+        [id],
+      );
+      return { id, status: 'PENDING' };
     } else {
       await this.prisma.execute(
         `UPDATE story SET status = 'REJECTED'::"StoryStatus", "rejectionNote" = $1, "updatedAt" = now()
@@ -393,5 +418,18 @@ export class StoriesService {
     await this.prisma.execute(`DELETE FROM story_like WHERE "storyId" = $1`, [id]).catch(() => null);
     await this.prisma.execute(`DELETE FROM story WHERE id = $1`, [id]);
     return { success: true };
+  }
+
+  async toggleFeatured(id: string) {
+    const story = await this.prisma.queryOne<{ id: string; isFeatured: boolean | null }>(
+      `SELECT id, "isFeatured" FROM story WHERE id = $1`,
+      [id],
+    );
+    if (!story) throw new NotFoundException('Story not found');
+    const newStatus = !story.isFeatured;
+    return this.prisma.queryOne(
+      `UPDATE story SET "isFeatured" = $1, "updatedAt" = now() WHERE id = $2 RETURNING *`,
+      [newStatus, id],
+    );
   }
 }

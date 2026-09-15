@@ -69,3 +69,212 @@ button {
 ::-webkit-scrollbar-thumb:hover {
   background-color: #94a3b8;
 }
+
+/* Tree Swaying Animation (like a Christmas tree / pine tree swaying in breeze) */
+@keyframes treeSwayGroup {
+  0%, 100% {
+    transform: rotate(0deg);
+  }
+  25% {
+    transform: rotate(2.8deg);
+  }
+  75% {
+    transform: rotate(-2.8deg);
+  }
+}
+
+@keyframes treeSwayTop {
+  0%, 100% {
+    transform: rotate(0deg) skewX(0deg);
+  }
+  25% {
+    transform: rotate(4.8deg) skewX(1.8deg);
+  }
+  75% {
+    transform: rotate(-4.8deg) skewX(-1.8deg);
+  }
+}
+
+@keyframes treeSwayMid {
+  0%, 100% {
+    transform: rotate(0deg) skewX(0deg);
+  }
+  25% {
+    transform: rotate(3deg) skewX(1deg);
+  }
+  75% {
+    transform: rotate(-3deg) skewX(-1deg);
+  }
+}
+
+@keyframes treeSwayBase {
+  0%, 100% {
+    transform: rotate(0deg);
+  }
+  25% {
+    transform: rotate(1.5deg);
+  }
+  75% {
+    transform: rotate(-1.5deg);
+  }
+}
+
+.animate-tree-sway-group {
+  transform-origin: 50% 100%;
+  animation: treeSwayGroup 5.2s ease-in-out infinite;
+  will-change: transform;
+}
+
+.animate-tree-sway-top {
+  transform-origin: 50% 100%;
+  animation: treeSwayTop 4.4s ease-in-out infinite;
+  will-change: transform;
+}
+
+.animate-tree-sway-mid {
+  transform-origin: 50% 100%;
+  animation: treeSwayMid 4.8s ease-in-out infinite 0.15s;
+  will-change: transform;
+}
+
+.animate-tree-sway-base {
+  transform-origin: 50% 100%;
+  animation: treeSwayBase 5.2s ease-in-out infinite 0.3s;
+  will-change: transform;
+}
+
+/* ==========================================================================
+   Swiper SSR & Hydration FOUC Prevention
+   Prevents initial millisecond flash of giant 100%-wide cards before Swiper JS initializes.
+   ========================================================================== */
+
+/* Base pre-initialization safety for all Swiper instances */
+.swiper:not(.swiper-initialized) {
+  overflow: hidden !important;
+}
+
+.swiper:not(.swiper-initialized) .swiper-wrapper {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  overflow: hidden !important;
+}
+
+.swiper:not(.swiper-initialized) .swiper-slide {
+  flex-shrink: 0 !important;
+  box-sizing: border-box !important;
+}
+
+/* 1. Latest Stories Carousel Pre-init Sizing */
+.latest-stories-swiper:not(.swiper-initialized) .swiper-slide {
+  width: 82% !important;
+  max-width: 320px !important;
+  margin-right: 20px !important;
+}
+@media (min-width: 480px) {
+  .latest-stories-swiper:not(.swiper-initialized) .swiper-slide {
+    width: 58% !important;
+    max-width: 320px !important;
+    margin-right: 20px !important;
+  }
+}
+@media (min-width: 640px) {
+  .latest-stories-swiper:not(.swiper-initialized) .swiper-slide {
+    width: 44% !important;
+    max-width: 340px !important;
+    margin-right: 22px !important;
+  }
+}
+@media (min-width: 768px) {
+  .latest-stories-swiper:not(.swiper-initialized) .swiper-slide {
+    width: 33% !important;
+    max-width: 300px !important;
+    margin-right: 24px !important;
+  }
+}
+@media (min-width: 1024px) {
+  .latest-stories-swiper:not(.swiper-initialized) .swiper-slide {
+    width: 26% !important;
+    max-width: 300px !important;
+    margin-right: 28px !important;
+  }
+}
+@media (min-width: 1280px) {
+  .latest-stories-swiper:not(.swiper-initialized) .swiper-slide {
+    width: 22.5% !important;
+    max-width: 290px !important;
+    margin-right: 28px !important;
+  }
+}
+
+/* 2. Upcoming Events Carousel Pre-init Sizing */
+.upcoming-events-swiper:not(.swiper-initialized) .swiper-slide {
+  width: 80% !important;
+  max-width: 360px !important;
+  margin-right: 20px !important;
+}
+@media (min-width: 640px) {
+  .upcoming-events-swiper:not(.swiper-initialized) .swiper-slide {
+    width: 45% !important;
+    max-width: 380px !important;
+    margin-right: 24px !important;
+  }
+}
+@media (min-width: 1024px) {
+  .upcoming-events-swiper:not(.swiper-initialized) .swiper-slide {
+    width: 29% !important;
+    max-width: 380px !important;
+    margin-right: 28px !important;
+  }
+}
+@media (min-width: 1280px) {
+  .upcoming-events-swiper:not(.swiper-initialized) .swiper-slide {
+    width: 27.5% !important;
+    max-width: 380px !important;
+    margin-right: 32px !important;
+  }
+}
+
+/* 3. Upcoming Book Releases Carousel Pre-init Sizing */
+.upcoming-books-swiper:not(.swiper-initialized) .swiper-slide {
+  width: 75% !important;
+  max-width: 260px !important;
+  margin-right: 20px !important;
+}
+@media (min-width: 540px) {
+  .upcoming-books-swiper:not(.swiper-initialized) .swiper-slide {
+    width: 43% !important;
+    max-width: 260px !important;
+    margin-right: 20px !important;
+  }
+}
+@media (min-width: 768px) {
+  .upcoming-books-swiper:not(.swiper-initialized) .swiper-slide {
+    width: 29% !important;
+    max-width: 240px !important;
+    margin-right: 24px !important;
+  }
+}
+@media (min-width: 1024px) {
+  .upcoming-books-swiper:not(.swiper-initialized) .swiper-slide {
+    width: 22% !important;
+    max-width: 240px !important;
+    margin-right: 24px !important;
+  }
+}
+@media (min-width: 1280px) {
+  .upcoming-books-swiper:not(.swiper-initialized) .swiper-slide {
+    width: 18.5% !important;
+    max-width: 230px !important;
+    margin-right: 24px !important;
+  }
+}
+
+/* 4. Reader Reviews Carousel Pre-init Sizing */
+.reader-reviews-swiper:not(.swiper-initialized) .swiper-slide {
+  width: 100% !important;
+}
+.reader-reviews-swiper:not(.swiper-initialized) .swiper-slide:not(:first-child) {
+  display: none !important;
+}
+

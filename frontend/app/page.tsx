@@ -78,7 +78,7 @@ async function getHomePageData() {
     const timeoutSignal = AbortSignal.timeout(8000);
 
     const [storiesRes, categoriesRes, eventsRes, booksRes, videosRes, reviewsRes, editorsNoteRes] = await Promise.allSettled([
-      fetch(`${API_BASE_URL}/stories?status=APPROVED&limit=10`, {
+      fetch(`${API_BASE_URL}/stories?status=APPROVED&featured=true&limit=10`, {
         next: { tags: ["homepage", "stories"], revalidate: 60 },
         signal: timeoutSignal,
       }),
@@ -118,6 +118,22 @@ async function getHomePageData() {
       }
     }
 
+    // Fallback: If no stories are explicitly marked as featured in editorial, fallback to latest approved
+    if (rawStories.length === 0) {
+      try {
+        const fallbackRes = await fetch(`${API_BASE_URL}/stories?status=APPROVED&limit=10`, {
+          next: { tags: ["homepage", "stories"], revalidate: 60 },
+          signal: AbortSignal.timeout(5000),
+        });
+        if (fallbackRes.ok) {
+          const fallbackJson = await fallbackRes.json();
+          rawStories = fallbackJson.data || (Array.isArray(fallbackJson) ? fallbackJson : []);
+        }
+      } catch (e) {
+        console.error("Failed to fallback to latest approved stories", e);
+      }
+    }
+
     const stories = rawStories.map((s: any) => ({
       id: s.id,
       category: (s.category || "Fiction").toUpperCase(),
@@ -126,7 +142,7 @@ async function getHomePageData() {
       description: s.description || s.excerpt || s.summary || s.shortDescription || "",
       author: typeof s.author === "string" && s.author.startsWith("By ") ? s.author : `By ${s.authorName || s.authorEmail || "Unknown Author"}`,
       imageSrc: s.coverImageUrl || s.imageSrc || "/images/stories/ramachi.jpg",
-      href: `/stories/${s.slug || s.id}`,
+      href: `/works/${s.slug || s.id}`,
       contentType: (s.contentType || s.category || "STORY").toUpperCase(),
     }));
 
