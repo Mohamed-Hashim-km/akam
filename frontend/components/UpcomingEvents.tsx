@@ -8,7 +8,6 @@ import { Navigation } from "swiper/modules";
 import type { Swiper as SwiperClass } from "swiper";
 import Button from "./ui/Button";
 import { API_BASE_URL } from "@/lib/config";
-import EventRegisterModal from "@/components/EventRegisterModal";
 
 // Swiper CSS imports
 import "swiper/css";
@@ -70,7 +69,6 @@ export const UpcomingEvents: React.FC<UpcomingEventsProps> = ({
   const [swiperInstance, setSwiperInstance] = useState<SwiperClass | null>(null);
   const [fetchedEvents, setFetchedEvents] = useState<EventItem[]>([]);
   const [loading, setLoading] = useState<boolean>(initialEvents === undefined);
-  const [selectedEventForReg, setSelectedEventForReg] = useState<EventItem | null>(null);
 
   useEffect(() => {
     if (initialEvents === undefined) {
@@ -161,8 +159,8 @@ export const UpcomingEvents: React.FC<UpcomingEventsProps> = ({
 
               return (
                 <SwiperSlide key={evt.id} className="flex flex-col">
-                  <div
-                    onClick={() => setSelectedEventForReg(evt)}
+                  <Link
+                    href={viewAllHref || "/events"}
                     className="group relative w-full h-[380px] sm:h-[420px] md:h-[450px] rounded-[26px] sm:rounded-[28px] overflow-hidden cursor-pointer shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col justify-end"
                   >
                     {/* Event Background Image from Backend */}
@@ -194,21 +192,14 @@ export const UpcomingEvents: React.FC<UpcomingEventsProps> = ({
                           </span>
                         </div>
 
-                        {/* Register Now Button */}
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedEventForReg(evt);
-                          }}
-                          className="px-4 py-2 bg-white text-[#111827] rounded-full text-xs font-semibold flex items-center gap-1.5 shadow-md hover:bg-gray-100 transition-all cursor-pointer shrink-0"
-                        >
+                        {/* Register Now Pill */}
+                        <div className="px-4 py-2 bg-white text-[#111827] rounded-full text-xs font-semibold flex items-center gap-1.5 shadow-md group-hover:bg-gray-100 transition-all shrink-0">
                           <span>Register Now</span>
                           <ArrowRight className="w-3.5 h-3.5" />
-                        </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  </Link>
                 </SwiperSlide>
               );
             })}
@@ -249,15 +240,6 @@ export const UpcomingEvents: React.FC<UpcomingEventsProps> = ({
           </Link>
         </div>
       </div>
-
-      {/* Registration Modal */}
-      {selectedEventForReg && (
-        <EventRegisterModal
-          isOpen={!!selectedEventForReg}
-          onClose={() => setSelectedEventForReg(null)}
-          event={selectedEventForReg}
-        />
-      )}
     </section>
   );
 };
