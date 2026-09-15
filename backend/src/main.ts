@@ -23,6 +23,7 @@ async function bootstrap() {
       'https://akamdigital.vercel.app',
       'http://localhost:3000',
       'http://localhost:3001',
+      'http://localhost:3002',
       process.env.FRONTEND_URL,
       ...configuredOrigins,
     ]),

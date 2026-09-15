@@ -4,11 +4,20 @@ import type { Response } from 'express';
 import { AuthService } from './auth.service.js';
 import { RequestOtpDto } from './dto/request-otp.dto.js';
 import { VerifyOtpDto } from './dto/verify-otp.dto.js';
+import { CheckEmailDto } from './dto/check-email.dto.js';
 
 @ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
+
+  @Post('check-email')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Check if email exists and if profile details are required' })
+  @ApiResponse({ status: 200, description: 'Email status checked' })
+  async checkEmail(@Body() dto: CheckEmailDto) {
+    return this.authService.checkEmail(dto);
+  }
 
   @Post('request-otp')
   @HttpCode(HttpStatus.OK)
