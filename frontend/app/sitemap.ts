@@ -11,7 +11,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     "/events",
     "/emagazine",
     "/media",
-    "/stories",
+    "/works",
     "/submit",
     "/editorial-guidelines",
     "/library",
@@ -31,7 +31,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       const stories = data?.data || (Array.isArray(data) ? data : []);
       const storyRoutes: MetadataRoute.Sitemap = stories.map(
         (story: { id: string; updatedAt?: string; createdAt?: string }) => ({
-          url: `${baseUrl}/stories/${story.id}`,
+          url: `${baseUrl}/works/${story.id}`,
           lastModified: story.updatedAt ? new Date(story.updatedAt) : new Date(),
           changeFrequency: "weekly",
           priority: 0.7,

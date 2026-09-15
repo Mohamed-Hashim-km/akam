@@ -314,9 +314,9 @@ export default function LibraryPage() {
               {activeTab === "liked" && "Show appreciation for stories by liking them to view them here later."}
               {activeTab === "completed" && "Finish reading stories completely to add them to your completed bookshelf."}
             </p>
-            <Link href="/stories">
+            <Link href="/works">
               <Button variant="primary" size="md" icon={<ArrowRight className="w-4 h-4" />} iconPosition="right">
-                Explore Stories Catalog
+                Explore Works Catalog
               </Button>
             </Link>
           </div>
@@ -404,7 +404,7 @@ export default function LibraryPage() {
                         : "AKAM Digital"}
                     </span>
 
-                    <Link href={`/stories/${targetSlugOrId}`}>
+                    <Link href={`/works/${targetSlugOrId}`}>
                       <Button
                         variant="primary"
                         size="sm"
@@ -412,7 +412,7 @@ export default function LibraryPage() {
                         iconPosition="right"
                         className="text-xs font-semibold py-1.5 px-3.5 shadow-xs cursor-pointer"
                       >
-                        {activeTab === "inProgress" ? "Continue" : "Read Story"}
+                        {activeTab === "inProgress" ? "Continue" : "Read Work"}
                       </Button>
                     </Link>
                   </div>

@@ -4,13 +4,15 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowRight, ChevronLeft, ChevronRight } from "lucide-react";
+import { motion } from "framer-motion";
 import { Swiper, SwiperSlide } from "swiper/react";
-import { Navigation } from "swiper/modules";
+import { Navigation, EffectCards } from "swiper/modules";
 import type { Swiper as SwiperClass } from "swiper";
 import { API_BASE_URL, apiFetch } from "@/lib/config";
 
 import "swiper/css";
 import "swiper/css/navigation";
+import "swiper/css/effect-cards";
 
 export interface CategoryItem {
   id: string;
@@ -112,28 +114,34 @@ export const ExploreByInterest: React.FC<ExploreByInterestProps> = ({
       FALLBACK_CARD_COLORS[index % FALLBACK_CARD_COLORS.length];
 
     return (
-      <div
-        key={cat.id}
-        onClick={() => router.push(cat.href || `/communities/${slug}`)}
-        className="relative rounded-[22px] p-5 sm:p-6 flex flex-col justify-between transition-all duration-300 group shadow-xs hover:shadow-xl cursor-pointer w-full min-h-[210px]"
-        style={{ backgroundColor: bgColor }}
-      >
-        <div>
-          <h3 className="text-base sm:text-lg font-bold text-gray-950 tracking-tight leading-snug mb-2 font-poppins">
-            {cat.title}
-          </h3>
-          <p className="text-xs text-gray-800/85 font-normal leading-relaxed mb-5 font-poppins">
-            {cat.description}
-          </p>
-        </div>
+      <div className="relative w-full h-full group select-none">
+        {/* Physical Stack Model Layer Underlay (Simulates layered cards stacked underneath) */}
+        <div className="absolute -bottom-2 -right-1.5 w-full h-full rounded-[24px] bg-black/[0.08] -z-10 transition-transform duration-300 group-hover:translate-x-1 group-hover:translate-y-1 pointer-events-none" />
+        <div className="absolute -bottom-3.5 -right-3 w-full h-full rounded-[24px] bg-black/[0.03] -z-20 transition-transform duration-300 group-hover:translate-x-1.5 group-hover:translate-y-1.5 pointer-events-none" />
 
-        <Link
-          href={cat.href || `/communities/${slug}`}
-          className="w-full bg-white text-gray-950 rounded-full px-4 py-2 flex items-center justify-between text-xs font-semibold shadow-xs hover:shadow-md transition-all cursor-pointer group-hover:bg-white/95"
+        <div
+          key={cat.id}
+          onClick={() => router.push(cat.href || `/communities/${slug}`)}
+          className="relative rounded-[22px] p-5 sm:p-6 flex flex-col justify-between transition-all duration-300 border border-black/[0.06] shadow-[0_8px_20px_-6px_rgba(0,0,0,0.08)] group-hover:shadow-[0_22px_40px_-8px_rgba(0,0,0,0.2)] cursor-pointer w-full min-h-[210px] h-full"
+          style={{ backgroundColor: bgColor }}
         >
-          <span>Explore</span>
-          <ArrowRight className="w-3.5 h-3.5 text-gray-800 transition-transform group-hover:translate-x-1" />
-        </Link>
+          <div>
+            <h3 className="text-base sm:text-lg font-bold text-gray-950 tracking-tight leading-snug mb-2 font-poppins">
+              {cat.title}
+            </h3>
+            <p className="text-xs text-gray-800/85 font-normal leading-relaxed mb-5 font-poppins">
+              {cat.description}
+            </p>
+          </div>
+
+          <Link
+            href={cat.href || `/communities/${slug}`}
+            className="w-full bg-white text-gray-950 rounded-full px-4 py-2 flex items-center justify-between text-xs font-semibold shadow-xs hover:shadow-md transition-all cursor-pointer group-hover:bg-white/95"
+          >
+            <span>Explore</span>
+            <ArrowRight className="w-3.5 h-3.5 text-gray-800 transition-transform group-hover:translate-x-1" />
+          </Link>
+        </div>
       </div>
     );
   };
@@ -183,9 +191,15 @@ export const ExploreByInterest: React.FC<ExploreByInterestProps> = ({
 
       <div className="container px-6 mx-auto relative z-10 max-w-[1280px]">
         {/* Section Headline */}
-        <h2 className="text-3xl sm:text-4xl lg:text-5xl font-medium text-center text-dark-text tracking-tight mb-12 sm:mb-16 font-poppins">
+        <motion.h2
+          initial={{ opacity: 0, y: 25 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.6, ease: "easeOut" }}
+          className="text-3xl sm:text-4xl lg:text-5xl font-medium text-center text-dark-text tracking-tight mb-12 sm:mb-16 font-poppins"
+        >
           {title}
-        </h2>
+        </motion.h2>
 
         {/* Loading Skeleton */}
         {loading && categoriesList.length === 0 ? (
@@ -199,68 +213,104 @@ export const ExploreByInterest: React.FC<ExploreByInterestProps> = ({
           </div>
         ) : (
           <>
-            {/* Desktop Staggered Serpentine Diagonal Snake Layout */}
-            <div className="hidden md:grid md:grid-cols-4 gap-5 lg:gap-6 md:auto-rows-[95px] lg:auto-rows-[105px] w-full items-start">
+            {/* Desktop Staggered Serpentine Diagonal Snake Layout with Card Stack Model Animation */}
+            <div className="hidden md:grid md:grid-cols-4 gap-5 lg:gap-6 md:auto-rows-[95px] lg:auto-rows-[105px] w-full items-start pb-10 lg:pb-14">
               {visibleCategories.map((cat, index) => {
                 const colIndex = getSnakeColumnIndex(index);
                 return (
-                  <div
+                  <motion.div
                     key={cat.id}
-                    className="w-full"
+                    initial={{
+                      opacity: 0,
+                      y: 70,
+                      scale: 0.9,
+                      rotate: index % 2 === 0 ? -2.5 : 2.5,
+                    }}
+                    whileInView={{
+                      opacity: 1,
+                      y: 0,
+                      scale: 1,
+                      rotate: 0,
+                    }}
+                    viewport={{ once: true, amount: 0.15 }}
+                    transition={{
+                      duration: 0.6,
+                      delay: (index % 4) * 0.1 + Math.floor(index / 4) * 0.08,
+                      ease: [0.16, 1, 0.3, 1],
+                    }}
+                    whileHover={{
+                      y: -12,
+                      scale: 1.03,
+                      zIndex: 35,
+                      transition: { duration: 0.25, ease: "easeOut" },
+                    }}
+                    className="w-full relative"
                     style={{
                       gridColumnStart: colIndex + 1,
                       gridRowStart: index + 1,
+                      gridRowEnd: "span 2",
                     }}
                   >
                     {renderCard(cat, index)}
-                  </div>
+                  </motion.div>
                 );
               })}
             </div>
 
-            {/* Mobile Carousel Slider */}
-            <div className="block md:hidden w-full">
+            {/* Mobile Card Stack Swiper Slider */}
+            <div className="block md:hidden w-full px-2 py-2">
               <Swiper
-                modules={[Navigation]}
+                modules={[EffectCards, Navigation]}
+                effect="cards"
+                grabCursor={true}
+                cardsEffect={{
+                  perSlideOffset: 10,
+                  perSlideRotate: 2.5,
+                  rotate: true,
+                  slideShadows: false,
+                }}
                 onSwiper={(swiper) => setSwiperInstance(swiper)}
-                spaceBetween={16}
-                slidesPerView={1.15}
-                className="w-full [&_.swiper-wrapper]:!items-stretch [&_.swiper-slide]:!h-auto [&_.swiper-slide]:!flex [&_.swiper-slide]:!flex-col"
+                className="w-[88%] max-w-[340px] mx-auto py-4 [&_.swiper-slide]:!h-auto [&_.swiper-slide]:!flex [&_.swiper-slide]:!flex-col"
               >
-                {visibleCategories.map((cat, index) => (
+                {categoriesList.map((cat, index) => (
                   <SwiperSlide key={cat.id} className="!h-auto !flex !flex-col">
                     {renderCard(cat, index)}
                   </SwiperSlide>
                 ))}
               </Swiper>
 
-              {/* Mobile Carousel Navigation Arrows */}
-              <div className="flex items-center justify-end gap-3 pt-6">
-                <button
-                  onClick={() => swiperInstance?.slidePrev()}
-                  className="w-10 h-10 rounded-full border border-gray-300 bg-white flex items-center justify-center text-gray-700 hover:bg-gray-100 transition focus:outline-none cursor-pointer shadow-xs active:scale-95"
-                  aria-label="Previous Category"
-                >
-                  <ChevronLeft className="w-5 h-5" />
-                </button>
-                <button
-                  onClick={() => swiperInstance?.slideNext()}
-                  className="w-10 h-10 rounded-full border border-gray-300 bg-white flex items-center justify-center text-gray-700 hover:bg-gray-100 transition focus:outline-none cursor-pointer shadow-xs active:scale-95"
-                  aria-label="Next Category"
-                >
-                  <ChevronRight className="w-5 h-5" />
-                </button>
+              {/* Mobile Carousel Navigation Arrows & Stack Indicator */}
+              <div className="flex items-center justify-between pt-5 max-w-[340px] mx-auto px-1">
+                <span className="text-[11px] text-gray-400 font-medium tracking-wide">
+                  Swipe cards stack
+                </span>
+                <div className="flex items-center gap-2.5">
+                  <button
+                    onClick={() => swiperInstance?.slidePrev()}
+                    className="w-9 h-9 rounded-full border border-gray-200 bg-white flex items-center justify-center text-gray-700 hover:bg-gray-100 transition focus:outline-none cursor-pointer shadow-xs active:scale-95"
+                    aria-label="Previous Category"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => swiperInstance?.slideNext()}
+                    className="w-9 h-9 rounded-full border border-gray-200 bg-white flex items-center justify-center text-gray-700 hover:bg-gray-100 transition focus:outline-none cursor-pointer shadow-xs active:scale-95"
+                    aria-label="Next Category"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
             </div>
           </>
         )}
 
-        {/* View More / Show Less Button */}
+        {/* View More / Show Less Button (Desktop) */}
         {categoriesList.length > 7 && (
-          <div className="flex justify-center mt-12 sm:mt-16">
+          <div className="hidden md:flex justify-center mt-8 sm:mt-10 lg:mt-12 relative z-30">
             <button
               onClick={() => setShowAll((prev) => !prev)}
-              className="px-8 py-3 rounded-full bg-black text-white hover:bg-gray-800 transition-all text-xs font-semibold shadow-md cursor-pointer active:scale-98"
+              className="px-8 py-3 rounded-full bg-black text-white hover:bg-gray-800 transition-all text-xs font-semibold shadow-md cursor-pointer active:scale-98 relative z-30"
             >
               {showAll ? "Show less" : "View more"}
             </button>

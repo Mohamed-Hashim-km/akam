@@ -80,14 +80,14 @@ function normalizeStory(s: any): Story {
     description: rawDesc,
     author,
     imageSrc: s.imageSrc || s.coverImageUrl || "/images/stories/ramachi.jpg",
-    href: s.href || `/stories/${s.slug || s.id}`,
+    href: s.href || `/works/${s.slug || s.id}`,
     contentType: (s.contentType || cat).toUpperCase(),
   };
 }
 
 export const LatestStories: React.FC<LatestStoriesProps> = ({
   title = "Featured content",
-  viewAllHref = "/stories",
+  viewAllHref = "/works",
   stories: propStories,
 }) => {
   const [swiperInstance, setSwiperInstance] = useState<SwiperClass | null>(null);
@@ -102,36 +102,62 @@ export const LatestStories: React.FC<LatestStoriesProps> = ({
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (propStories !== undefined) {
+    if (propStories !== undefined && propStories.length > 0) {
       setStories(propStories.map(normalizeStory));
     }
 
-    const fetchLatestPublishedStories = async () => {
+    let isMounted = true;
+
+    const fetchFeaturedPublishedStories = async () => {
       if (!propStories || propStories.length === 0) {
         setLoading(true);
       }
 
       try {
         const res = await apiFetch(
-          `${API_BASE_URL}/stories?status=APPROVED&limit=10`,
+          `${API_BASE_URL}/stories?status=APPROVED&featured=true&limit=10`,
           { cache: "no-store" }
         );
 
         if (res.ok) {
           const json = await res.json();
-          const items = json.data || json;
-          if (Array.isArray(items)) {
-            setStories(items.map(normalizeStory));
+          const items = json.data || (Array.isArray(json) ? json : []);
+          if (Array.isArray(items) && items.length > 0) {
+            if (isMounted) {
+              setStories(items.map(normalizeStory));
+            }
+            return;
+          }
+        }
+
+        // Fallback: If no stories are explicitly marked as featured, fallback to latest approved
+        if (!propStories || propStories.length === 0) {
+          const fallbackRes = await apiFetch(
+            `${API_BASE_URL}/stories?status=APPROVED&limit=10`,
+            { cache: "no-store" }
+          );
+          if (fallbackRes.ok) {
+            const fallbackJson = await fallbackRes.json();
+            const fallbackItems = fallbackJson.data || (Array.isArray(fallbackJson) ? fallbackJson : []);
+            if (Array.isArray(fallbackItems) && isMounted) {
+              setStories(fallbackItems.map(normalizeStory));
+            }
           }
         }
       } catch (err) {
-        console.error("Failed to fetch dynamic latest stories", err);
+        console.error("Failed to fetch dynamic featured stories", err);
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     };
 
-    fetchLatestPublishedStories();
+    fetchFeaturedPublishedStories();
+
+    return () => {
+      isMounted = false;
+    };
   }, [propStories]);
 
   return (
@@ -176,11 +202,10 @@ export const LatestStories: React.FC<LatestStoriesProps> = ({
             <div className="bg-gray-50 border border-gray-200 rounded-[28px] p-8 text-center my-6">
               <BookOpen className="w-10 h-10 mx-auto text-gray-400 mb-2" />
               <h3 className="text-lg font-bold text-gray-900">
-                No Published Stories Yet
+                No Featured Works Yet
               </h3>
               <p className="text-xs text-gray-500 max-w-sm mx-auto mt-1">
-                New stories will appear here dynamically as editors approve
-                submissions.
+                Featured works selected in the Editorial catalog will appear here.
               </p>
             </div>
           )
@@ -198,7 +223,7 @@ export const LatestStories: React.FC<LatestStoriesProps> = ({
                 1024: { slidesPerView: 3.5,  spaceBetween: 28 },
                 1280: { slidesPerView: 4.1,  spaceBetween: 28 },
               }}
-              className="w-full !pb-4 !overflow-visible"
+              className="latest-stories-swiper w-full !pb-4 !overflow-visible"
             >
               {stories.map((story, index) => {
                 const badge = getCategoryBadge(story.category);
@@ -209,7 +234,7 @@ export const LatestStories: React.FC<LatestStoriesProps> = ({
                 return (
                   <SwiperSlide key={story.id} className="h-auto">
                     <Link
-                      href={story.href || `/stories/${story.id}`}
+                      href={story.href || `/works/${story.id}`}
                       className="flex flex-col h-full group/card cursor-pointer"
                     >
                       {/* ── Image ── */}

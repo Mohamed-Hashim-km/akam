@@ -8,9 +8,15 @@ const HOMEPAGE_TAGS = ["homepage", "stories", "events", "books", "media", "comme
 function performRevalidation(path: string, tag: string | null, profile: string = "max") {
   const revalidatedTags: string[] = [];
 
+  const targetProfile = profile || "max";
+
   if (tag) {
-    revalidateTag(tag, profile);
-    revalidatedTags.push(tag);
+    try {
+      revalidateTag(tag, targetProfile);
+      revalidatedTags.push(tag);
+    } catch (e) {
+      // Ignore
+    }
   }
 
   // Always revalidate homepage data tags if revalidating the root path "/" or if no tag was explicitly passed
@@ -18,7 +24,7 @@ function performRevalidation(path: string, tag: string | null, profile: string =
     for (const t of HOMEPAGE_TAGS) {
       if (!revalidatedTags.includes(t)) {
         try {
-          revalidateTag(t, profile);
+          revalidateTag(t, targetProfile);
           revalidatedTags.push(t);
         } catch (e) {
           // Ignore if tag revalidation fails
@@ -28,8 +34,11 @@ function performRevalidation(path: string, tag: string | null, profile: string =
   }
 
   if (path) {
-    revalidatePath(path, "page");
-    revalidatePath(path, "layout");
+    try {
+      revalidatePath(path);
+    } catch (e) {
+      // Ignore
+    }
   }
 
   return revalidatedTags;
@@ -59,6 +68,7 @@ export async function GET(request: NextRequest) {
       }
     );
   } catch (err: any) {
+    console.error("Revalidate GET error:", err);
     return NextResponse.json(
       { revalidated: false, error: err.message || "Failed to revalidate" },
       { status: 500 }

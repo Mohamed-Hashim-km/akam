@@ -151,7 +151,7 @@ export const UpcomingEvents: React.FC<UpcomingEventsProps> = ({
               1024: { slidesPerView: 3.2, spaceBetween: 28 },
               1280: { slidesPerView: 3.4, spaceBetween: 32 },
             }}
-            className="w-full !pb-4 !overflow-visible"
+            className="upcoming-events-swiper w-full !pb-4 !overflow-visible"
           >
             {displayEvents.map((evt) => {
               const rawImg = evt.imageSrc || evt.image || evt.imageUrl || evt.coverImage;

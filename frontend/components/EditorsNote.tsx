@@ -190,7 +190,7 @@ export const EditorsNote: React.FC<EditorsNoteProps> = ({
       {/* Sticky Pinned Container - Stays locked in viewport while scrubbing scroll track */}
       <div className="sticky top-0 h-screen w-full overflow-hidden font-poppins flex items-center justify-center">
         {/* ── ROTATING HALF-CIRCLE CAROUSEL WHEEL (DRIVEN BY SCROLL SCRUB) ── */}
-        <div className="absolute top-1/2 -translate-y-1/2 right-[-140px] sm:right-[-180px] md:right-[-220px] w-[340px] h-[340px] sm:w-[440px] sm:h-[440px] md:w-[500px] md:h-[500px] pointer-events-none z-0">
+        <div className="hidden md:block absolute top-1/2 -translate-y-1/2 right-[-140px] sm:right-[-180px] md:right-[-220px] w-[340px] h-[340px] sm:w-[440px] sm:h-[440px] md:w-[500px] md:h-[500px] pointer-events-none z-0">
           <motion.div
             style={{ rotate: wheelRotate }}
             className="w-full h-full relative"

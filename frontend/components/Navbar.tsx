@@ -330,7 +330,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     setMobileSearchOpen(false);
     setMobileMenuOpen(false);
     if (onSearch) onSearch(searchQuery.trim());
-    router.push(`/stories?search=${encodeURIComponent(searchQuery.trim())}`);
+    router.push(`/works?search=${encodeURIComponent(searchQuery.trim())}`);
   };
 
   const handleSelectSearchResult = (slugOrId: string) => {
@@ -338,7 +338,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     setSearchOpen(false);
     setMobileSearchOpen(false);
     setMobileMenuOpen(false);
-    router.push(`/stories/${slugOrId}`);
+    router.push(`/works/${slugOrId}`);
   };
 
   const handleStartWriting = () => {
@@ -419,7 +419,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                     <Search className="absolute left-3 w-4 h-4 text-gray-400 pointer-events-none" />
                     <input
                       type="text"
-                      placeholder="Search stories..."
+                      placeholder="Search works..."
                       value={searchQuery}
                       onChange={handleSearchChange}
                       autoFocus
@@ -461,11 +461,11 @@ export const Navbar: React.FC<NavbarProps> = ({
                       {isSearching ? (
                         <div className="p-4 text-center text-xs text-gray-500 flex items-center justify-center gap-2">
                           <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
-                          <span>Searching stories...</span>
+                          <span>Searching works...</span>
                         </div>
                       ) : searchResults.length === 0 ? (
                         <div className="p-4 text-center text-xs text-gray-500">
-                          No stories found for &ldquo;{searchQuery}&rdquo;
+                          No works found for &ldquo;{searchQuery}&rdquo;
                         </div>
                       ) : (
                         searchResults.map((story) => (
@@ -474,7 +474,8 @@ export const Navbar: React.FC<NavbarProps> = ({
                             onClick={() => handleSelectSearchResult(story.slug || story.id)}
                             className="p-3 hover:bg-gray-50 flex items-center gap-3 transition-colors cursor-pointer group"
                           >
-                            <div className="relative w-10 h-10 rounded-lg overflow-hidden bg-gray-100 shrink-0 border border-gray-200">
+                            <div className="relative w-10 h-1
+                            0 rounded-lg overflow-hidden bg-gray-100 shrink-0 border border-gray-200">
                               <Image
                                 src={story.coverImageUrl || "/images/stories/ramachi.jpg"}
                                 alt={story.title}
@@ -681,7 +682,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <Search className="absolute left-3.5 w-4 h-4 text-gray-400 pointer-events-none" />
                   <input
                     type="text"
-                    placeholder="Search stories..."
+                    placeholder="Search works..."
                     value={searchQuery}
                     onChange={handleSearchChange}
                     autoFocus
@@ -726,11 +727,11 @@ export const Navbar: React.FC<NavbarProps> = ({
                     {isSearching ? (
                       <div className="p-4 text-center text-xs text-gray-500 flex items-center justify-center gap-2">
                         <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
-                        <span>Searching stories...</span>
+                        <span>Searching works...</span>
                       </div>
                     ) : searchResults.length === 0 ? (
                       <div className="p-4 text-center text-xs text-gray-500">
-                        No stories found for &ldquo;{searchQuery}&rdquo;
+                        No works found for &ldquo;{searchQuery}&rdquo;
                       </div>
                     ) : (
                       searchResults.map((story) => (

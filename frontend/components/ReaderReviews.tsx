@@ -118,7 +118,7 @@ export const ReaderReviews: React.FC<ReaderReviewsProps> = ({
                 }}
                 spaceBetween={24}
                 slidesPerView={1}
-                className="w-full !pb-2 [&_.swiper-wrapper]:!items-stretch [&_.swiper-slide]:!h-auto [&_.swiper-slide]:!flex [&_.swiper-slide]:!flex-col"
+                className="reader-reviews-swiper w-full !pb-2 [&_.swiper-wrapper]:!items-stretch [&_.swiper-slide]:!h-auto [&_.swiper-slide]:!flex [&_.swiper-slide]:!flex-col"
               >
                 {reviewsList.map((item) => {
                   const photoUrl = item.image ? formatAssetUrl(item.image) : null;

@@ -6,6 +6,7 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
   icon?: React.ReactNode;
   iconPosition?: "left" | "right";
   fullWidth?: boolean;
+  loading?: boolean;
   children: React.ReactNode;
 }
 
@@ -15,6 +16,7 @@ export const Button: React.FC<ButtonProps> = ({
   icon,
   iconPosition = "right",
   fullWidth = false,
+  loading = false,
   children,
   className = "",
   disabled,
@@ -43,12 +45,16 @@ export const Button: React.FC<ButtonProps> = ({
   return (
     <button
       className={`${baseStyles} ${variantStyles[variant]} ${sizeStyles[size]} ${widthStyle} ${className}`}
-      disabled={disabled}
+      disabled={disabled || loading}
       {...props}
     >
-      {icon && iconPosition === "left" && <span className="inline-flex">{icon}</span>}
+      {loading ? (
+        <span className="inline-block animate-spin rounded-full h-3.5 w-3.5 border-b-2 border-current mr-1.5" />
+      ) : (
+        icon && iconPosition === "left" && <span className="inline-flex">{icon}</span>
+      )}
       <span>{children}</span>
-      {icon && iconPosition === "right" && <span className="inline-flex">{icon}</span>}
+      {!loading && icon && iconPosition === "right" && <span className="inline-flex">{icon}</span>}
     </button>
   );
 };

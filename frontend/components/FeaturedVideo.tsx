@@ -179,9 +179,19 @@ export const FeaturedVideo: React.FC<FeaturedVideoProps> = ({
           {/* Center Column (3 Dummy Malayalam SVGs + Explore All Button) - Desktop Only */}
           <div className="hidden lg:flex lg:col-span-4 flex-col items-center justify-between gap-6 lg:gap-0 h-full py-6 lg:py-2">
             <div></div>
-            <DummySvgOne className="w-28 sm:w-36 lg:w-44 h-auto max-w-full" />
-            <DummySvgTwo className="w-24 sm:w-32 lg:w-40 h-auto max-w-full" />
-            <DummySvgThree className="w-18 sm:w-24 lg:w-28 h-auto max-w-full" />
+
+            {/* Christmas Tree Swaying Animation Stack (sways right and left from base) */}
+            <div className="flex flex-col items-center justify-center gap-2 lg:gap-3.5 my-auto animate-tree-sway-group select-none">
+              <div className="animate-tree-sway-top transition-transform duration-500 hover:scale-105">
+                <DummySvgOne className="w-28 sm:w-36 lg:w-44 h-auto max-w-full drop-shadow-xs" />
+              </div>
+              <div className="animate-tree-sway-mid transition-transform duration-500 hover:scale-105">
+                <DummySvgTwo className="w-24 sm:w-32 lg:w-40 h-auto max-w-full drop-shadow-xs" />
+              </div>
+              <div className="animate-tree-sway-base transition-transform duration-500 hover:scale-105">
+                <DummySvgThree className="w-18 sm:w-24 lg:w-28 h-auto max-w-full drop-shadow-xs" />
+              </div>
+            </div>
 
             {/* Explore All Button (Desktop) */}
             <Link href="/media">
@@ -251,6 +261,49 @@ export const FeaturedVideo: React.FC<FeaturedVideoProps> = ({
           </div>
         </div>
       )}
+      {/* Embedded scoped styles for tree swaying animation */}
+      <style>{`
+        @keyframes treeSwayGroup {
+          0%, 100% { transform: rotate(0deg); }
+          25% { transform: rotate(2.8deg); }
+          75% { transform: rotate(-2.8deg); }
+        }
+        @keyframes treeSwayTop {
+          0%, 100% { transform: rotate(0deg) skewX(0deg); }
+          25% { transform: rotate(5deg) skewX(1.8deg); }
+          75% { transform: rotate(-5deg) skewX(-1.8deg); }
+        }
+        @keyframes treeSwayMid {
+          0%, 100% { transform: rotate(0deg) skewX(0deg); }
+          25% { transform: rotate(3.2deg) skewX(1deg); }
+          75% { transform: rotate(-3.2deg) skewX(-1deg); }
+        }
+        @keyframes treeSwayBase {
+          0%, 100% { transform: rotate(0deg); }
+          25% { transform: rotate(1.6deg); }
+          75% { transform: rotate(-1.6deg); }
+        }
+        .animate-tree-sway-group {
+          transform-origin: 50% 100%;
+          animation: treeSwayGroup 5.2s ease-in-out infinite;
+          will-change: transform;
+        }
+        .animate-tree-sway-top {
+          transform-origin: 50% 100%;
+          animation: treeSwayTop 4.4s ease-in-out infinite;
+          will-change: transform;
+        }
+        .animate-tree-sway-mid {
+          transform-origin: 50% 100%;
+          animation: treeSwayMid 4.8s ease-in-out infinite 0.15s;
+          will-change: transform;
+        }
+        .animate-tree-sway-base {
+          transform-origin: 50% 100%;
+          animation: treeSwayBase 5.2s ease-in-out infinite 0.3s;
+          will-change: transform;
+        }
+      `}</style>
     </section>
   );
 };

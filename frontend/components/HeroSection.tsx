@@ -15,8 +15,8 @@ export interface HeroSectionProps {
 export const HeroSection: React.FC<HeroSectionProps> = ({
   headline = "Where\nMalayalam\nstories live.",
   subheadline = "Discover stories, voices, and ideas that celebrate the richness of Malayalam literature and culture.",
-  ctaText = "Explore Stories",
-  ctaHref = "/stories",
+  ctaText = "Explore Works",
+  ctaHref = "/works",
   imageSrc = "/images/home/hero2.webp",
   imageAlt = "Malayalam literary readers",
 }) => {

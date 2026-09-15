@@ -1,7 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service.js';
 
-export type NotificationType = 'STORY_SUBMITTED' | 'STORY_APPROVED' | 'STORY_REJECTED';
+export type NotificationType =
+  | 'STORY_SUBMITTED'
+  | 'STORY_APPROVED'
+  | 'STORY_REJECTED'
+  | 'STORY_APPROVED_EMAGAZINE';
 
 type NotificationRow = {
   id: string;
@@ -105,6 +109,15 @@ export class NotificationsService {
         storyId,
       );
     }
+  }
+
+  async notifyAuthorOfEmagazineApproval(authorId: string, storyTitle: string, storyId: string): Promise<void> {
+    await this.createNotification(
+      authorId,
+      'STORY_APPROVED_EMAGAZINE',
+      `Congratulations! Your submission "${storyTitle}" has been approved for the AKAM E-Magazine edition.`,
+      storyId,
+    );
   }
 
   async notifyAuthorOfApproval(authorId: string, storyTitle: string, storyId: string): Promise<void> {

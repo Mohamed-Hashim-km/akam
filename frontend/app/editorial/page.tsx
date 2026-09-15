@@ -62,6 +62,7 @@ import {
   Save,
   Globe,
   Loader2,
+  Star,
 } from "lucide-react";
 import Button from "@/components/ui/Button";
 import AuthModal from "@/components/AuthModal";
@@ -76,7 +77,8 @@ interface PendingStory {
   coverImageUrl: string | null;
   submissionType?: "STORY" | "PAINTING" | "VIDEO";
   mediaUrl?: string | null;
-  status: "PENDING" | "APPROVED" | "REJECTED" | "DRAFT";
+  status: "PENDING" | "APPROVED" | "REJECTED" | "DRAFT" | "APPROVED_EMAGAZINE";
+  isFeatured?: boolean;
   createdAt: string;
   updatedAt: string;
   authorId: string;
@@ -143,6 +145,7 @@ function formatDateTime(dateStr?: string | null) {
 
 type TabType =
   | "queue"
+  | "emagazine"
   | "reports"
   | "inquiries"
   | "catalog"
@@ -310,6 +313,9 @@ function EditorialDashboardContent() {
   // Data & Metadata State (Server-Side Paginated & Searched)
   const [pendingStories, setPendingStories] = useState<PendingStory[]>([]);
   const [queueMeta, setQueueMeta] = useState({ total: 0, page: 1, limit: 10, totalPages: 1 });
+
+  const [emagazineStories, setEmagazineStories] = useState<PendingStory[]>([]);
+  const [emagazineMeta, setEmagazineMeta] = useState({ total: 0, page: 1, limit: 10, totalPages: 1 });
 
   const [allStories, setAllStories] = useState<PendingStory[]>([]);
   const [catalogMeta, setCatalogMeta] = useState({ total: 0, page: 1, limit: 10, totalPages: 1 });
@@ -979,6 +985,18 @@ function EditorialDashboardContent() {
             setQueueMeta(json.meta);
           } else {
             setPendingStories(json);
+          }
+        }
+      } else if (tab === "emagazine") {
+        const emSearch = query ? `&search=${encodeURIComponent(query)}` : "";
+        const emRes = await apiFetch(`${API_BASE_URL}/stories?status=APPROVED_EMAGAZINE&page=${page}&limit=10${emSearch}`);
+        if (emRes.ok) {
+          const json = await emRes.json();
+          if (json.data) {
+            setEmagazineStories(json.data);
+            setEmagazineMeta(json.meta);
+          } else {
+            setEmagazineStories(Array.isArray(json) ? json : []);
           }
         }
       } else if (tab === "reports") {
@@ -1908,7 +1926,11 @@ function EditorialDashboardContent() {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  const handleReview = async (storyId: string, decision: "APPROVED" | "REJECTED", note?: string) => {
+  const handleReview = async (
+    storyId: string,
+    decision: "APPROVED" | "REJECTED" | "APPROVED_EMAGAZINE" | "PENDING",
+    note?: string
+  ) => {
     setActionLoading(true);
     try {
       const res = await apiFetch(`${API_BASE_URL}/stories/${storyId}/review`, {
@@ -1920,14 +1942,20 @@ function EditorialDashboardContent() {
       });
 
       if (res.ok) {
-        setFeedbackMessage(decision === "APPROVED" ? "Submission approved and published!" : "Submission rejected with feedback sent to author.");
         if (decision === "APPROVED") {
+          setFeedbackMessage("Submission approved and published to public catalog!");
           fetch("/api/revalidate?path=/").catch(() => {});
+        } else if (decision === "APPROVED_EMAGAZINE") {
+          setFeedbackMessage("Submission approved for E-Magazine! Stored in the E-Magazine collection.");
+        } else if (decision === "PENDING") {
+          setFeedbackMessage("Story moved back to Pending Review Queue.");
+        } else {
+          setFeedbackMessage("Submission rejected with feedback sent to author.");
         }
         setSelectedStory(null);
         setRejectingStory(null);
         setRejectionNote("");
-        fetchDashboardData();
+        fetchDashboardData(activeTab, currentPage, searchQuery);
       } else {
         const errData = await res.json();
         alert(errData.message || "Failed to review submission");
@@ -2279,6 +2307,44 @@ function EditorialDashboardContent() {
     }
   };
 
+  const handleToggleFeaturedStory = async (storyId: string) => {
+    // Optimistic UI update
+    setAllStories((prev) =>
+      prev.map((s) => (s.id === storyId ? { ...s, isFeatured: !s.isFeatured } : s))
+    );
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/stories/${storyId}/toggle-featured`, {
+        method: "PATCH",
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setAllStories((prev) =>
+          prev.map((s) => (s.id === storyId ? { ...s, isFeatured: updated.isFeatured } : s))
+        );
+        setFeedbackMessage(
+          updated.isFeatured
+            ? "Story marked as Featured on homepage!"
+            : "Story removed from Featured."
+        );
+        fetch("/api/revalidate?path=/&tag=stories").catch(() => {});
+        setTimeout(() => setFeedbackMessage(null), 3000);
+      } else {
+        // Revert on failure
+        setAllStories((prev) =>
+          prev.map((s) => (s.id === storyId ? { ...s, isFeatured: !s.isFeatured } : s))
+        );
+        const err = await res.json();
+        alert(err.message || "Failed to toggle featured status");
+      }
+    } catch (err) {
+      console.error(err);
+      // Revert on error
+      setAllStories((prev) =>
+        prev.map((s) => (s.id === storyId ? { ...s, isFeatured: !s.isFeatured } : s))
+      );
+    }
+  };
+
   const handleAddCategory = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCatName.trim()) return;
@@ -2557,6 +2623,23 @@ function EditorialDashboardContent() {
             </button>
 
             <button
+              onClick={() => handleTabChange("emagazine")}
+              className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
+                activeTab === "emagazine" ? "bg-[#040706] text-white shadow-xs" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <BookOpen className="w-4 h-4 text-purple-400 shrink-0" />
+                <span>E-Magazine Collection</span>
+              </div>
+              {emagazineMeta.total > 0 && (
+                <span className="bg-purple-100 text-purple-900 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                  {emagazineMeta.total}
+                </span>
+              )}
+            </button>
+
+            <button
               onClick={() => handleTabChange("authors")}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
                 activeTab === "authors" ? "bg-[#040706] text-white shadow-xs" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
@@ -2747,6 +2830,7 @@ function EditorialDashboardContent() {
             <div className="flex items-center justify-between gap-4">
               <h1 className="text-2xl sm:text-3xl font-bold text-gray-950 tracking-tight">
                 {activeTab === "queue" && "Pending Review Queue"}
+                {activeTab === "emagazine" && "E-Magazine Collection"}
                 {activeTab === "reports" && "Reported Content Moderation"}
                 {activeTab === "catalog" && "Published Content Catalog"}
                 {activeTab === "authors" && "User & Author Roster"}
@@ -2777,6 +2861,7 @@ function EditorialDashboardContent() {
 
             <p className="text-xs sm:text-sm text-gray-500 font-medium leading-relaxed max-w-3xl">
               {activeTab === "queue" && "Review pending author submissions and approve or reject content."}
+              {activeTab === "emagazine" && "Curated submissions approved exclusively for AKAM E-Magazine editions. These works are stored for the periodical and not published in the public web catalog."}
               {activeTab === "reports" && "Investigate reader flag reports submitted against published content and comments."}
               {activeTab === "catalog" && "Browse all active works (articles, paintings, videos) currently published on AKAM Digital."}
               {activeTab === "authors" && "Manage all registered platform users, writers, and role permissions."}
@@ -2866,11 +2951,11 @@ function EditorialDashboardContent() {
                           </div>
 
                           {/* Action Bar */}
-                          <div className="pt-3.5 border-t border-gray-100 flex items-center gap-2">
+                          <div className="pt-3.5 border-t border-gray-100 flex items-center gap-1.5 flex-wrap">
                             <button
                               type="button"
                               onClick={() => setSelectedStory(story)}
-                              className="flex-1 inline-flex items-center justify-center gap-1.5 py-2 px-2 bg-white hover:bg-gray-100 border border-gray-300 text-gray-900 text-xs font-semibold rounded-xl transition-all cursor-pointer shadow-2xs active:scale-95"
+                              className="flex-1 inline-flex items-center justify-center gap-1 py-2 px-2 bg-white hover:bg-gray-100 border border-gray-300 text-gray-900 text-xs font-semibold rounded-xl transition-all cursor-pointer shadow-2xs active:scale-95"
                               title="Review submission"
                             >
                               <Eye className="w-3.5 h-3.5 text-gray-600 shrink-0" />
@@ -2878,17 +2963,26 @@ function EditorialDashboardContent() {
                             </button>
                             <button
                               type="button"
+                              onClick={() => handleReview(story.id, "APPROVED_EMAGAZINE")}
+                              className="flex-1 inline-flex items-center justify-center gap-1 py-2 px-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold rounded-xl transition-all cursor-pointer shadow-2xs active:scale-95"
+                              title="Approve for E-Magazine (stores offline for digital edition)"
+                            >
+                              <BookOpen className="w-3.5 h-3.5 text-purple-200 shrink-0" />
+                              <span className="truncate">E-Magazine</span>
+                            </button>
+                            <button
+                              type="button"
                               onClick={() => handleReview(story.id, "APPROVED")}
-                              className="flex-1 inline-flex items-center justify-center gap-1.5 py-2 px-2 bg-gray-950 hover:bg-black text-white text-xs font-semibold rounded-xl transition-all cursor-pointer shadow-2xs active:scale-95"
-                              title="Approve submission"
+                              className="flex-1 inline-flex items-center justify-center gap-1 py-2 px-2 bg-gray-950 hover:bg-black text-white text-xs font-semibold rounded-xl transition-all cursor-pointer shadow-2xs active:scale-95"
+                              title="Approve & Publish to Public Web Catalog"
                             >
                               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                              <span>Approve</span>
+                              <span>Publish</span>
                             </button>
                             <button
                               type="button"
                               onClick={() => setRejectingStory(story)}
-                              className="flex-1 inline-flex items-center justify-center gap-1.5 py-2 px-2 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-600 text-xs font-semibold rounded-xl transition-all cursor-pointer shadow-2xs active:scale-95"
+                              className="inline-flex items-center justify-center gap-1 py-2 px-2.5 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-600 text-xs font-semibold rounded-xl transition-all cursor-pointer shadow-2xs active:scale-95"
                               title="Reject submission"
                             >
                               <XCircle className="w-3.5 h-3.5 text-rose-500 shrink-0" />
@@ -2901,6 +2995,197 @@ function EditorialDashboardContent() {
                   </div>
 
                   <PaginationFooter meta={queueMeta} onPageChange={handlePageChange} />
+                </>
+              )}
+            </div>
+          )}
+
+          {/* TAB: E-MAGAZINE COLLECTION */}
+          {activeTab === "emagazine" && (
+            <div className="space-y-6 font-poppins">
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-white p-5 rounded-[24px] border border-gray-200/80 shadow-xs">
+                <div className="relative max-w-md w-full">
+                  <Search className="absolute left-3.5 top-3 w-4 h-4 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Search E-Magazine collection by title, author, or category..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-2xl text-xs font-medium outline-none focus:border-black shadow-xs"
+                  />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery("")}
+                      className="absolute right-3.5 top-3 text-gray-400 hover:text-gray-600 cursor-pointer"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-3 self-end sm:self-auto">
+                  <span className="text-xs font-medium text-gray-500">
+                    Total stored: <strong className="text-purple-700">{emagazineMeta.total}</strong>
+                  </span>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    icon={<Plus className="w-3.5 h-3.5" />}
+                    iconPosition="left"
+                    onClick={() => handleTabChange("queue")}
+                    className="border border-purple-200 text-purple-700 bg-purple-50/70 hover:bg-purple-100 hover:text-purple-900 text-xs font-semibold px-4 py-2 cursor-pointer shrink-0 whitespace-nowrap shadow-xs"
+                  >
+                    Add from Queue
+                  </Button>
+                </div>
+              </div>
+
+              {loading ? (
+                <div className="py-20 text-center flex flex-col items-center justify-center gap-3">
+                  <div className="w-8 h-8 border-3 border-purple-600 border-t-transparent rounded-full animate-spin" />
+                  <p className="text-xs text-gray-400 font-medium">Loading E-Magazine collection...</p>
+                </div>
+              ) : emagazineStories.length === 0 ? (
+                <div className="py-16 px-4 bg-white rounded-[28px] border border-gray-200/80 text-center flex flex-col items-center justify-center max-w-xl mx-auto shadow-xs">
+                  <div className="w-14 h-14 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center mb-4 shadow-inner">
+                    <BookOpen className="w-7 h-7" />
+                  </div>
+                  <h3 className="text-lg font-bold text-gray-900 mb-1.5">
+                    {searchQuery ? "No Matching E-Magazine Submissions" : "E-Magazine Collection is Empty"}
+                  </h3>
+                  <p className="text-xs text-gray-500 max-w-sm mb-6 leading-relaxed">
+                    {searchQuery
+                      ? `No stored e-magazine works matched "${searchQuery}". Try adjusting your search term.`
+                      : "Submissions approved for the AKAM E-Magazine from the Pending Review Queue will be curated and displayed here."}
+                  </p>
+                  {searchQuery ? (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => setSearchQuery("")}
+                      className="border border-gray-300 text-xs shadow-xs cursor-pointer"
+                    >
+                      Clear Search Filter
+                    </Button>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="primary"
+                      size="sm"
+                      onClick={() => handleTabChange("queue")}
+                      className="bg-purple-700 hover:bg-purple-800 text-white text-xs shadow-xs cursor-pointer"
+                    >
+                      Open Pending Review Queue
+                    </Button>
+                  )}
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {emagazineStories.map((story) => (
+                      <div
+                        key={story.id}
+                        className="bg-white rounded-[24px] border border-gray-200/80 p-5 flex flex-col justify-between hover:border-purple-300 hover:shadow-md transition-all duration-300 group/emcard"
+                      >
+                        <div>
+                          {/* Story Cover Image */}
+                          <div className="relative w-full aspect-[16/9] rounded-2xl overflow-hidden bg-gray-100 mb-4 shadow-xs">
+                            {story.coverImageUrl ? (
+                              <Image
+                                src={story.coverImageUrl}
+                                alt={story.title || "Story Cover"}
+                                fill
+                                unoptimized
+                                className="object-cover group-hover/emcard:scale-105 transition-transform duration-500"
+                              />
+                            ) : (
+                              <div className="w-full h-full flex flex-col items-center justify-center gap-2 bg-gradient-to-br from-purple-50 via-gray-100 to-indigo-50/40 p-4 text-center">
+                                <BookOpen className="w-8 h-8 text-purple-400/60" />
+                                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">No Cover Image</span>
+                              </div>
+                            )}
+
+                            <div className="absolute top-2.5 left-2.5 z-10 flex gap-1.5 flex-wrap">
+                              <span className="bg-purple-700 text-white font-bold text-[9px] uppercase tracking-wider px-2.5 py-1 rounded-xl shadow-xs flex items-center gap-1">
+                                <BookOpen className="w-2.5 h-2.5" />
+                                <span>E-MAGAZINE</span>
+                              </span>
+                              {story.category && (
+                                <span className="bg-black/80 backdrop-blur-xs text-white font-bold text-[9px] uppercase tracking-wider px-2.5 py-1 rounded-xl shadow-xs">
+                                  {story.category}
+                                </span>
+                              )}
+                              {story.submissionType && story.submissionType !== "STORY" && (
+                                <span className="bg-white/90 text-gray-900 font-bold text-[9px] uppercase tracking-wider px-2 py-1 rounded-xl shadow-xs">
+                                  {story.submissionType}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="space-y-2">
+                            <h3 className="text-base font-bold text-gray-950 tracking-tight leading-snug line-clamp-2 group-hover/emcard:text-purple-700 transition-colors">
+                              {story.title}
+                            </h3>
+                            <p className="text-xs text-gray-500 flex items-center gap-1.5">
+                              <User className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                              <span className="truncate">By {story.authorName || story.authorEmail}</span>
+                            </p>
+                            <p className="text-[11px] text-gray-400 flex items-center gap-1.5">
+                              <Clock className="w-3 h-3 text-gray-400 shrink-0" />
+                              <span>Reserved on {formatDateTime(story.updatedAt || story.createdAt)}</span>
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Action Bar */}
+                        <div className="pt-4 mt-4 border-t border-gray-100 flex items-center gap-2 flex-wrap">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedStory(story)}
+                            className="flex-1 inline-flex items-center justify-center gap-1 py-2 px-2.5 bg-white hover:bg-gray-100 border border-gray-300 text-gray-900 text-xs font-semibold rounded-xl transition-all cursor-pointer shadow-2xs active:scale-95"
+                            title="Preview submission details"
+                          >
+                            <Eye className="w-3.5 h-3.5 text-gray-600 shrink-0" />
+                            <span>Preview</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (confirm(`Publish "${story.title}" to the live public web catalog?`)) {
+                                handleReview(story.id, "APPROVED");
+                              }
+                            }}
+                            className="flex-1 inline-flex items-center justify-center gap-1 py-2 px-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl transition-all cursor-pointer shadow-2xs active:scale-95"
+                            title="Publish to public website catalog"
+                          >
+                            <Globe className="w-3.5 h-3.5 text-emerald-200 shrink-0" />
+                            <span className="truncate">Publish Web</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (confirm(`Return "${story.title}" back to the Pending Review Queue?`)) {
+                                handleReview(story.id, "PENDING");
+                              }
+                            }}
+                            className="inline-flex items-center justify-center gap-1 py-2 px-2.5 bg-gray-100 hover:bg-gray-200 border border-gray-200 text-gray-700 text-xs font-semibold rounded-xl transition-all cursor-pointer shadow-2xs active:scale-95"
+                            title="Return to Pending Queue"
+                          >
+                            <Undo className="w-3.5 h-3.5 text-gray-500 shrink-0" />
+                            <span>Return</span>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <PaginationFooter meta={emagazineMeta} onPageChange={handlePageChange} />
                 </>
               )}
             </div>
@@ -3018,8 +3303,8 @@ function EditorialDashboardContent() {
 
                           <div>
                             <h4 className="text-sm font-bold text-gray-950">
-                              Target Story:{" "}
-                              <Link href={`/stories/${report.storySlug || report.storyId}`} className="text-black underline hover:text-gray-700">
+                              Target Work:{" "}
+                              <Link href={`/works/${report.storySlug || report.storyId}`} className="text-black underline hover:text-gray-700">
                                 {report.storyTitle || report.storyId}
                               </Link>
                             </h4>
@@ -3034,9 +3319,9 @@ function EditorialDashboardContent() {
 
                         {/* Standardized Action Buttons */}
                         <div className="flex flex-wrap items-center gap-2 shrink-0 pt-3 md:pt-0 border-t md:border-t-0 border-gray-100">
-                          <Link href={`/stories/${report.storySlug || report.storyId}${report.commentId ? "#comments-section" : ""}`}>
+                          <Link href={`/works/${report.storySlug || report.storyId}${report.commentId ? "#comments-section" : ""}`}>
                             <Button variant="secondary" size="sm" icon={<Eye className="w-3.5 h-3.5" />} className="text-xs font-semibold">
-                              {report.commentId ? "View Comment" : "View Story"}
+                              {report.commentId ? "View Comment" : "View Work"}
                             </Button>
                           </Link>
 
@@ -3311,7 +3596,7 @@ function EditorialDashboardContent() {
                         {s.category && (
                           <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mt-0.5 block">Category: {s.category}</span>
                         )}
-                        <div className="mt-1.5">
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                           {s.submissionType === "PAINTING" ? (
                             <span className="inline-flex items-center gap-1 text-[10px] font-bold text-purple-700 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-lg">🎨 Painting</span>
                           ) : s.submissionType === "VIDEO" ? (
@@ -3319,6 +3604,19 @@ function EditorialDashboardContent() {
                           ) : (
                             <span className="inline-flex items-center gap-1 text-[10px] font-bold text-gray-600 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded-lg">📝 Article / Story</span>
                           )}
+                          <button
+                            type="button"
+                            onClick={() => handleToggleFeaturedStory(s.id)}
+                            className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-lg border transition-all cursor-pointer ${
+                              s.isFeatured
+                                ? "bg-[#E4F953] text-[#040706] border-[#cce42e] shadow-xs"
+                                : "bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200"
+                            }`}
+                            title={s.isFeatured ? "Featured on Homepage" : "Click to feature"}
+                          >
+                            <Star className={`w-3 h-3 ${s.isFeatured ? "fill-[#040706]" : ""}`} />
+                            <span>{s.isFeatured ? "Featured" : "Feature"}</span>
+                          </button>
                         </div>
                       </div>
                       <span className="bg-[#E4F953] text-[#040706] font-bold text-[10px] uppercase px-2.5 py-1 rounded-xl shrink-0 shadow-xs">
@@ -3374,6 +3672,7 @@ function EditorialDashboardContent() {
                         <th className="py-4 px-6">Type</th>
                         <th className="py-4 px-6">Category</th>
                         <th className="py-4 px-6">Author</th>
+                        <th className="py-4 px-6 text-center">Featured</th>
                         <th className="py-4 px-6">Status</th>
                         <th className="py-4 px-6">Created Date</th>
                         <th className="py-4 px-6 text-right">Actions</th>
@@ -3394,6 +3693,21 @@ function EditorialDashboardContent() {
                           </td>
                           <td className="py-4 px-6 text-gray-600 font-medium">{s.category || "General"}</td>
                           <td className="py-4 px-6 text-gray-600">{s.authorName || s.authorEmail}</td>
+                          <td className="py-4 px-6 text-center whitespace-nowrap">
+                            <button
+                              type="button"
+                              onClick={() => handleToggleFeaturedStory(s.id)}
+                              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
+                                s.isFeatured
+                                  ? "bg-[#E4F953] text-[#040706] border-[#cce42e] shadow-xs hover:bg-[#d8ed3e]"
+                                  : "bg-gray-50 text-gray-400 border-gray-200 hover:bg-gray-100 hover:text-gray-700"
+                              }`}
+                              title={s.isFeatured ? "Featured on Homepage (Click to unfeature)" : "Click to feature on Homepage"}
+                            >
+                              <Star className={`w-3.5 h-3.5 ${s.isFeatured ? "fill-[#040706]" : ""}`} />
+                              <span>{s.isFeatured ? "Featured" : "Feature"}</span>
+                            </button>
+                          </td>
                           <td className="py-4 px-6">
                             <span className="bg-[#E4F953] text-[#040706] font-bold text-[10px] uppercase px-3 py-1 rounded-xl">{s.status}</span>
                           </td>
@@ -3980,10 +4294,16 @@ function EditorialDashboardContent() {
                               ? "bg-amber-100 text-amber-700"
                               : item.type === "STORY_APPROVED"
                                 ? "bg-emerald-100 text-emerald-700"
-                                : "bg-rose-100 text-rose-700"
+                                : item.type === "STORY_APPROVED_EMAGAZINE"
+                                  ? "bg-purple-100 text-purple-700"
+                                  : "bg-rose-100 text-rose-700"
                           }`}
                         >
-                          <Bell className="w-4 h-4" />
+                          {item.type === "STORY_APPROVED_EMAGAZINE" ? (
+                            <BookOpen className="w-4 h-4" />
+                          ) : (
+                            <Bell className="w-4 h-4" />
+                          )}
                         </div>
                         <div>
                           <p className="text-xs font-bold text-gray-900">{item.message}</p>
@@ -5517,18 +5837,62 @@ function EditorialDashboardContent() {
                       setSelectedStory(null);
                       setRejectingStory(s);
                     }}
-                    className="w-full sm:w-auto justify-center text-rose-600 border-rose-200 hover:bg-rose-50"
+                    className="w-full sm:w-auto justify-center text-rose-600 border-rose-200 hover:bg-rose-50 cursor-pointer"
                   >
                     Reject with Note
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="md"
+                    onClick={() => handleReview(selectedStory.id, "APPROVED_EMAGAZINE")}
+                    disabled={actionLoading}
+                    className="w-full sm:w-auto justify-center bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100 font-semibold cursor-pointer"
+                  >
+                    <BookOpen className="w-4 h-4 mr-1.5 text-purple-600" />
+                    Approve for E-Magazine
                   </Button>
                   <Button
                     variant="primary"
                     size="md"
                     onClick={() => handleReview(selectedStory.id, "APPROVED")}
                     disabled={actionLoading}
-                    className="w-full sm:w-auto justify-center"
+                    className="w-full sm:w-auto justify-center cursor-pointer"
                   >
                     Approve & Publish
+                  </Button>
+                </>
+              )}
+              {selectedStory.status === "APPROVED_EMAGAZINE" && (
+                <>
+                  <Button
+                    variant="outline"
+                    size="md"
+                    onClick={() => {
+                      const sId = selectedStory.id;
+                      if (confirm("Return this story to the Pending Review Queue?")) {
+                        handleReview(sId, "PENDING");
+                      }
+                    }}
+                    disabled={actionLoading}
+                    className="w-full sm:w-auto justify-center text-gray-700 border-gray-300 hover:bg-gray-100 font-semibold cursor-pointer"
+                  >
+                    <Undo className="w-4 h-4 mr-1 text-gray-500" />
+                    Return to Queue
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="md"
+                    onClick={() => {
+                      const sId = selectedStory.id;
+                      if (confirm("Publish this story to the live public web catalog?")) {
+                        handleReview(sId, "APPROVED");
+                      }
+                    }}
+                    disabled={actionLoading}
+                    className="w-full sm:w-auto justify-center bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer"
+                  >
+                    <Globe className="w-4 h-4 mr-1.5 text-emerald-200" />
+                    Publish to Web
                   </Button>
                 </>
               )}
