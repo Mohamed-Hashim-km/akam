@@ -10,6 +10,7 @@ import * as nodemailer from 'nodemailer';
 import { PrismaService } from '../common/prisma/prisma.service.js';
 import { RequestOtpDto } from './dto/request-otp.dto.js';
 import { VerifyOtpDto } from './dto/verify-otp.dto.js';
+import { CheckEmailDto } from './dto/check-email.dto.js';
 
 @Injectable()
 export class AuthService {
@@ -47,6 +48,38 @@ export class AuthService {
 
   private generateOtp(): string {
     return Math.floor(100000 + Math.random() * 900000).toString();
+  }
+
+  async checkEmail(dto: CheckEmailDto): Promise<{
+    exists: boolean;
+    name: string | null;
+    phone: string | null;
+    requiresDetails: boolean;
+    hasPhone: boolean;
+    hasConsent: boolean;
+  }> {
+    const email = dto.email.toLowerCase().trim();
+    const user = await this.prisma.queryOne<{
+      id: string;
+      name: string | null;
+      phone: string | null;
+      privacyPolicyAccepted: boolean | null;
+    }>(
+      `SELECT id, name, phone, "privacyPolicyAccepted" FROM "user" WHERE LOWER(email) = $1`,
+      [email],
+    );
+
+    const hasPhone = Boolean(user?.phone && user.phone.trim().length >= 8);
+    const hasConsent = Boolean(user?.privacyPolicyAccepted);
+
+    return {
+      exists: !!user,
+      name: user?.name || null,
+      phone: user?.phone || null,
+      requiresDetails: !user || !hasPhone || !hasConsent,
+      hasPhone,
+      hasConsent,
+    };
   }
 
   async requestOtp(dto: RequestOtpDto): Promise<{ message: string }> {
@@ -200,10 +233,11 @@ export class AuthService {
       [otp.id],
     );
 
+    const name = dto.name?.trim() || null;
     const phone = dto.phone?.trim() || null;
     const privacyPolicyAccepted = dto.privacyPolicyAccepted === true;
 
-    // Upsert user with phone and privacyPolicyAccepted
+    // Upsert user with name, phone and privacyPolicyAccepted
     const user = await this.prisma.queryOne<{
       id: string;
       email: string;
@@ -214,14 +248,15 @@ export class AuthService {
       bio: string | null;
       avatarUrl: string | null;
     }>(
-      `INSERT INTO "user" (id, email, phone, "privacyPolicyAccepted", role, "createdAt", "updatedAt")
-       VALUES (gen_random_uuid()::text, $1, $2, $3, 'READER', now(), now())
+      `INSERT INTO "user" (id, email, name, phone, "privacyPolicyAccepted", role, "createdAt", "updatedAt")
+       VALUES (gen_random_uuid()::text, $1, $2, $3, $4, 'READER', now(), now())
        ON CONFLICT (email) DO UPDATE SET
+         name = COALESCE(EXCLUDED.name, "user".name),
          phone = COALESCE(EXCLUDED.phone, "user".phone),
          "privacyPolicyAccepted" = CASE WHEN EXCLUDED."privacyPolicyAccepted" = true THEN true ELSE "user"."privacyPolicyAccepted" END,
          "updatedAt" = now()
        RETURNING id, email, name, phone, "privacyPolicyAccepted", role, bio, "avatarUrl"`,
-      [email, phone, privacyPolicyAccepted],
+      [email, name, phone, privacyPolicyAccepted],
     );
 
     if (!user) {
