@@ -114,15 +114,15 @@ const ScrolledWord: React.FC<{
 
   return (
     <span className="relative inline-block mr-[0.25em] my-[0.08em] select-none">
-      {/* Base unfilled text (faint muted ghost color) */}
-      <span className="text-[#111827]/25 font-medium sm:font-semibold">
+      {/* Base unfilled text: solid on mobile (no animation), faint muted ghost on md+ */}
+      <span className="text-[#111827] md:text-[#111827]/25 font-medium sm:font-semibold">
         {word}
       </span>
 
-      {/* Solid filled text overlay (wipes left-to-right and remains 100% filled once passed) */}
+      {/* Solid filled text overlay (wipes left-to-right on md+, hidden on mobile) */}
       <motion.span
         style={{ width }}
-        className="absolute left-0 top-0 overflow-hidden whitespace-nowrap text-[#111827] font-medium sm:font-semibold pointer-events-none"
+        className="hidden md:inline-block absolute left-0 top-0 overflow-hidden whitespace-nowrap text-[#111827] font-medium sm:font-semibold pointer-events-none"
       >
         {word}
       </motion.span>
@@ -233,8 +233,13 @@ export const EditorsNote: React.FC<EditorsNoteProps> = ({
           </h3>
         )}
 
-        {/* Word-by-Word Text Highlight Animation (Scrubbed in sync with User Scroll) */}
-        <p className="text-xl sm:text-2xl lg:text-3xl leading-relaxed text-center tracking-tight flex flex-wrap justify-center">
+        {/* Mobile: Normal static text without color filling animation */}
+        <p className="md:hidden text-xl sm:text-2xl leading-relaxed text-center tracking-tight text-[#111827] font-medium sm:font-semibold">
+          {data.note}
+        </p>
+
+        {/* Desktop: Word-by-Word Text Highlight Animation (Scrubbed in sync with User Scroll) */}
+        <p className="hidden md:flex text-2xl lg:text-3xl leading-relaxed text-center tracking-tight flex-wrap justify-center">
           {words.map((word, i) => (
             <ScrolledWord
               key={i}

@@ -87,7 +87,7 @@ async function getHomePageData() {
         signal: timeoutSignal,
       }),
       fetch(`${API_BASE_URL}/events`, {
-        cache: "no-store",
+        next: { tags: ["homepage", "events"], revalidate: 60 },
         signal: timeoutSignal,
       }),
       fetch(`${API_BASE_URL}/books`, {
@@ -95,15 +95,15 @@ async function getHomePageData() {
         signal: timeoutSignal,
       }),
       fetch(`${API_BASE_URL}/media?featured=true&limit=4`, {
-        cache: "no-store",
+        next: { tags: ["homepage", "media"], revalidate: 60 },
         signal: timeoutSignal,
       }),
       fetch(`${API_BASE_URL}/reviews`, {
-        cache: "no-store",
+        next: { tags: ["homepage", "reviews"], revalidate: 60 },
         signal: timeoutSignal,
       }),
       fetch(`${API_BASE_URL}/settings/editors-note`, {
-        cache: "no-store",
+        next: { tags: ["homepage", "editors-note"], revalidate: 60 },
         signal: timeoutSignal,
       }),
     ]);

@@ -127,7 +127,7 @@ export const MediaSection: React.FC<MediaSectionProps> = ({
   };
 
   return (
-    <section className="relative w-full bg-white py-10 sm:py-16 lg:py-20 font-poppins overflow-hidden">
+    <section className="relative w-full bg-white py-10 sm:py-16 lg:py-20 font-poppins">
       <div className="container px-4 mx-auto relative z-10">
         {/* Section Heading */}
         <h1 className="text-3xl sm:text-4xl lg:text-5xl font-medium text-dark-bg tracking-tight text-center mb-8 sm:mb-12 lg:mb-16 font-poppins">
@@ -135,7 +135,7 @@ export const MediaSection: React.FC<MediaSectionProps> = ({
         </h1>
 
         {/* Main Content Layout (Sidebar Tabs on Desktop + Mobile Category Dropdown) */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-start mx-auto">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-stretch mx-auto">
           
           {/* Mobile Category Select Dropdown (Shown on screens < lg) */}
           <div className="block lg:hidden w-full mb-2">
@@ -156,36 +156,38 @@ export const MediaSection: React.FC<MediaSectionProps> = ({
             </div>
           </div>
 
-          {/* Desktop Left Category Tabs (Shown on screens >= lg) */}
-          <div className="hidden lg:flex lg:col-span-3 flex-col gap-6 shrink-0">
-            {mediaCategories.map((cat, index) => {
-              const isActive = activeTab === cat.id;
-              const isLast = index === mediaCategories.length - 1;
-              return (
-                <div
-                  key={cat.id}
-                  className={`relative flex flex-col shrink-0 ${
-                    !isLast ? "border-b border-[#D0D0D0]" : ""
-                  }`}
-                >
-                  <button
-                    onClick={() => handleTabChange(cat.id)}
-                    className={`text-left text-base sm:text-lg lg:text-xl transition-all duration-200 pb-2.5 whitespace-nowrap cursor-pointer ${
-                      isActive
-                        ? "font-semibold text-gray-950"
-                        : "font-medium text-gray-400 hover:text-gray-700"
+          {/* Desktop Left Category Tabs (Shown on screens >= lg, sticky on scroll) */}
+          <div className="hidden lg:block lg:col-span-3 h-full">
+            <div className="sticky top-10 flex flex-col gap-6">
+              {mediaCategories.map((cat, index) => {
+                const isActive = activeTab === cat.id;
+                const isLast = index === mediaCategories.length - 1;
+                return (
+                  <div
+                    key={cat.id}
+                    className={`relative flex flex-col shrink-0 ${
+                      !isLast ? "border-b border-[#D0D0D0]" : ""
                     }`}
                   >
-                    {cat.label}
-                  </button>
+                    <button
+                      onClick={() => handleTabChange(cat.id)}
+                      className={`text-left text-base sm:text-lg lg:text-xl transition-all duration-200 pb-2.5 whitespace-nowrap cursor-pointer ${
+                        isActive
+                          ? "font-semibold text-gray-950"
+                          : "font-medium text-gray-400 hover:text-gray-700"
+                      }`}
+                    >
+                      {cat.label}
+                    </button>
 
-                  {/* Multi-color 3px Linear Gradient Underline on Active Tab */}
-                  {isActive && (
-                    <div className="h-[3px] w-full rounded-full bg-[linear-gradient(to_right,#29ACD8,#26AFB1,#23B47B,#57C15C,#7FCA49,#D8E021)] -mt-[1px]" />
-                  )}
-                </div>
-              );
-            })}
+                    {/* Multi-color 3px Linear Gradient Underline on Active Tab */}
+                    {isActive && (
+                      <div className="h-[3px] w-full rounded-full bg-[linear-gradient(to_right,#29ACD8,#26AFB1,#23B47B,#57C15C,#7FCA49,#D8E021)] -mt-[1px]" />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
           {/* Right Side Media Cards Grid */}

@@ -6,7 +6,7 @@ import { MapPin, Play, X, Loader2 } from "lucide-react";
 import { Swiper, SwiperSlide } from "swiper/react";
 import { Pagination, Autoplay } from "swiper/modules";
 import { API_BASE_URL, apiFetch } from "@/lib/config";
-import { getYouTubeEmbedUrl } from "@/lib/youtube";
+import { getYouTubeEmbedUrl, getYouTubeThumbnail } from "@/lib/youtube";
 
 // Swiper CSS imports
 import "swiper/css";
@@ -147,6 +147,8 @@ export const PastEventArchive: React.FC<PastEventArchiveProps> = ({
         {/* 3-Column Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8 mb-10">
           {eventList.map((item) => {
+            const isVideo = Boolean(item.videoUrl && item.videoUrl.trim());
+            const videoThumbnail = item.imageSrc ? getImageUrl(item.imageSrc) : getYouTubeThumbnail(item.videoUrl || "");
             const cardImages = Array.isArray(item.images) && item.images.length > 0
               ? item.images
               : [getImageUrl(item.imageSrc) || "https://images.unsplash.com/photo-1511578314322-379afb476865?auto=format&fit=crop&q=80&w=800"];
@@ -156,9 +158,40 @@ export const PastEventArchive: React.FC<PastEventArchiveProps> = ({
                 key={item.id}
                 className="bg-white border border-gray-200/70 rounded-3xl overflow-hidden flex flex-col justify-between shadow-xs hover:shadow-md transition-all duration-300 group"
               >
-                {/* Top Cover Box with Swiper image slider for multiple images - Full Width */}
+                {/* Top Cover Box: Play Button for Video OR Swiper / Single Image for Photo Gallery */}
                 <div className="relative w-full aspect-[16/10] bg-gray-100 overflow-hidden group-hover:shadow-sm transition-shadow">
-                  {cardImages.length > 1 ? (
+                  {isVideo ? (
+                    <div
+                      onClick={() => setActiveVideoUrl(item.videoUrl!)}
+                      className="relative w-full h-full cursor-pointer overflow-hidden group/video"
+                    >
+                      <Image
+                        src={videoThumbnail}
+                        alt={item.title}
+                        fill
+                        sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                        className="object-cover group-hover:scale-105 transition-transform duration-500"
+                        unoptimized
+                        onError={(e) => {
+                          const target = e.currentTarget as HTMLImageElement;
+                          target.srcset = "";
+                          target.src = "https://images.unsplash.com/photo-1511578314322-379afb476865?auto=format&fit=crop&q=80&w=800";
+                        }}
+                      />
+                      {/* Dark overlay */}
+                      <div className="absolute inset-0 bg-black/25 group-hover/video:bg-black/40 transition-colors" />
+
+                      {/* Prominent Center Play Button */}
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-white/95 text-black shadow-xl flex items-center justify-center pl-1 group-hover/video:scale-110 group-hover/video:bg-rose-600 group-hover/video:text-white transition-all duration-300">
+                          <Play className="w-6 h-6 sm:w-7 sm:h-7 fill-current" />
+                        </div>
+                      </div>
+
+                      {/* Video Indicator Badge */}
+                    
+                    </div>
+                  ) : cardImages.length > 1 ? (
                     <Swiper
                       modules={[Pagination, Autoplay]}
                       pagination={{ clickable: true }}
@@ -217,15 +250,7 @@ export const PastEventArchive: React.FC<PastEventArchiveProps> = ({
                       <span className="truncate">{item.location || "Archive Recording"}</span>
                     </div>
 
-                    {item.videoUrl && (
-                      <button
-                        onClick={() => setActiveVideoUrl(item.videoUrl!)}
-                        className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-black text-white text-[11px] font-semibold hover:bg-gray-800 transition-all cursor-pointer shadow-2xs shrink-0"
-                      >
-                        <Play className="w-2.5 h-2.5 fill-white" />
-                        <span>Watch</span>
-                      </button>
-                    )}
+                    
                   </div>
                 </div>
               </div>

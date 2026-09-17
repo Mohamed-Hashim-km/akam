@@ -365,7 +365,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             {/* Custom Themed Privacy Policy Consent Checkbox */}
             <label
               htmlFor="privacy-checkbox"
-              className="flex items-start gap-3 pt-1 cursor-pointer select-none group"
+              className="flex items-center gap-3 pt-1 cursor-pointer select-none group"
             >
               <div className="relative flex items-center justify-center mt-0.5">
                 <input

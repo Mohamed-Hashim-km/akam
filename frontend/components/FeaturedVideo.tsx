@@ -192,7 +192,7 @@ export const FeaturedVideo: React.FC<FeaturedVideoProps> = ({
       </div>
 
       {/* Bottom Left: 'അ' Outline */}
-      <div className="absolute bottom-4 sm:bottom-6 lg:bottom-1/2 left-0 pointer-events-none select-none ">
+      <div className="absolute bottom-4 sm:bottom-6 left-0 pointer-events-none select-none ">
         <DummySvgOne className="w-28 sm:w-36 md:w-44 lg:w-52 h-auto" />
       </div>
 
