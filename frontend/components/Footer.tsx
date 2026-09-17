@@ -163,7 +163,7 @@ export const Footer: React.FC<FooterProps> = ({
         <div className="border-b border-white/25 w-full my-4" />
 
         {/* Bottom Bar: Copyright + Center Credit Link + Nav Links */}
-        <div className="flex flex-col md:flex-row items-center justify-between gap-4 pt-6 text-xs sm:text-sm text-white/90">
+        <div className="flex flex-col md:flex-row  justify-between gap-4 pt-6 text-xs sm:text-sm text-white/90">
           <p className="font-normal text-center md:text-left text-white/80">
             &copy; {new Date().getFullYear()} Akam &middot; India&apos;s First Digital Literary Channel &mdash; every story here passed editorial review
           </p>
@@ -174,10 +174,10 @@ export const Footer: React.FC<FooterProps> = ({
             rel="noopener noreferrer"
             className="hover:text-white hover:underline transition-colors text-center shrink-0 text-white/90 font-medium px-2"
           >
-            Made with by Megamind Studio
+            Made with by <span className="font-sans">♥</span> Megamind Studios
           </a>
 
-          <div className="flex flex-wrap items-center justify-center md:justify-end gap-5 sm:gap-6 font-medium shrink-0">
+          <div className="flex flex-wrap  justify-center md:justify-end gap-5 sm:gap-6 font-medium shrink-0">
             <Link href={aboutHref} className="hover:text-white hover:underline transition-colors">
               About Akam
             </Link>

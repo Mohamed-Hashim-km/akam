@@ -72,6 +72,7 @@ import Button from "@/components/ui/Button";
 import AuthModal from "@/components/AuthModal";
 import { API_BASE_URL, apiFetch, formatAssetUrl } from "@/lib/config";
 import StudentVerificationsPanel from "@/components/StudentVerificationsPanel";
+import { getYouTubeThumbnail } from "@/lib/youtube";
 
 interface PendingStory {
   id: string;
@@ -562,10 +563,12 @@ function EditorialDashboardContent() {
   const [eventFormRegisterHref, setEventFormRegisterHref] = useState("");
   const [eventFormVideoUrl, setEventFormVideoUrl] = useState("");
   const [eventFormPublished, setEventFormPublished] = useState(true);
+  const [pastArchiveMediaType, setPastArchiveMediaType] = useState<"IMAGES" | "VIDEO">("IMAGES");
   const [submittingEvent, setSubmittingEvent] = useState(false);
 
   const [showArchiveModal, setShowArchiveModal] = useState(false);
   const [selectedEventForArchive, setSelectedEventForArchive] = useState<any | null>(null);
+  const [archiveMediaType, setArchiveMediaType] = useState<"IMAGES" | "VIDEO">("IMAGES");
   const [archiveImage, setArchiveImage] = useState("");
   const [archiveImages, setArchiveImages] = useState<string[]>([]);
   const [archiveVideoUrl, setArchiveVideoUrl] = useState("");
@@ -1311,15 +1314,28 @@ function EditorialDashboardContent() {
     e.preventDefault();
     if (!eventFormTitle.trim() || !eventFormDesc.trim()) return;
 
-    if (["WORKSHOP", "PAST_ARCHIVE"].includes(eventFormType) && !eventFormImage.trim() && eventFormImages.length === 0) {
-      alert("Cover image is required for Workshop and Past Archive events.");
+    if (eventFormType === "PAST_ARCHIVE") {
+      if (pastArchiveMediaType === "VIDEO") {
+        if (!eventFormVideoUrl.trim()) {
+          alert("YouTube URL is required when choosing YouTube Video format for Past Archive.");
+          return;
+        }
+      } else {
+        if (!eventFormImage.trim() && eventFormImages.length === 0) {
+          alert("At least one image is required for Past Archive Photo Gallery.");
+          return;
+        }
+      }
+    } else if (eventFormType === "WORKSHOP" && !eventFormImage.trim() && eventFormImages.length === 0) {
+      alert("Cover image is required for Workshop events.");
       return;
     }
 
     setSubmittingEvent(true);
     try {
+      const isPastArchiveVideo = eventFormType === "PAST_ARCHIVE" && pastArchiveMediaType === "VIDEO";
       const imagesList = eventFormType === "PAST_ARCHIVE"
-        ? (eventFormImages.length > 0 ? eventFormImages : (eventFormImage.trim() ? [eventFormImage.trim()] : []))
+        ? (isPastArchiveVideo ? [] : (eventFormImages.length > 0 ? eventFormImages : (eventFormImage.trim() ? [eventFormImage.trim()] : [])))
         : (eventFormImage.trim() ? [eventFormImage.trim()] : []);
       const payload = {
         type: eventFormType,
@@ -1329,9 +1345,11 @@ function EditorialDashboardContent() {
         time: eventFormTime.trim() || undefined,
         day: eventFormDay.trim() || undefined,
         monthYear: eventFormMonthYear.trim() || undefined,
-        imageSrc: eventFormImage.trim() || imagesList[0] || undefined,
+        imageSrc: isPastArchiveVideo
+          ? (eventFormImage.trim() || undefined)
+          : (eventFormImage.trim() || imagesList[0] || undefined),
         images: imagesList,
-        videoUrl: eventFormType === "PAST_ARCHIVE" ? (eventFormVideoUrl.trim() || undefined) : undefined,
+        videoUrl: isPastArchiveVideo ? (eventFormVideoUrl.trim() || null) : null,
         registerHref: eventFormRegisterHref.trim() || undefined,
         isPublished: eventFormPublished,
       };
@@ -1403,6 +1421,7 @@ function EditorialDashboardContent() {
       : (eventItem.imageSrc ? [eventItem.imageSrc] : []);
     setArchiveImages(initialImages);
     setArchiveVideoUrl(eventItem.videoUrl || "");
+    setArchiveMediaType(eventItem.videoUrl && eventItem.videoUrl.trim() ? "VIDEO" : "IMAGES");
     setShowArchiveModal(true);
   };
 
@@ -1431,9 +1450,14 @@ function EditorialDashboardContent() {
       }
 
       if (uploadedUrls.length > 0) {
-        setArchiveImages((prev) => [...prev, ...uploadedUrls]);
-        if (!archiveImage) {
+        if (archiveMediaType === "VIDEO") {
           setArchiveImage(uploadedUrls[0]);
+          setArchiveImages([]);
+        } else {
+          setArchiveImages((prev) => [...prev, ...uploadedUrls]);
+          if (!archiveImage) {
+            setArchiveImage(uploadedUrls[0]);
+          }
         }
       } else {
         alert("Failed to upload image(s). Please try again.");
@@ -1451,16 +1475,30 @@ function EditorialDashboardContent() {
     e.preventDefault();
     if (!selectedEventForArchive) return;
 
-    const imagesList = archiveImages.length > 0 ? archiveImages : (archiveImage.trim() ? [archiveImage.trim()] : []);
-    const coverImage = archiveImage.trim() || (imagesList.length > 0 ? imagesList[0] : "");
-
-    if (!coverImage) {
-      alert("Cover image is required to move an event to Past Archive.");
-      return;
+    const isVideoMode = archiveMediaType === "VIDEO";
+    if (isVideoMode) {
+      if (!archiveVideoUrl.trim()) {
+        alert("YouTube URL is required when selecting YouTube Video format.");
+        return;
+      }
+    } else {
+      const imagesList = archiveImages.length > 0 ? archiveImages : (archiveImage.trim() ? [archiveImage.trim()] : []);
+      const coverImage = archiveImage.trim() || (imagesList.length > 0 ? imagesList[0] : "");
+      if (!coverImage) {
+        alert("At least one image is required to move an event to Past Archive Photo Gallery.");
+        return;
+      }
     }
 
     setArchivingEvent(true);
     try {
+      const imagesList = isVideoMode
+        ? []
+        : (archiveImages.length > 0 ? archiveImages : (archiveImage.trim() ? [archiveImage.trim()] : []));
+      const coverImage = isVideoMode
+        ? (archiveImage.trim() || undefined)
+        : (archiveImage.trim() || (imagesList.length > 0 ? imagesList[0] : undefined));
+
       const res = await apiFetch(`${API_BASE_URL}/editorial/events/${selectedEventForArchive.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -1468,7 +1506,7 @@ function EditorialDashboardContent() {
           type: "PAST_ARCHIVE",
           imageSrc: coverImage,
           images: imagesList,
-          videoUrl: archiveVideoUrl.trim() || undefined,
+          videoUrl: isVideoMode ? (archiveVideoUrl.trim() || null) : null,
         }),
       });
 
@@ -1550,6 +1588,7 @@ function EditorialDashboardContent() {
     setEventFormImages([]);
     setEventFormRegisterHref("");
     setEventFormVideoUrl("");
+    setPastArchiveMediaType("IMAGES");
     setEventFormPublished(true);
   };
 
@@ -4960,6 +4999,9 @@ function EditorialDashboardContent() {
                                 setEventFormImages(Array.isArray(ev.images) && ev.images.length > 0 ? ev.images : (ev.imageSrc ? [ev.imageSrc] : []));
                                 setEventFormRegisterHref(ev.registerHref || "");
                                 setEventFormVideoUrl(ev.videoUrl || "");
+                                if (ev.type === "PAST_ARCHIVE") {
+                                  setPastArchiveMediaType(ev.videoUrl && ev.videoUrl.trim() ? "VIDEO" : "IMAGES");
+                                }
                                 setEventFormPublished(ev.isPublished);
                                 setShowAddEventModal(true);
                               }}
@@ -6669,81 +6711,197 @@ function EditorialDashboardContent() {
                 )}
               </div>
 
-              {/* Cover & Gallery Images Upload */}
+              {/* Cover & Gallery Images / Video Option */}
               {eventFormType === "PAST_ARCHIVE" ? (
-                <div>
-                  <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider">
-                    Past Archive Images Gallery <span className="text-rose-500">*</span>
-                  </label>
-                  <p className="text-[11px] text-gray-500 mb-2">
-                    Upload photos from the past event. Click an image to set it as the primary cover.
-                  </p>
+                <div className="space-y-4">
+                  {/* Media Format Selector: Photo Gallery vs YouTube Video */}
+                  <div>
+                    <label className="block text-xs font-bold text-gray-900 mb-1.5 uppercase tracking-wider flex items-center justify-between">
+                      <span>Archive Media Format <span className="text-rose-500">*</span></span>
+                      <span className="text-[10px] font-normal text-gray-500 lowercase">(select only one format)</span>
+                    </label>
+                    <div className="grid grid-cols-2 gap-2 bg-gray-100 p-1 rounded-2xl">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPastArchiveMediaType("IMAGES");
+                          setEventFormVideoUrl("");
+                        }}
+                        className={`py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                          pastArchiveMediaType === "IMAGES"
+                            ? "bg-white text-gray-900 shadow-xs"
+                            : "text-gray-500 hover:text-gray-900"
+                        }`}
+                      >
+                        <span>📸 Photo Gallery</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPastArchiveMediaType("VIDEO");
+                          setEventFormImages([]);
+                        }}
+                        className={`py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                          pastArchiveMediaType === "VIDEO"
+                            ? "bg-white text-gray-900 shadow-xs"
+                            : "text-gray-500 hover:text-gray-900"
+                        }`}
+                      >
+                        <span className="text-rose-600">▶</span>
+                        <span>YouTube Video</span>
+                      </button>
+                    </div>
+                  </div>
 
-                  {/* Uploaded Thumbnails Grid */}
-                  {eventFormImages.length > 0 && (
-                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5 mb-3">
-                      {eventFormImages.map((imgUrl, idx) => {
-                        const isCover = eventFormImage === imgUrl || (!eventFormImage && idx === 0);
-                        return (
-                          <div
-                            key={idx}
-                            onClick={() => setEventFormImage(imgUrl)}
-                            className={`relative rounded-xl overflow-hidden border cursor-pointer h-24 bg-gray-50 group transition-all ${
-                              isCover ? "border-amber-500 ring-2 ring-amber-500/30" : "border-gray-200 hover:border-gray-400"
-                            }`}
-                          >
+                  {pastArchiveMediaType === "IMAGES" ? (
+                    <div>
+                      <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider">
+                        Past Archive Images Gallery <span className="text-rose-500">*</span>
+                      </label>
+                      <p className="text-[11px] text-gray-500 mb-2">
+                        Upload photos from the past event. Click an image to set it as the primary cover.
+                      </p>
+
+                      {/* Uploaded Thumbnails Grid */}
+                      {eventFormImages.length > 0 && (
+                        <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5 mb-3">
+                          {eventFormImages.map((imgUrl, idx) => {
+                            const isCover = eventFormImage === imgUrl || (!eventFormImage && idx === 0);
+                            return (
+                              <div
+                                key={idx}
+                                onClick={() => setEventFormImage(imgUrl)}
+                                className={`relative rounded-xl overflow-hidden border cursor-pointer h-24 bg-gray-50 group transition-all ${
+                                  isCover ? "border-amber-500 ring-2 ring-amber-500/30" : "border-gray-200 hover:border-gray-400"
+                                }`}
+                              >
+                                <img
+                                  src={imgUrl.startsWith("/") ? `${API_BASE_URL.replace(/\/api$/, "")}${imgUrl}` : imgUrl}
+                                  alt={`Past event image ${idx + 1}`}
+                                  className="w-full h-full object-cover"
+                                />
+                                {isCover && (
+                                  <span className="absolute bottom-1 left-1 bg-amber-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow-xs">
+                                    Cover
+                                  </span>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const updated = eventFormImages.filter((_, i) => i !== idx);
+                                    setEventFormImages(updated);
+                                    if (eventFormImage === imgUrl) {
+                                      setEventFormImage(updated[0] || "");
+                                    }
+                                  }}
+                                  className="absolute top-1 right-1 p-1 bg-black/70 hover:bg-rose-600 text-white rounded-full transition-colors cursor-pointer"
+                                  title="Remove image"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {/* File Drop Area for Multiple */}
+                      <label className="border-2 border-dashed border-gray-200 hover:border-black rounded-2xl p-4 flex flex-col items-center justify-center cursor-pointer transition-colors bg-gray-50/50 hover:bg-gray-50">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          onChange={handleEventImageUpload}
+                          disabled={uploadingEventImage}
+                          className="hidden"
+                        />
+                        <div className="text-center">
+                          <span className="text-xs font-bold text-gray-900">
+                            {uploadingEventImage ? "Uploading Images..." : "📁 Select Images from Device (Multiple Allowed)"}
+                          </span>
+                          <p className="text-[10px] text-gray-500 mt-1">PNG, JPG, WEBP up to 5MB each</p>
+                        </div>
+                      </label>
+                      {eventFormImages.length === 0 && !eventFormImage && (
+                        <p className="text-[11px] text-rose-500 mt-1 font-medium">
+                          * At least one cover image is required for Photo Gallery Archive.
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider flex items-center justify-between">
+                          <span className="flex items-center gap-1.5">
+                            <span className="text-rose-600 font-bold">▶</span> YouTube URL <span className="text-rose-500">*</span>
+                          </span>
+                        </label>
+                        <input
+                          type="url"
+                          value={eventFormVideoUrl}
+                          onChange={(e) => setEventFormVideoUrl(e.target.value)}
+                          placeholder="https://www.youtube.com/watch?v=... or https://youtu.be/..."
+                          className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium text-gray-900 outline-none focus:border-black shadow-xs"
+                        />
+                        <p className="text-[10px] text-gray-400 mt-1">
+                          Creates a watchable video card with a play button in the Past Events archive.
+                        </p>
+                      </div>
+
+                      {/* Optional Custom Cover or YouTube Thumbnail Preview */}
+                      <div>
+                        <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider">
+                          Video Cover Thumbnail <span className="text-[10px] font-normal text-gray-400 normal-case">(Optional - defaults to YouTube cover)</span>
+                        </label>
+                        {eventFormImage ? (
+                          <div className="relative rounded-2xl overflow-hidden border border-gray-200 h-32 bg-gray-50 flex items-center justify-center group">
                             <img
-                              src={imgUrl.startsWith("/") ? `${API_BASE_URL.replace(/\/api$/, "")}${imgUrl}` : imgUrl}
-                              alt={`Past event image ${idx + 1}`}
+                              src={eventFormImage.startsWith("/") ? `${API_BASE_URL.replace(/\/api$/, "")}${eventFormImage}` : eventFormImage}
+                              alt="Custom Video Cover"
                               className="w-full h-full object-cover"
                             />
-                            {isCover && (
-                              <span className="absolute bottom-1 left-1 bg-amber-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow-xs">
-                                Cover
-                              </span>
-                            )}
                             <button
                               type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                const updated = eventFormImages.filter((_, i) => i !== idx);
-                                setEventFormImages(updated);
-                                if (eventFormImage === imgUrl) {
-                                  setEventFormImage(updated[0] || "");
-                                }
-                              }}
-                              className="absolute top-1 right-1 p-1 bg-black/70 hover:bg-rose-600 text-white rounded-full transition-colors cursor-pointer"
-                              title="Remove image"
+                              onClick={() => setEventFormImage("")}
+                              className="absolute top-2 right-2 p-1.5 bg-black/70 hover:bg-rose-600 text-white rounded-full transition-colors cursor-pointer"
+                              title="Remove custom cover"
                             >
-                              <X className="w-3 h-3" />
+                              <X className="w-4 h-4" />
                             </button>
                           </div>
-                        );
-                      })}
+                        ) : eventFormVideoUrl.trim() ? (
+                          <div className="relative rounded-2xl overflow-hidden border border-gray-200 h-32 bg-gray-900 flex items-center justify-center">
+                            <img
+                              src={getYouTubeThumbnail(eventFormVideoUrl)}
+                              alt="YouTube Thumbnail"
+                              className="w-full h-full object-cover opacity-80"
+                            />
+                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                              <div className="w-10 h-10 rounded-full bg-rose-600 text-white flex items-center justify-center pl-0.5 shadow-lg">
+                                <Play className="w-5 h-5 fill-white" />
+                              </div>
+                            </div>
+                            <span className="absolute bottom-2 left-2 bg-black/70 text-white text-[10px] font-medium px-2 py-0.5 rounded">
+                              Auto YouTube Thumbnail
+                            </span>
+                          </div>
+                        ) : (
+                          <label className="border border-dashed border-gray-200 hover:border-black rounded-xl p-3 flex items-center justify-center cursor-pointer transition-colors bg-gray-50/50 hover:bg-gray-50">
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={handleEventImageUpload}
+                              disabled={uploadingEventImage}
+                              className="hidden"
+                            />
+                            <span className="text-xs font-semibold text-gray-600">
+                              {uploadingEventImage ? "Uploading..." : "📁 Upload Custom Cover (or leave empty for YouTube thumbnail)"}
+                            </span>
+                          </label>
+                        )}
+                      </div>
                     </div>
-                  )}
-
-                  {/* File Drop Area for Multiple */}
-                  <label className="border-2 border-dashed border-gray-200 hover:border-black rounded-2xl p-4 flex flex-col items-center justify-center cursor-pointer transition-colors bg-gray-50/50 hover:bg-gray-50">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      onChange={handleEventImageUpload}
-                      disabled={uploadingEventImage}
-                      className="hidden"
-                    />
-                    <div className="text-center">
-                      <span className="text-xs font-bold text-gray-900">
-                        {uploadingEventImage ? "Uploading Images..." : "📁 Select Images from Device (Multiple Allowed)"}
-                      </span>
-                      <p className="text-[10px] text-gray-500 mt-1">PNG, JPG, WEBP up to 5MB each</p>
-                    </div>
-                  </label>
-                  {eventFormImages.length === 0 && !eventFormImage && (
-                    <p className="text-[11px] text-rose-500 mt-1 font-medium">
-                      * At least one cover image is required for Past Archive.
-                    </p>
                   )}
                 </div>
               ) : (
@@ -6792,30 +6950,6 @@ function EditorialDashboardContent() {
                       * Cover image is required for Workshop events.
                     </p>
                   )}
-                </div>
-              )}
-
-              {/* YouTube / Video Recording URL - Only for Past Archive */}
-              {eventFormType === "PAST_ARCHIVE" && (
-                <div>
-                  <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider flex items-center justify-between">
-                    <span className="flex items-center gap-1.5">
-                      <span className="text-rose-600 font-bold">▶</span> YouTube / Recording URL
-                    </span>
-                    <span className="text-[10px] font-normal text-gray-400">
-                      Optional
-                    </span>
-                  </label>
-                  <input
-                    type="url"
-                    value={eventFormVideoUrl}
-                    onChange={(e) => setEventFormVideoUrl(e.target.value)}
-                    placeholder="https://www.youtube.com/watch?v=... or https://youtu.be/..."
-                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium text-gray-900 outline-none focus:border-black shadow-xs"
-                  />
-                  <p className="text-[10px] text-gray-400 mt-1">
-                    Adds a watchable video recording for this event in the Past Events archive.
-                  </p>
                 </div>
               )}
 
@@ -6974,98 +7108,214 @@ function EditorialDashboardContent() {
                 Upload photos from the event to feature in the <strong>Past Event Archive</strong>. Select an image to set it as the primary cover. <strong className="text-rose-600">Cover image is required.</strong>
               </p>
 
-              {/* Archive Gallery & Cover Image Upload */}
+              {/* Archive Media Format Selector */}
               <div>
-                <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider">
-                  Archive Images Gallery <span className="text-rose-500">*</span>
+                <label className="block text-xs font-bold text-gray-900 mb-1.5 uppercase tracking-wider flex items-center justify-between">
+                  <span>Archive Media Format <span className="text-rose-500">*</span></span>
+                  <span className="text-[10px] font-normal text-gray-500 lowercase">(choose only one)</span>
                 </label>
-
-                {/* Uploaded Thumbnails Grid */}
-                {archiveImages.length > 0 && (
-                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 mb-3">
-                    {archiveImages.map((url, idx) => {
-                      const isCover = archiveImage === url || (!archiveImage && idx === 0);
-                      return (
-                        <div
-                          key={idx}
-                          onClick={() => setArchiveImage(url)}
-                          className={`relative rounded-xl overflow-hidden border cursor-pointer h-20 bg-gray-50 group transition-all ${
-                            isCover ? "border-amber-500 ring-2 ring-amber-500/30" : "border-gray-200 hover:border-gray-400"
-                          }`}
-                        >
-                          <img
-                            src={url.startsWith("/") ? `${API_BASE_URL.replace(/\/api$/, "")}${url}` : url}
-                            alt={`Archive image ${idx + 1}`}
-                            className="w-full h-full object-cover"
-                          />
-                          {isCover && (
-                            <span className="absolute bottom-1 left-1 bg-amber-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow-xs">
-                              Cover
-                            </span>
-                          )}
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              const updated = archiveImages.filter((_, i) => i !== idx);
-                              setArchiveImages(updated);
-                              if (archiveImage === url) {
-                                setArchiveImage(updated[0] || "");
-                              }
-                            }}
-                            className="absolute top-1 right-1 p-1 bg-black/70 hover:bg-rose-600 text-white rounded-full transition-colors cursor-pointer"
-                            title="Remove image"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {/* File Drop / Select Area */}
-                <label className="border-2 border-dashed border-gray-200 hover:border-black rounded-2xl p-4 flex flex-col items-center justify-center cursor-pointer transition-colors bg-gray-50/50 hover:bg-gray-50">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    onChange={handleArchiveImageUpload}
-                    disabled={uploadingArchiveImage}
-                    className="hidden"
-                  />
-                  <div className="text-center">
-                    <span className="text-xs font-bold text-gray-900">
-                      {uploadingArchiveImage ? "Uploading Images..." : "📁 Select Images for Archive (Multiple Allowed)"}
-                    </span>
-                    <p className="text-[10px] text-gray-500 mt-1">PNG, JPG, WEBP up to 5MB each</p>
-                  </div>
-                </label>
-                {archiveImages.length === 0 && !archiveImage && (
-                  <p className="text-[11px] text-rose-500 mt-1 font-medium">
-                    * At least one cover image is required to move an event to Past Archive.
-                  </p>
-                )}
-              </div>
-
-              {/* Optional Recording Video URL */}
-              <div>
-                <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider">
-                  Event Recording Video URL
-                  <span className="ml-1.5 text-[10px] font-normal text-gray-400 normal-case">(Optional)</span>
-                </label>
-                <div className="relative">
-                  <input
-                    type="url"
-                    value={archiveVideoUrl}
-                    onChange={(e) => setArchiveVideoUrl(e.target.value)}
-                    placeholder="https://youtu.be/... or https://youtube.com/watch?v=..."
-                    className="w-full pl-9 pr-4 py-2.5 bg-white border border-gray-200 rounded-2xl text-xs font-medium outline-none focus:border-black shadow-xs transition-all"
-                  />
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">🎥</span>
+                <div className="grid grid-cols-2 gap-2 bg-gray-100 p-1 rounded-2xl">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setArchiveMediaType("IMAGES");
+                      setArchiveVideoUrl("");
+                    }}
+                    className={`py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                      archiveMediaType === "IMAGES"
+                        ? "bg-white text-gray-900 shadow-xs"
+                        : "text-gray-500 hover:text-gray-900"
+                    }`}
+                  >
+                    <span>📸 Photo Gallery</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setArchiveMediaType("VIDEO");
+                      setArchiveImages([]);
+                    }}
+                    className={`py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                      archiveMediaType === "VIDEO"
+                        ? "bg-white text-gray-900 shadow-xs"
+                        : "text-gray-500 hover:text-gray-900"
+                    }`}
+                  >
+                    <span className="text-rose-600">▶</span>
+                    <span>YouTube Video</span>
+                  </button>
                 </div>
-                <p className="text-[10px] text-gray-400 mt-1">Paste a YouTube or video recording link for this archived event.</p>
               </div>
+
+              {archiveMediaType === "IMAGES" ? (
+                /* Archive Gallery & Cover Image Upload */
+                <div>
+                  <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider">
+                    Archive Images Gallery <span className="text-rose-500">*</span>
+                  </label>
+
+                  {/* Uploaded Thumbnails Grid */}
+                  {archiveImages.length > 0 && (
+                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 mb-3">
+                      {archiveImages.map((url, idx) => {
+                        const isCover = archiveImage === url || (!archiveImage && idx === 0);
+                        return (
+                          <div
+                            key={idx}
+                            onClick={() => setArchiveImage(url)}
+                            className={`relative rounded-xl overflow-hidden border cursor-pointer h-20 bg-gray-50 group transition-all ${
+                              isCover ? "border-amber-500 ring-2 ring-amber-500/30" : "border-gray-200 hover:border-gray-400"
+                            }`}
+                          >
+                            <img
+                              src={url.startsWith("/") ? `${API_BASE_URL.replace(/\/api$/, "")}${url}` : url}
+                              alt={`Archive image ${idx + 1}`}
+                              className="w-full h-full object-cover"
+                            />
+                            {isCover && (
+                              <span className="absolute bottom-1 left-1 bg-amber-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow-xs">
+                                Cover
+                              </span>
+                            )}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const updated = archiveImages.filter((_, i) => i !== idx);
+                                setArchiveImages(updated);
+                                if (archiveImage === url) {
+                                  setArchiveImage(updated[0] || "");
+                                }
+                              }}
+                              className="absolute top-1 right-1 p-1 bg-black/70 hover:bg-rose-600 text-white rounded-full transition-colors cursor-pointer"
+                              title="Remove image"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* File Drop / Select Area */}
+                  <label className="border-2 border-dashed border-gray-200 hover:border-black rounded-2xl p-4 flex flex-col items-center justify-center cursor-pointer transition-colors bg-gray-50/50 hover:bg-gray-50">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      onChange={handleArchiveImageUpload}
+                      disabled={uploadingArchiveImage}
+                      className="hidden"
+                    />
+                    <div className="text-center">
+                      <span className="text-xs font-bold text-gray-900">
+                        {uploadingArchiveImage ? "Uploading Images..." : "📁 Select Images for Archive (Multiple Allowed)"}
+                      </span>
+                      <p className="text-[10px] text-gray-500 mt-1">PNG, JPG, WEBP up to 5MB each</p>
+                    </div>
+                  </label>
+                  {archiveImages.length === 0 && !archiveImage && (
+                    <p className="text-[11px] text-rose-500 mt-1 font-medium">
+                      * At least one cover image is required to move an event to Past Archive.
+                    </p>
+                  )}
+                </div>
+              ) : (
+                /* YouTube Video URL */
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider flex items-center justify-between">
+                      <span className="flex items-center gap-1.5">
+                        <span className="text-rose-600 font-bold">▶</span> YouTube / Video URL <span className="text-rose-500">*</span>
+                      </span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="url"
+                        value={archiveVideoUrl}
+                        onChange={(e) => setArchiveVideoUrl(e.target.value)}
+                        placeholder="https://youtu.be/... or https://youtube.com/watch?v=..."
+                        className="w-full pl-9 pr-4 py-2.5 bg-white border border-gray-200 rounded-2xl text-xs font-medium outline-none focus:border-black shadow-xs transition-all"
+                      />
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">🎥</span>
+                    </div>
+                    <p className="text-[10px] text-gray-400 mt-1">This will display as a watchable video card with a play button in the archive.</p>
+                  </div>
+
+                  {/* Video Cover Image Option */}
+                  <div>
+                    <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider">
+                      Video Cover Image <span className="text-[10px] font-normal text-gray-400 normal-case">(Optional - defaults to YouTube cover)</span>
+                    </label>
+
+                    {archiveImage ? (
+                      <div className="relative rounded-2xl overflow-hidden border border-gray-200 h-32 bg-gray-50 flex items-center justify-center group">
+                        <img
+                          src={archiveImage.startsWith("/") ? `${API_BASE_URL.replace(/\/api$/, "")}${archiveImage}` : archiveImage}
+                          alt="Custom Video Cover"
+                          className="w-full h-full object-cover"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setArchiveImage("")}
+                          className="absolute top-2 right-2 p-1.5 bg-black/70 hover:bg-rose-600 text-white rounded-full transition-colors cursor-pointer"
+                          title="Remove custom cover"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                        <span className="absolute bottom-2 left-2 bg-black/70 text-white text-[10px] font-semibold px-2 py-0.5 rounded shadow-xs">
+                          Custom Cover
+                        </span>
+                      </div>
+                    ) : archiveVideoUrl.trim() ? (
+                      <div className="space-y-2">
+                        <div className="relative rounded-2xl overflow-hidden border border-gray-200 h-32 bg-gray-900 flex items-center justify-center">
+                          <img
+                            src={getYouTubeThumbnail(archiveVideoUrl)}
+                            alt="YouTube Thumbnail"
+                            className="w-full h-full object-cover opacity-80"
+                          />
+                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                            <div className="w-10 h-10 rounded-full bg-rose-600 text-white flex items-center justify-center pl-0.5 shadow-lg">
+                              <Play className="w-5 h-5 fill-white" />
+                            </div>
+                          </div>
+                          <span className="absolute bottom-2 left-2 bg-black/70 text-white text-[10px] font-medium px-2 py-0.5 rounded">
+                            Auto YouTube Thumbnail
+                          </span>
+                        </div>
+                        <label className="border border-dashed border-gray-200 hover:border-black rounded-xl p-2.5 flex items-center justify-center cursor-pointer transition-colors bg-gray-50/50 hover:bg-gray-50 text-center">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={handleArchiveImageUpload}
+                            disabled={uploadingArchiveImage}
+                            className="hidden"
+                          />
+                          <span className="text-xs font-semibold text-gray-700">
+                            {uploadingArchiveImage ? "Uploading..." : "📁 Upload Custom Cover Image"}
+                          </span>
+                        </label>
+                      </div>
+                    ) : (
+                      <label className="border-2 border-dashed border-gray-200 hover:border-black rounded-2xl p-4 flex flex-col items-center justify-center cursor-pointer transition-colors bg-gray-50/50 hover:bg-gray-50 text-center">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleArchiveImageUpload}
+                          disabled={uploadingArchiveImage}
+                          className="hidden"
+                        />
+                        <span className="text-xs font-bold text-gray-900">
+                          {uploadingArchiveImage ? "Uploading Cover..." : "📁 Upload Custom Cover Image"}
+                        </span>
+                        <p className="text-[10px] text-gray-500 mt-1">PNG, JPG, WEBP up to 5MB (or leave empty to use YouTube thumbnail)</p>
+                      </label>
+                    )}
+                  </div>
+                </div>
+              )}
 
               <div className="flex items-center justify-end gap-3 pt-3 border-t border-gray-100">
                 <Button

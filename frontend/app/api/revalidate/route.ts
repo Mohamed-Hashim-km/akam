@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
-const HOMEPAGE_TAGS = ["homepage", "stories", "events", "books", "media", "comments", "editors-note"];
+const HOMEPAGE_TAGS = ["homepage", "stories", "categories", "events", "books", "media", "comments", "editors-note", "reviews"];
 
 function performRevalidation(path: string, tag: string | null, profile: string = "max") {
   const revalidatedTags: string[] = [];
