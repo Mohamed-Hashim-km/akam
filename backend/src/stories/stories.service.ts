@@ -59,13 +59,22 @@ export class StoriesService {
     authorId?: string,
     featured?: string,
   ) {
-    const storyStatus = status ?? 'APPROVED';
     const page = pageVal && pageVal > 0 ? pageVal : 1;
     const limit = limitVal && limitVal > 0 ? limitVal : 10;
     const offset = (page - 1) * limit;
 
-    let whereSql = `WHERE s.status = $1::"StoryStatus"`;
-    const params: any[] = [storyStatus];
+    let whereSql = '';
+    const params: any[] = [];
+
+    if (status === 'CATALOG') {
+      whereSql = `WHERE s.status IN ('APPROVED'::"StoryStatus", 'UNPUBLISHED'::"StoryStatus")`;
+    } else if (status === 'ALL') {
+      whereSql = `WHERE 1=1`;
+    } else {
+      const storyStatus = status ?? 'APPROVED';
+      whereSql = `WHERE s.status = $1::"StoryStatus"`;
+      params.push(storyStatus);
+    }
 
     if (featured === 'true' || featured === '1') {
       whereSql += ` AND s."isFeatured" = true`;
@@ -299,7 +308,7 @@ export class StoriesService {
 
     if (search && search.trim()) {
       params.push(`%${search.trim()}%`);
-      whereSql += ` AND (s.title ILIKE $1 OR u.name ILIKE $1 OR u.email ILIKE $1 OR s.category ILIKE $1)`;
+      whereSql += ` AND (s.title ILIKE $1 OR u.name ILIKE $1 OR u.email ILIKE $1 OR s.category ILIKE $1 OR s.description ILIKE $1)`;
     }
 
     const countRow = await this.prisma.queryOne<{ count: string }>(
@@ -314,7 +323,7 @@ export class StoriesService {
     const queryParams = [...params, limit, offset];
     const data = await this.prisma.query<StoryRow>(
       `SELECT
-         s.id, s.title, s.slug, s.content, s.category, s."coverImageUrl",
+         s.id, s.title, s.slug, s.description, s.content, s.category, s."coverImageUrl",
          s."submissionType", s."mediaUrl",
          s.status, s."rejectionNote", s."createdAt", s."updatedAt",
          s."authorId",
@@ -365,6 +374,13 @@ export class StoriesService {
         id,
       );
       return { id, status: 'APPROVED' };
+    } else if (dto.decision === 'UNPUBLISHED') {
+      await this.prisma.execute(
+        `UPDATE story SET status = 'UNPUBLISHED'::"StoryStatus", "rejectionNote" = null, "updatedAt" = now()
+         WHERE id = $1`,
+        [id],
+      );
+      return { id, status: 'UNPUBLISHED' };
     } else if (dto.decision === 'APPROVED_EMAGAZINE') {
       await this.prisma.execute(
         `UPDATE story SET status = 'APPROVED_EMAGAZINE'::"StoryStatus", "rejectionNote" = null, "updatedAt" = now()
@@ -405,6 +421,15 @@ export class StoriesService {
     if (story.authorId !== userId && !['EDITOR', 'ADMIN'].includes(userRole)) {
       throw new ForbiddenException('Not authorized to delete this story');
     }
+
+    if (story.authorId !== userId && ['EDITOR', 'ADMIN'].includes(userRole)) {
+      try {
+        await this.notificationsService.notifyAuthorOfContentRemoval(story.authorId, story.title, false, id);
+      } catch (err) {
+        console.error('Error notifying author of story removal', err);
+      }
+    }
+
     if (story.coverImageUrl) {
       this.uploadsService.deleteFileByUrl(story.coverImageUrl);
     }

@@ -139,17 +139,17 @@ export const EditorsNote: React.FC<EditorsNoteProps> = ({
     note: initialNote,
   });
 
-  const containerRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLElement>(null);
 
-  // Scroll progress for the EditorsNote track (0 -> 1) as user scrolls through pinned section
+  // Scroll progress for the EditorsNote section (0 -> 1) as user scrolls past it
   const { scrollYProgress } = useScroll({
     target: containerRef,
-    offset: ["start start", "end end"],
+    offset: ["start 85%", "end 20%"],
   });
 
-  // Map scroll progress (0 -> 1) directly to wheel rotation (-60deg -> 240deg) as user scrolls
-  const wheelRotate = useTransform(scrollYProgress, [0, 1], [-60, 240]);
-  const svgCounterRotate = useTransform(scrollYProgress, [0, 1], [60, -240]);
+  // Map scroll progress (0 -> 1) directly to wheel rotation as user scrolls
+  const wheelRotate = useTransform(scrollYProgress, [0, 1], [-45, 135]);
+  const svgCounterRotate = useTransform(scrollYProgress, [0, 1], [45, -135]);
 
   // Fetch API note if using fallbacks
   useEffect(() => {
@@ -183,73 +183,70 @@ export const EditorsNote: React.FC<EditorsNoteProps> = ({
   const words = data.note.split(" ");
 
   return (
-    <div
+    <section
       ref={containerRef}
-      className="relative w-full h-[220vh] sm:h-[260vh] bg-[#D3F0E3]"
+      className="relative w-full bg-[#D3F0E3] py-14 sm:py-18 lg:py-22 font-poppins overflow-hidden flex items-center justify-center"
     >
-      {/* Sticky Pinned Container - Stays locked in viewport while scrubbing scroll track */}
-      <div className="sticky top-0 h-screen w-full overflow-hidden font-poppins flex items-center justify-center">
-        {/* ── ROTATING HALF-CIRCLE CAROUSEL WHEEL (DRIVEN BY SCROLL SCRUB) ── */}
-        <div className="hidden md:block absolute top-1/2 -translate-y-1/2 right-[-140px] sm:right-[-180px] md:right-[-220px] w-[340px] h-[340px] sm:w-[440px] sm:h-[440px] md:w-[500px] md:h-[500px] pointer-events-none z-0">
-          <motion.div
-            style={{ rotate: wheelRotate }}
-            className="w-full h-full relative"
-          >
-            {/* SVG 1: Top position on wheel */}
-            <div className="absolute top-2 left-1/2 -translate-x-1/2 -translate-y-1/2">
-              <motion.div style={{ rotate: svgCounterRotate }}>
-                <MalayalamSvgOne className="w-24 sm:w-32 md:w-36 drop-shadow-sm" id="svg_wheel_1" />
-              </motion.div>
-            </div>
+      {/* ── ROTATING HALF-CIRCLE CAROUSEL WHEEL (DRIVEN BY SCROLL SCRUB) ── */}
+      <div className="hidden md:block absolute top-1/2 -translate-y-1/2 right-[-140px] sm:right-[-180px] md:right-[-220px] w-[340px] h-[340px] sm:w-[440px] sm:h-[440px] md:w-[500px] md:h-[500px] pointer-events-none z-0">
+        <motion.div
+          style={{ rotate: wheelRotate }}
+          className="w-full h-full relative"
+        >
+          {/* SVG 1: Top position on wheel */}
+          <div className="absolute top-2 left-1/2 -translate-x-1/2 -translate-y-1/2">
+            <motion.div style={{ rotate: svgCounterRotate }}>
+              <MalayalamSvgOne className="w-24 sm:w-32 md:w-36 drop-shadow-sm" id="svg_wheel_1" />
+            </motion.div>
+          </div>
 
-            {/* SVG 2: Left position on wheel */}
-            <div className="absolute left-2 top-1/2 -translate-y-1/2 -translate-x-1/2">
-              <motion.div style={{ rotate: svgCounterRotate }}>
-                <MalayalamSvgTwo className="w-24 sm:w-30 md:w-34 drop-shadow-sm" id="svg_wheel_2" />
-              </motion.div>
-            </div>
+          {/* SVG 2: Left position on wheel */}
+          <div className="absolute left-2 top-1/2 -translate-y-1/2 -translate-x-1/2">
+            <motion.div style={{ rotate: svgCounterRotate }}>
+              <MalayalamSvgTwo className="w-24 sm:w-30 md:w-34 drop-shadow-sm" id="svg_wheel_2" />
+            </motion.div>
+          </div>
 
-            {/* SVG 3: Bottom position on wheel */}
-            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 translate-y-1/2">
-              <motion.div style={{ rotate: svgCounterRotate }}>
-                <MalayalamSvgThree className="w-24 sm:w-30 md:w-34 drop-shadow-sm" id="svg_wheel_3" />
-              </motion.div>
-            </div>
+          {/* SVG 3: Bottom position on wheel */}
+          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 translate-y-1/2">
+            <motion.div style={{ rotate: svgCounterRotate }}>
+              <MalayalamSvgThree className="w-24 sm:w-30 md:w-34 drop-shadow-sm" id="svg_wheel_3" />
+            </motion.div>
+          </div>
 
-            {/* SVG 4: Right position on wheel */}
-            <div className="absolute right-2 top-1/2 -translate-y-1/2 translate-x-1/2">
-              <motion.div style={{ rotate: svgCounterRotate }}>
-                <MalayalamSvgTwo className="w-24 sm:w-30 md:w-34 drop-shadow-sm" id="svg_wheel_4" />
-              </motion.div>
-            </div>
-          </motion.div>
-        </div>
-        {/* ── END ROTATING WHEEL CAROUSEL ── */}
-
-        {/* Main Content Container */}
-        <div className="container px-6 sm:px-10 max-w-3xl sm:max-w-4xl mx-auto relative z-10 text-center">
-          {/* Section Title */}
-          {data.title && (
-            <h3 className="text-sm sm:text-base md:text-lg font-medium text-[#0FA975] tracking-wide mb-4">
-              {data.title}
-            </h3>
-          )}
-
-          {/* Word-by-Word Text Highlight Animation (Scrubbed in sync with User Scroll) */}
-          <p className="text-xl sm:text-2xl lg:text-3xl leading-relaxed text-center tracking-tight flex flex-wrap justify-center">
-            {words.map((word, i) => (
-              <ScrolledWord
-                key={i}
-                word={word}
-                index={i}
-                total={words.length}
-                progress={scrollYProgress}
-              />
-            ))}
-          </p>
-        </div>
+          {/* SVG 4: Right position on wheel */}
+          <div className="absolute right-2 top-1/2 -translate-y-1/2 translate-x-1/2">
+            <motion.div style={{ rotate: svgCounterRotate }}>
+              <MalayalamSvgTwo className="w-24 sm:w-30 md:w-34 drop-shadow-sm" id="svg_wheel_4" />
+            </motion.div>
+          </div>
+        </motion.div>
       </div>
-    </div>
+      {/* ── END ROTATING WHEEL CAROUSEL ── */}
+
+      {/* Main Content Container */}
+      <div className="container px-6 sm:px-10 max-w-3xl sm:max-w-4xl mx-auto relative z-10 text-center">
+        {/* Section Title */}
+        {data.title && (
+          <h3 className="text-sm sm:text-base md:text-xl font-medium text-[#0FA975] tracking-wide mb-4">
+            {data.title}
+          </h3>
+        )}
+
+        {/* Word-by-Word Text Highlight Animation (Scrubbed in sync with User Scroll) */}
+        <p className="text-xl sm:text-2xl lg:text-3xl leading-relaxed text-center tracking-tight flex flex-wrap justify-center">
+          {words.map((word, i) => (
+            <ScrolledWord
+              key={i}
+              word={word}
+              index={i}
+              total={words.length}
+              progress={scrollYProgress}
+            />
+          ))}
+        </p>
+      </div>
+    </section>
   );
 };
 

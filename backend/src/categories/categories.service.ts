@@ -8,18 +8,28 @@ export type CategoryRow = {
   malName: string | null;
   description: string | null;
   createdAt: string;
+  workCount?: number;
 };
 
 @Injectable()
 export class CategoriesService {
   constructor(private prisma: PrismaService) {}
 
-  async findAll(pageVal?: number, limitVal?: number) {
+  async findAll(pageVal?: number, limitVal?: number, search?: string) {
+    const trimmedSearch = search?.trim();
+    const searchFilter = trimmedSearch
+      ? `WHERE LOWER(c.name) LIKE LOWER($1) OR LOWER(COALESCE(c."malName", '')) LIKE LOWER($1) OR LOWER(COALESCE(c.description, '')) LIKE LOWER($1)`
+      : '';
+    const searchParam = trimmedSearch ? [`%${trimmedSearch}%`] : [];
+
     if (!pageVal && !limitVal) {
       return this.prisma.query<CategoryRow>(
-        `SELECT id, name, "malName", description, "createdAt"
-         FROM category
-         ORDER BY name ASC`,
+        `SELECT c.id, c.name, c."malName", c.description, c."createdAt",
+                (SELECT COUNT(*)::int FROM story s WHERE LOWER(s.category) = LOWER(c.name) AND s.status = 'APPROVED') AS "workCount"
+         FROM category c
+         ${searchFilter}
+         ORDER BY c.name ASC`,
+        searchParam,
       );
     }
 
@@ -27,17 +37,27 @@ export class CategoriesService {
     const limit = limitVal && limitVal > 0 ? limitVal : 10;
     const offset = (page - 1) * limit;
 
+    const countSql = searchFilter
+      ? `SELECT COUNT(*) AS count FROM category c ${searchFilter}`
+      : `SELECT COUNT(*) AS count FROM category`;
     const countRow = await this.prisma.queryOne<{ count: string }>(
-      `SELECT COUNT(*) AS count FROM category`,
+      countSql,
+      searchParam,
     );
     const total = parseInt(countRow?.count ?? '0', 10);
 
+    const querySql = `
+      SELECT c.id, c.name, c."malName", c.description, c."createdAt",
+             (SELECT COUNT(*)::int FROM story s WHERE LOWER(s.category) = LOWER(c.name) AND s.status = 'APPROVED') AS "workCount"
+      FROM category c
+      ${searchFilter}
+      ORDER BY c.name ASC
+      LIMIT $${searchParam.length + 1} OFFSET $${searchParam.length + 2}
+    `;
+
     const data = await this.prisma.query<CategoryRow>(
-      `SELECT id, name, "malName", description, "createdAt"
-       FROM category
-       ORDER BY name ASC
-       LIMIT $1 OFFSET $2`,
-      [limit, offset],
+      querySql,
+      [...searchParam, limit, offset],
     );
 
     return {

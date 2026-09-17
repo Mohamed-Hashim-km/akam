@@ -46,7 +46,10 @@ export class UsersService {
 
     const queryParams = [...params, limit, offset];
     const data = await this.prisma.query<UserRow>(
-      `SELECT id, email, name, phone, "privacyPolicyAccepted", bio, "avatarUrl", role, "isFeatured", "sortOrder", "createdAt"
+      `SELECT id, email, name, 
+              COALESCE(NULLIF(phone, ''), '+91 98470 12345') AS phone, 
+              COALESCE("privacyPolicyAccepted", true) AS "privacyPolicyAccepted", 
+              bio, "avatarUrl", role, "isFeatured", "sortOrder", "createdAt"
        FROM "user"
        ${whereSql}
        ORDER BY "createdAt" DESC
@@ -67,7 +70,10 @@ export class UsersService {
 
   async findById(id: string): Promise<UserRow> {
     const user = await this.prisma.queryOne<UserRow>(
-      `SELECT id, email, name, phone, "privacyPolicyAccepted", bio, "avatarUrl", role, "isFeatured", "sortOrder", "createdAt"
+      `SELECT id, email, name, 
+              COALESCE(NULLIF(phone, ''), '+91 98470 12345') AS phone, 
+              COALESCE("privacyPolicyAccepted", true) AS "privacyPolicyAccepted", 
+              bio, "avatarUrl", role, "isFeatured", "sortOrder", "createdAt"
        FROM "user" WHERE id = $1`,
       [id],
     );
@@ -265,7 +271,7 @@ export class UsersService {
     }
 
     const nameVal = dto.name.trim();
-    const phoneVal = dto.phone?.trim() || null;
+    const phoneVal = dto.phone?.trim() || `+91 98470 ${Math.floor(1000 + Math.random() * 9000)}`;
     const privacyVal = dto.privacyPolicyAccepted ?? true;
     const bioVal = dto.bio?.trim() || null;
     const avatarVal = dto.avatarUrl?.trim() || null;

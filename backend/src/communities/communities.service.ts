@@ -161,6 +161,16 @@ export class CommunitiesService {
     const updates: string[] = ['"updatedAt" = now()'];
     const params: unknown[] = [];
 
+    if (dto.slug && dto.slug !== slug) {
+      const existing = await this.prisma.queryOne<{ id: string }>(
+        `SELECT id FROM community WHERE slug = $1`,
+        [dto.slug],
+      );
+      if (existing) throw new ConflictException(`Community slug '${dto.slug}' already exists`);
+      params.push(dto.slug);
+      updates.push(`slug = $${params.length}`);
+    }
+
     const fields: Array<[keyof UpdateCommunityDto, string]> = [
       ['name', 'name'],
       ['description', 'description'],

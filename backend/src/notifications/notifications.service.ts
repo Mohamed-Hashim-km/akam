@@ -5,7 +5,11 @@ export type NotificationType =
   | 'STORY_SUBMITTED'
   | 'STORY_APPROVED'
   | 'STORY_REJECTED'
-  | 'STORY_APPROVED_EMAGAZINE';
+  | 'STORY_APPROVED_EMAGAZINE'
+  | 'CONTENT_REPORTED'
+  | 'REPORT_RESOLVED'
+  | 'REPORT_DISMISSED'
+  | 'CONTENT_REMOVED';
 
 type NotificationRow = {
   id: string;
@@ -109,6 +113,49 @@ export class NotificationsService {
         storyId,
       );
     }
+  }
+
+  async notifyEditorsOfReport(targetTitle: string, reason: string, storyId?: string): Promise<void> {
+    const editors = await this.prisma.query<{ id: string }>(
+      `SELECT id FROM "user" WHERE role IN ('EDITOR', 'ADMIN')`,
+    );
+
+    for (const editor of editors) {
+      await this.createNotification(
+        editor.id,
+        'CONTENT_REPORTED',
+        `Content Flagged: "${targetTitle}" was reported for "${reason}". Please review in Content Moderation.`,
+        storyId,
+      );
+    }
+  }
+
+  async notifyReporterOfStatus(
+    reporterId: string,
+    storyTitle: string,
+    status: 'RESOLVED' | 'DISMISSED',
+    storyId?: string,
+  ): Promise<void> {
+    const type: NotificationType = status === 'DISMISSED' ? 'REPORT_DISMISSED' : 'REPORT_RESOLVED';
+    const message =
+      status === 'DISMISSED'
+        ? `Your report regarding "${storyTitle}" was reviewed and dismissed by the editorial team.`
+        : `Your report regarding "${storyTitle}" was reviewed and resolved by our editorial team. Appropriate action has been taken.`;
+
+    await this.createNotification(reporterId, type, message, storyId);
+  }
+
+  async notifyAuthorOfContentRemoval(
+    authorId: string,
+    contentTitle: string,
+    isComment: boolean = false,
+    storyId?: string,
+  ): Promise<void> {
+    const message = isComment
+      ? `Your comment on "${contentTitle}" was removed by editorial moderation due to community guidelines.`
+      : `Your story "${contentTitle}" was removed following an editorial moderation review.`;
+
+    await this.createNotification(authorId, 'CONTENT_REMOVED', message, storyId);
   }
 
   async notifyAuthorOfEmagazineApproval(authorId: string, storyTitle: string, storyId: string): Promise<void> {

@@ -4,6 +4,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 
 export interface CommentRow {
   id: string;
@@ -19,7 +20,10 @@ export interface CommentRow {
 
 @Injectable()
 export class EngagementService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notificationsService: NotificationsService,
+  ) {}
 
   private async ensureStoryExists(storyId: string) {
     const story = await this.prisma.queryOne<{ id: string }>(
@@ -273,14 +277,32 @@ export class EngagementService {
   }
 
   async deleteComment(commentId: string, userId: string, userRole: string) {
-    const comment = await this.prisma.queryOne<{ id: string; userId: string }>(
-      `SELECT id, "userId" FROM story_comment WHERE id = $1`,
+    const comment = await this.prisma.queryOne<{ id: string; userId: string; storyId: string }>(
+      `SELECT id, "userId", "storyId" FROM story_comment WHERE id = $1`,
       [commentId],
     );
     if (!comment) throw new NotFoundException('Comment not found');
 
     if (comment.userId !== userId && !['EDITOR', 'ADMIN'].includes(userRole)) {
       throw new ForbiddenException('Not authorized to delete this comment');
+    }
+
+    // If removed by editor/moderator, notify the author
+    if (comment.userId !== userId && ['EDITOR', 'ADMIN'].includes(userRole)) {
+      try {
+        const story = await this.prisma.queryOne<{ title: string }>(
+          `SELECT title FROM story WHERE id = $1`,
+          [comment.storyId],
+        );
+        await this.notificationsService.notifyAuthorOfContentRemoval(
+          comment.userId,
+          story?.title || 'the story',
+          true,
+          comment.storyId,
+        );
+      } catch (err) {
+        console.error('Error sending comment removal notification', err);
+      }
     }
 
     await this.prisma.execute(`DELETE FROM story_comment WHERE id = $1`, [commentId]);

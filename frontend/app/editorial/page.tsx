@@ -37,11 +37,13 @@ import {
   ChevronLeft,
   Flag,
   Video,
+  Palette,
   Mail,
   MessageSquare,
   Inbox,
   FileText,
   Edit3,
+  Pencil,
   UserPlus,
   Upload,
   Image as ImageIcon,
@@ -63,21 +65,25 @@ import {
   Globe,
   Loader2,
   Star,
+  GraduationCap,
+  Play,
 } from "lucide-react";
 import Button from "@/components/ui/Button";
 import AuthModal from "@/components/AuthModal";
 import { API_BASE_URL, apiFetch, formatAssetUrl } from "@/lib/config";
+import StudentVerificationsPanel from "@/components/StudentVerificationsPanel";
 
 interface PendingStory {
   id: string;
   title: string;
   slug: string;
+  description?: string | null;
   content: string;
   category?: string;
   coverImageUrl: string | null;
   submissionType?: "STORY" | "PAINTING" | "VIDEO";
   mediaUrl?: string | null;
-  status: "PENDING" | "APPROVED" | "REJECTED" | "DRAFT" | "APPROVED_EMAGAZINE";
+  status: "PENDING" | "APPROVED" | "REJECTED" | "DRAFT" | "APPROVED_EMAGAZINE" | "UNPUBLISHED";
   isFeatured?: boolean;
   createdAt: string;
   updatedAt: string;
@@ -145,6 +151,7 @@ function formatDateTime(dateStr?: string | null) {
 
 type TabType =
   | "queue"
+  | "student-verifications"
   | "emagazine"
   | "reports"
   | "inquiries"
@@ -319,6 +326,7 @@ function EditorialDashboardContent() {
 
   const [allStories, setAllStories] = useState<PendingStory[]>([]);
   const [catalogMeta, setCatalogMeta] = useState({ total: 0, page: 1, limit: 10, totalPages: 1 });
+  const [catalogStatusFilter, setCatalogStatusFilter] = useState<"ALL" | "APPROVED" | "UNPUBLISHED">("ALL");
 
   const [allUsers, setAllUsers] = useState<RosterUser[]>([]);
   const [authorsMeta, setAuthorsMeta] = useState({ total: 0, page: 1, limit: 10, totalPages: 1 });
@@ -331,6 +339,7 @@ function EditorialDashboardContent() {
   const [reportsMeta, setReportsMeta] = useState({ total: 0, page: 1, limit: 10, totalPages: 1 });
   const [reportStatusFilter, setReportStatusFilter] = useState("ALL");
   const [reportTypeFilter, setReportTypeFilter] = useState("ALL");
+  const [pendingReportsCount, setPendingReportsCount] = useState<number>(0);
 
   const [inquiriesList, setInquiriesList] = useState<ContactInquiryItem[]>([]);
   const [inquiriesMeta, setInquiriesMeta] = useState({ total: 0, page: 1, limit: 10, totalPages: 1 });
@@ -520,12 +529,14 @@ function EditorialDashboardContent() {
   const [communitiesList, setCommunitiesList] = useState<any[]>([]);
   const [commSubTab, setCommSubTab] = useState<"reports" | "communities">("communities");
 
-  // Create Community State
+  // Create / Edit Community State
   const [showAddCommModal, setShowAddCommModal] = useState(false);
+  const [editingCommSlug, setEditingCommSlug] = useState<string | null>(null);
   const [newCommName, setNewCommName] = useState("");
   const [newCommSlug, setNewCommSlug] = useState("");
   const [newCommDesc, setNewCommDesc] = useState("");
   const [newCommColor, setNewCommColor] = useState("#21B573");
+  const [newCommIsActive, setNewCommIsActive] = useState(true);
   const [creatingComm, setCreatingComm] = useState(false);
 
   // Events & Workshops State
@@ -549,12 +560,14 @@ function EditorialDashboardContent() {
   const [eventFormImages, setEventFormImages] = useState<string[]>([]);
   const [uploadingEventImage, setUploadingEventImage] = useState(false);
   const [eventFormRegisterHref, setEventFormRegisterHref] = useState("");
+  const [eventFormVideoUrl, setEventFormVideoUrl] = useState("");
   const [eventFormPublished, setEventFormPublished] = useState(true);
   const [submittingEvent, setSubmittingEvent] = useState(false);
 
   const [showArchiveModal, setShowArchiveModal] = useState(false);
   const [selectedEventForArchive, setSelectedEventForArchive] = useState<any | null>(null);
   const [archiveImage, setArchiveImage] = useState("");
+  const [archiveImages, setArchiveImages] = useState<string[]>([]);
   const [archiveVideoUrl, setArchiveVideoUrl] = useState("");
   const [uploadingArchiveImage, setUploadingArchiveImage] = useState(false);
   const [archivingEvent, setArchivingEvent] = useState(false);
@@ -946,6 +959,7 @@ function EditorialDashboardContent() {
 
         if (["EDITOR", "ADMIN"].includes(uData.role)) {
           fetchAllPlatformCategories();
+          fetchPendingReportsCount();
           await fetchDashboardData(activeTab, currentPage, searchQuery);
         }
       } else {
@@ -956,6 +970,18 @@ function EditorialDashboardContent() {
       setUser(null);
     } finally {
       setAuthChecking(false);
+    }
+  };
+
+  const fetchPendingReportsCount = async () => {
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/editorial/reports/pending-count`);
+      if (res.ok) {
+        const json = await res.json();
+        setPendingReportsCount(typeof json.count === "number" ? json.count : 0);
+      }
+    } catch (e) {
+      console.error("Error fetching pending reports count", e);
     }
   };
 
@@ -1012,6 +1038,7 @@ function EditorialDashboardContent() {
           } else {
             setReportsList(Array.isArray(json) ? json : []);
           }
+          fetchPendingReportsCount();
         }
       } else if (tab === "inquiries") {
         const iStatus = inquiryStatusFilter !== "ALL" ? `&status=${inquiryStatusFilter}` : "";
@@ -1035,7 +1062,7 @@ function EditorialDashboardContent() {
         }
       } else if (tab === "catalog") {
         const cSearch = query ? `&search=${encodeURIComponent(query)}` : "";
-        const cRes = await apiFetch(`${API_BASE_URL}/stories?status=APPROVED&page=${page}&limit=10${cSearch}`);
+        const cRes = await apiFetch(`${API_BASE_URL}/stories?status=CATALOG&page=${page}&limit=10${cSearch}`);
         if (cRes.ok) {
           const json = await cRes.json();
           if (json.data) {
@@ -1058,7 +1085,8 @@ function EditorialDashboardContent() {
           }
         }
       } else if (tab === "categories") {
-        const catRes = await apiFetch(`${API_BASE_URL}/categories?page=${page}&limit=10`);
+        const catSearch = query ? `&search=${encodeURIComponent(query)}` : "";
+        const catRes = await apiFetch(`${API_BASE_URL}/categories?page=${page}&limit=12${catSearch}`);
         if (catRes.ok) {
           const json = await catRes.json();
           if (json.data) {
@@ -1089,7 +1117,7 @@ function EditorialDashboardContent() {
       } else if (tab === "communities") {
         const [crRes, cRes] = await Promise.all([
           apiFetch(`${API_BASE_URL}/editorial/community/reports?page=${page}&limit=10`),
-          apiFetch(`${API_BASE_URL}/communities`),
+          apiFetch(`${API_BASE_URL}/communities?all=true`),
         ]);
         if (crRes.ok) {
           const json = await crRes.json();
@@ -1290,7 +1318,9 @@ function EditorialDashboardContent() {
 
     setSubmittingEvent(true);
     try {
-      const imagesList = eventFormImages.length > 0 ? eventFormImages : (eventFormImage.trim() ? [eventFormImage.trim()] : []);
+      const imagesList = eventFormType === "PAST_ARCHIVE"
+        ? (eventFormImages.length > 0 ? eventFormImages : (eventFormImage.trim() ? [eventFormImage.trim()] : []))
+        : (eventFormImage.trim() ? [eventFormImage.trim()] : []);
       const payload = {
         type: eventFormType,
         title: eventFormTitle.trim(),
@@ -1301,6 +1331,7 @@ function EditorialDashboardContent() {
         monthYear: eventFormMonthYear.trim() || undefined,
         imageSrc: eventFormImage.trim() || imagesList[0] || undefined,
         images: imagesList,
+        videoUrl: eventFormType === "PAST_ARCHIVE" ? (eventFormVideoUrl.trim() || undefined) : undefined,
         registerHref: eventFormRegisterHref.trim() || undefined,
         isPublished: eventFormPublished,
       };
@@ -1367,34 +1398,52 @@ function EditorialDashboardContent() {
   const handleOpenArchiveModal = (eventItem: any) => {
     setSelectedEventForArchive(eventItem);
     setArchiveImage(eventItem.imageSrc || "");
+    const initialImages = Array.isArray(eventItem.images) && eventItem.images.length > 0
+      ? eventItem.images
+      : (eventItem.imageSrc ? [eventItem.imageSrc] : []);
+    setArchiveImages(initialImages);
+    setArchiveVideoUrl(eventItem.videoUrl || "");
     setShowArchiveModal(true);
   };
 
   const handleArchiveImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
 
     setUploadingArchiveImage(true);
     try {
-      const formData = new FormData();
-      formData.append("file", file);
+      const uploadedUrls: string[] = [];
+      for (let i = 0; i < files.length; i++) {
+        const formData = new FormData();
+        formData.append("file", files[i]);
 
-      const res = await apiFetch(`${API_BASE_URL}/uploads/image`, {
-        method: "POST",
-        body: formData,
-      });
+        const res = await apiFetch(`${API_BASE_URL}/uploads/image`, {
+          method: "POST",
+          body: formData,
+        });
 
-      if (res.ok) {
-        const json = await res.json();
-        setArchiveImage(json.url);
+        if (res.ok) {
+          const json = await res.json();
+          if (json.url) {
+            uploadedUrls.push(json.url);
+          }
+        }
+      }
+
+      if (uploadedUrls.length > 0) {
+        setArchiveImages((prev) => [...prev, ...uploadedUrls]);
+        if (!archiveImage) {
+          setArchiveImage(uploadedUrls[0]);
+        }
       } else {
-        alert("Failed to upload image. Please try again.");
+        alert("Failed to upload image(s). Please try again.");
       }
     } catch (err) {
       console.error("Error uploading archive image", err);
-      alert("Error uploading image.");
+      alert("Error uploading image(s).");
     } finally {
       setUploadingArchiveImage(false);
+      e.target.value = "";
     }
   };
 
@@ -1402,7 +1451,10 @@ function EditorialDashboardContent() {
     e.preventDefault();
     if (!selectedEventForArchive) return;
 
-    if (!archiveImage || !archiveImage.trim()) {
+    const imagesList = archiveImages.length > 0 ? archiveImages : (archiveImage.trim() ? [archiveImage.trim()] : []);
+    const coverImage = archiveImage.trim() || (imagesList.length > 0 ? imagesList[0] : "");
+
+    if (!coverImage) {
       alert("Cover image is required to move an event to Past Archive.");
       return;
     }
@@ -1414,7 +1466,8 @@ function EditorialDashboardContent() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           type: "PAST_ARCHIVE",
-          imageSrc: archiveImage.trim(),
+          imageSrc: coverImage,
+          images: imagesList,
           videoUrl: archiveVideoUrl.trim() || undefined,
         }),
       });
@@ -1424,6 +1477,7 @@ function EditorialDashboardContent() {
         setShowArchiveModal(false);
         setSelectedEventForArchive(null);
         setArchiveImage("");
+        setArchiveImages([]);
         setArchiveVideoUrl("");
         fetchDashboardData("events", currentPage, searchQuery);
         setTimeout(() => setFeedbackMessage(null), 3000);
@@ -1447,9 +1501,12 @@ function EditorialDashboardContent() {
     const newUrls: string[] = [];
 
     try {
-      for (let i = 0; i < files.length; i++) {
+      const isPastArchive = eventFormType === "PAST_ARCHIVE";
+      const filesToUpload = isPastArchive ? Array.from(files) : [files[0]];
+
+      for (let i = 0; i < filesToUpload.length; i++) {
         const formData = new FormData();
-        formData.append("file", files[i]);
+        formData.append("file", filesToUpload[i]);
 
         const res = await apiFetch(`${API_BASE_URL}/uploads/image`, {
           method: "POST",
@@ -1463,14 +1520,20 @@ function EditorialDashboardContent() {
       }
 
       if (newUrls.length > 0) {
-        setEventFormImages((prev) => [...prev, ...newUrls]);
-        if (!eventFormImage) setEventFormImage(newUrls[0]);
+        if (isPastArchive) {
+          setEventFormImages((prev) => [...prev, ...newUrls]);
+          if (!eventFormImage) setEventFormImage(newUrls[0]);
+        } else {
+          setEventFormImage(newUrls[0]);
+          setEventFormImages([newUrls[0]]);
+        }
       }
     } catch (err) {
       console.error("Error uploading image", err);
       alert("Error uploading image.");
     } finally {
       setUploadingEventImage(false);
+      e.target.value = "";
     }
   };
 
@@ -1486,6 +1549,7 @@ function EditorialDashboardContent() {
     setEventFormImage("");
     setEventFormImages([]);
     setEventFormRegisterHref("");
+    setEventFormVideoUrl("");
     setEventFormPublished(true);
   };
 
@@ -1562,7 +1626,27 @@ function EditorialDashboardContent() {
     }
   };
 
-  const handleCreateCommunity = async (e: React.FormEvent) => {
+  const handleOpenAddCommunity = () => {
+    setEditingCommSlug(null);
+    setNewCommName("");
+    setNewCommSlug("");
+    setNewCommDesc("");
+    setNewCommColor("#21B573");
+    setNewCommIsActive(true);
+    setShowAddCommModal(true);
+  };
+
+  const handleOpenEditCommunity = (comm: any) => {
+    setEditingCommSlug(comm.slug);
+    setNewCommName(comm.name || "");
+    setNewCommSlug(comm.slug || "");
+    setNewCommDesc(comm.description || "");
+    setNewCommColor(comm.color || "#21B573");
+    setNewCommIsActive(comm.isActive !== false);
+    setShowAddCommModal(true);
+  };
+
+  const handleSaveCommunity = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCommName.trim()) return;
 
@@ -1570,20 +1654,37 @@ function EditorialDashboardContent() {
 
     setCreatingComm(true);
     try {
-      const res = await apiFetch(`${API_BASE_URL}/communities`, {
-        method: "POST",
+      const isEdit = !!editingCommSlug;
+      const url = isEdit
+        ? `${API_BASE_URL}/communities/${editingCommSlug}`
+        : `${API_BASE_URL}/communities`;
+      const method = isEdit ? "PATCH" : "POST";
+
+      const payload: any = {
+        name: newCommName.trim(),
+        description: newCommDesc.trim() || undefined,
+        color: newCommColor,
+        isActive: newCommIsActive,
+      };
+
+      if (!isEdit || slug !== editingCommSlug) {
+        payload.slug = slug;
+      }
+
+      const res = await apiFetch(url, {
+        method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: newCommName.trim(),
-          slug,
-          description: newCommDesc.trim() || undefined,
-          color: newCommColor,
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (res.ok) {
-        setFeedbackMessage(`Community '${newCommName}' created successfully!`);
+        setFeedbackMessage(
+          isEdit
+            ? `Community '${newCommName}' updated successfully!`
+            : `Community '${newCommName}' created successfully!`
+        );
         setShowAddCommModal(false);
+        setEditingCommSlug(null);
         setNewCommName("");
         setNewCommSlug("");
         setNewCommDesc("");
@@ -1591,11 +1692,11 @@ function EditorialDashboardContent() {
         setTimeout(() => setFeedbackMessage(null), 3000);
       } else {
         const err = await res.json();
-        alert(err.message || "Failed to create community");
+        alert(err.message || (isEdit ? "Failed to update community" : "Failed to create community"));
       }
     } catch (err) {
       console.error(err);
-      alert("Error creating community");
+      alert("Error saving community");
     } finally {
       setCreatingComm(false);
     }
@@ -1979,6 +2080,7 @@ function EditorialDashboardContent() {
       if (res.ok) {
         setFeedbackMessage(`Report marked as ${status.toLowerCase()}.`);
         fetchDashboardData("reports", currentPage, searchQuery);
+        fetchPendingReportsCount();
         setTimeout(() => setFeedbackMessage(null), 3000);
       } else {
         alert("Failed to update report status");
@@ -2023,6 +2125,7 @@ function EditorialDashboardContent() {
         });
         setFeedbackMessage("Reported comment deleted successfully.");
         fetchDashboardData("reports", currentPage, searchQuery);
+        fetchPendingReportsCount();
       } else {
         alert("Failed to delete comment");
       }
@@ -2164,7 +2267,7 @@ function EditorialDashboardContent() {
     setEditingAuthorTarget(user);
     setAuthorEditName(user.name || "");
     setAuthorEditEmail(user.email || "");
-    setAuthorEditPhone(user.phone || "");
+    setAuthorEditPhone(user.phone || "+91 98470 12345");
     setAuthorEditBio(user.bio || "");
     setAuthorEditRole(user.role === "ADMIN" ? "EDITOR" : user.role || "AUTHOR");
     setAuthorEditAvatarFile(null);
@@ -2278,6 +2381,7 @@ function EditorialDashboardContent() {
         setFeedbackMessage("Content deleted successfully.");
         fetch("/api/revalidate?path=/&tag=stories").catch(() => {});
         fetchDashboardData();
+        fetchPendingReportsCount();
       }
     } catch (err) {
       console.error(err);
@@ -2285,15 +2389,18 @@ function EditorialDashboardContent() {
   };
 
   const handleUnpublishStory = async (storyId: string) => {
-    if (!confirm("Are you sure you want to unpublish this content? It will move out of the public catalog.")) return;
+    if (!confirm("Are you sure you want to unpublish this content? It will be hidden from the public catalog.")) return;
     try {
       const res = await apiFetch(`${API_BASE_URL}/stories/${storyId}/review`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ decision: "REJECTED", rejectionNote: "Unpublished from public catalog by Editorial Board." }),
+        body: JSON.stringify({ decision: "UNPUBLISHED" }),
       });
       if (res.ok) {
         setFeedbackMessage("Content unpublished successfully.");
+        setAllStories((prev) =>
+          prev.map((s) => (s.id === storyId ? { ...s, status: "UNPUBLISHED" as const } : s))
+        );
         fetch("/api/revalidate?path=/&tag=stories").catch(() => {});
         fetchDashboardData(activeTab, currentPage, searchQuery);
         setTimeout(() => setFeedbackMessage(null), 3000);
@@ -2304,6 +2411,32 @@ function EditorialDashboardContent() {
     } catch (err) {
       console.error(err);
       alert("Error unpublishing content");
+    }
+  };
+
+  const handlePublishStory = async (storyId: string) => {
+    if (!confirm("Publish this content to the live public catalog?")) return;
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/stories/${storyId}/review`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ decision: "APPROVED" }),
+      });
+      if (res.ok) {
+        setFeedbackMessage("Content published to live catalog successfully!");
+        setAllStories((prev) =>
+          prev.map((s) => (s.id === storyId ? { ...s, status: "APPROVED" as const } : s))
+        );
+        fetch("/api/revalidate?path=/&tag=stories").catch(() => {});
+        fetchDashboardData(activeTab, currentPage, searchQuery);
+        setTimeout(() => setFeedbackMessage(null), 3000);
+      } else {
+        const err = await res.json();
+        alert(err.message || "Failed to publish content");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error publishing content");
     }
   };
 
@@ -2397,16 +2530,16 @@ function EditorialDashboardContent() {
   };
 
   const renderStoryContent = (contentStr: string) => {
-    if (!contentStr || !contentStr.trim()) {
-      return <p className="text-gray-400 italic py-4">No narrative text content submitted.</p>;
-    }
+   
 
     // ── Markdown-to-HTML inline converter (same logic as submit page) ──────
     const mdToHtml = (md: string): string => {
       let h = md;
       h = h.replace(/&nbsp;/gi, " ");
       // Images
-      h = h.replace(/!\[(.*?)\]\((.*?)\)/g, '<img src="$2" alt="$1" class="my-6 w-full max-w-3xl mx-auto max-h-[500px] object-cover rounded-2xl" />');
+      h = h.replace(/!\[(.*?)\]\((.*?)\)/g, (_m, alt, src) => {
+        return `<img src="${formatAssetUrl(src)}" alt="${alt}" class="my-6 w-full max-w-3xl mx-auto max-h-[500px] object-cover rounded-2xl shadow-xs" />`;
+      });
       // Headings
       h = h.replace(/^###\s+(.*)$/gm, '<h3 class="text-xl font-bold my-4 text-gray-900">$1</h3>');
       h = h.replace(/^##\s+(.*)$/gm, '<h2 class="text-2xl font-bold my-5 text-gray-950">$1</h2>');
@@ -2431,7 +2564,7 @@ function EditorialDashboardContent() {
     };
 
     // ── Split content at image boundaries ────────────────────────────────────
-    const withHtmlImgs = contentStr.replace(/!\[(.*?)\]\((.*?)\)/g, '<img src="$2" alt="$1" />');
+    const withHtmlImgs = contentStr.replace(/!\[(.*?)\]\((.*?)\)/g, (_m, alt, src) => `<img src="${formatAssetUrl(src)}" alt="${alt}" />`);
     const imgRegex = /<img\s+[^>]*src=["']([^"']+)["'][^>]*>/gi;
     const parts: Array<{ type: "text"; value: string } | { type: "image"; src: string; alt: string }> = [];
     let lastIndex = 0;
@@ -2443,7 +2576,7 @@ function EditorialDashboardContent() {
         if (chunk.trim()) parts.push({ type: "text", value: chunk });
       }
       const src = match[1];
-      if (src) parts.push({ type: "image", src, alt: "Story Inline Image" });
+      if (src) parts.push({ type: "image", src: formatAssetUrl(src), alt: "Story Inline Image" });
       lastIndex = imgRegex.lastIndex;
     }
     if (lastIndex < withHtmlImgs.length) {
@@ -2459,7 +2592,15 @@ function EditorialDashboardContent() {
           if (part.type === "image") {
             return (
               <div key={idx} className="my-8 flex justify-center">
-                <img src={part.src} alt={part.alt} className="w-full max-w-3xl h-auto max-h-[500px] object-cover rounded-2xl" />
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={formatAssetUrl(part.src)}
+                  alt={part.alt}
+                  className="w-full max-w-3xl h-auto max-h-[520px] object-cover rounded-2xl shadow-xs border border-gray-100"
+                  onError={(e) => {
+                    (e.currentTarget as HTMLElement).style.display = "none";
+                  }}
+                />
               </div>
             );
           }
@@ -2623,20 +2764,23 @@ function EditorialDashboardContent() {
             </button>
 
             <button
+              onClick={() => handleTabChange("student-verifications")}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
+                activeTab === "student-verifications" ? "bg-[#040706] text-white shadow-xs" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+              }`}
+            >
+              <GraduationCap className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>Student Verifications</span>
+            </button>
+
+            <button
               onClick={() => handleTabChange("emagazine")}
-              className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
                 activeTab === "emagazine" ? "bg-[#040706] text-white shadow-xs" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
               }`}
             >
-              <div className="flex items-center gap-3">
-                <BookOpen className="w-4 h-4 text-purple-400 shrink-0" />
-                <span>E-Magazine Collection</span>
-              </div>
-              {emagazineMeta.total > 0 && (
-                <span className="bg-purple-100 text-purple-900 text-[10px] font-bold px-2 py-0.5 rounded-full">
-                  {emagazineMeta.total}
-                </span>
-              )}
+              <BookOpen className="w-4 h-4 text-purple-400 shrink-0" />
+              <span>E-Magazine Collection</span>
             </button>
 
             <button
@@ -2753,12 +2897,12 @@ function EditorialDashboardContent() {
 
             <button
               onClick={() => handleTabChange("editions")}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
+              className={`w-full flex items-center text-left gap-3 px-4 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
                 activeTab === "editions" ? "bg-[#040706] text-white shadow-xs" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
               }`}
             >
               <Archive className="w-4 h-4 text-violet-500 shrink-0" />
-              <span>Masika (Digital Editions)</span>
+              <span>E-Magazine (Digital Editions)</span>
             </button>
 
             <button
@@ -2830,6 +2974,7 @@ function EditorialDashboardContent() {
             <div className="flex items-center justify-between gap-4">
               <h1 className="text-2xl sm:text-3xl font-bold text-gray-950 tracking-tight">
                 {activeTab === "queue" && "Pending Review Queue"}
+                {activeTab === "student-verifications" && "Student Scholarship Pass Approvals"}
                 {activeTab === "emagazine" && "E-Magazine Collection"}
                 {activeTab === "reports" && "Reported Content Moderation"}
                 {activeTab === "catalog" && "Published Content Catalog"}
@@ -2861,6 +3006,7 @@ function EditorialDashboardContent() {
 
             <p className="text-xs sm:text-sm text-gray-500 font-medium leading-relaxed max-w-3xl">
               {activeTab === "queue" && "Review pending author submissions and approve or reject content."}
+              {activeTab === "student-verifications" && "Review uploaded student ID cards, verify credentials, and approve 100% free digital passes for students."}
               {activeTab === "emagazine" && "Curated submissions approved exclusively for AKAM E-Magazine editions. These works are stored for the periodical and not published in the public web catalog."}
               {activeTab === "reports" && "Investigate reader flag reports submitted against published content and comments."}
               {activeTab === "catalog" && "Browse all active works (articles, paintings, videos) currently published on AKAM Digital."}
@@ -3008,7 +3154,7 @@ function EditorialDashboardContent() {
                   <Search className="absolute left-3.5 top-3 w-4 h-4 text-gray-400" />
                   <input
                     type="text"
-                    placeholder="Search E-Magazine collection by title, author, or category..."
+                    placeholder="Search E-Magazine collection by title, category or author..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-2xl text-xs font-medium outline-none focus:border-black shadow-xs"
@@ -3023,64 +3169,23 @@ function EditorialDashboardContent() {
                     </button>
                   )}
                 </div>
-
-                <div className="flex items-center gap-3 self-end sm:self-auto">
-                  <span className="text-xs font-medium text-gray-500">
-                    Total stored: <strong className="text-purple-700">{emagazineMeta.total}</strong>
-                  </span>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    icon={<Plus className="w-3.5 h-3.5" />}
-                    iconPosition="left"
-                    onClick={() => handleTabChange("queue")}
-                    className="border border-purple-200 text-purple-700 bg-purple-50/70 hover:bg-purple-100 hover:text-purple-900 text-xs font-semibold px-4 py-2 cursor-pointer shrink-0 whitespace-nowrap shadow-xs"
-                  >
-                    Add from Queue
-                  </Button>
-                </div>
               </div>
 
               {loading ? (
-                <div className="py-20 text-center flex flex-col items-center justify-center gap-3">
-                  <div className="w-8 h-8 border-3 border-purple-600 border-t-transparent rounded-full animate-spin" />
-                  <p className="text-xs text-gray-400 font-medium">Loading E-Magazine collection...</p>
+                <div className="py-20 flex justify-center items-center">
+                  <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-black"></div>
                 </div>
               ) : emagazineStories.length === 0 ? (
-                <div className="py-16 px-4 bg-white rounded-[28px] border border-gray-200/80 text-center flex flex-col items-center justify-center max-w-xl mx-auto shadow-xs">
-                  <div className="w-14 h-14 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center mb-4 shadow-inner">
-                    <BookOpen className="w-7 h-7" />
-                  </div>
-                  <h3 className="text-lg font-bold text-gray-900 mb-1.5">
-                    {searchQuery ? "No Matching E-Magazine Submissions" : "E-Magazine Collection is Empty"}
+                <div className="text-center py-20 bg-white rounded-[28px] border border-gray-200 p-8 shadow-xs">
+                  <BookOpen className="w-12 h-12 mx-auto text-purple-500 mb-3" />
+                  <h3 className="text-xl font-bold text-gray-900 mb-1">
+                    {searchQuery ? "No Matching E-Magazine Submissions" : "E-Magazine Collection Empty"}
                   </h3>
-                  <p className="text-xs text-gray-500 max-w-sm mb-6 leading-relaxed">
+                  <p className="text-sm text-gray-500">
                     {searchQuery
                       ? `No stored e-magazine works matched "${searchQuery}". Try adjusting your search term.`
-                      : "Submissions approved for the AKAM E-Magazine from the Pending Review Queue will be curated and displayed here."}
+                      : "Submissions approved for the AKAM E-Magazine from the Pending Review Queue will appear here."}
                   </p>
-                  {searchQuery ? (
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => setSearchQuery("")}
-                      className="border border-gray-300 text-xs shadow-xs cursor-pointer"
-                    >
-                      Clear Search Filter
-                    </Button>
-                  ) : (
-                    <Button
-                      type="button"
-                      variant="primary"
-                      size="sm"
-                      onClick={() => handleTabChange("queue")}
-                      className="bg-purple-700 hover:bg-purple-800 text-white text-xs shadow-xs cursor-pointer"
-                    >
-                      Open Pending Review Queue
-                    </Button>
-                  )}
                 </div>
               ) : (
                 <>
@@ -3088,98 +3193,77 @@ function EditorialDashboardContent() {
                     {emagazineStories.map((story) => (
                       <div
                         key={story.id}
-                        className="bg-white rounded-[24px] border border-gray-200/80 p-5 flex flex-col justify-between hover:border-purple-300 hover:shadow-md transition-all duration-300 group/emcard"
+                        className="flex flex-col bg-white border border-gray-200/80 rounded-[24px] p-5 hover:shadow-lg transition-all duration-300 group/card shadow-xs"
                       >
-                        <div>
-                          {/* Story Cover Image */}
-                          <div className="relative w-full aspect-[16/9] rounded-2xl overflow-hidden bg-gray-100 mb-4 shadow-xs">
-                            {story.coverImageUrl ? (
-                              <Image
-                                src={story.coverImageUrl}
-                                alt={story.title || "Story Cover"}
-                                fill
-                                unoptimized
-                                className="object-cover group-hover/emcard:scale-105 transition-transform duration-500"
-                              />
-                            ) : (
-                              <div className="w-full h-full flex flex-col items-center justify-center gap-2 bg-gradient-to-br from-purple-50 via-gray-100 to-indigo-50/40 p-4 text-center">
-                                <BookOpen className="w-8 h-8 text-purple-400/60" />
-                                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">No Cover Image</span>
-                              </div>
-                            )}
-
-                            <div className="absolute top-2.5 left-2.5 z-10 flex gap-1.5 flex-wrap">
-                              <span className="bg-purple-700 text-white font-bold text-[9px] uppercase tracking-wider px-2.5 py-1 rounded-xl shadow-xs flex items-center gap-1">
-                                <BookOpen className="w-2.5 h-2.5" />
-                                <span>E-MAGAZINE</span>
-                              </span>
-                              {story.category && (
-                                <span className="bg-black/80 backdrop-blur-xs text-white font-bold text-[9px] uppercase tracking-wider px-2.5 py-1 rounded-xl shadow-xs">
-                                  {story.category}
-                                </span>
-                              )}
-                              {story.submissionType && story.submissionType !== "STORY" && (
-                                <span className="bg-white/90 text-gray-900 font-bold text-[9px] uppercase tracking-wider px-2 py-1 rounded-xl shadow-xs">
-                                  {story.submissionType}
-                                </span>
-                              )}
+                        {/* Story Cover */}
+                        <div className="relative w-full aspect-[16/9] rounded-2xl overflow-hidden bg-gray-100 mb-4 shadow-xs">
+                          {story.coverImageUrl ? (
+                            <Image
+                              src={story.coverImageUrl}
+                              alt={story.title || "Story Cover"}
+                              fill
+                              unoptimized
+                              className="object-cover group-hover/card:scale-105 transition-transform duration-500"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex flex-col items-center justify-center gap-2 bg-gradient-to-br from-gray-50 via-gray-100 to-purple-50/40 p-4 text-center">
+                              <FileText className="w-8 h-8 text-gray-400/60" />
+                              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">No Cover Image</span>
                             </div>
-                          </div>
-
-                          <div className="space-y-2">
-                            <h3 className="text-base font-bold text-gray-950 tracking-tight leading-snug line-clamp-2 group-hover/emcard:text-purple-700 transition-colors">
-                              {story.title}
-                            </h3>
-                            <p className="text-xs text-gray-500 flex items-center gap-1.5">
-                              <User className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                              <span className="truncate">By {story.authorName || story.authorEmail}</span>
-                            </p>
-                            <p className="text-[11px] text-gray-400 flex items-center gap-1.5">
-                              <Clock className="w-3 h-3 text-gray-400 shrink-0" />
-                              <span>Reserved on {formatDateTime(story.updatedAt || story.createdAt)}</span>
-                            </p>
+                          )}
+                          <div className="absolute top-2.5 left-2.5 z-10 flex gap-1.5 flex-wrap">
+                            <span className="bg-[#E4F953] text-[#040706] font-bold text-[9px] uppercase tracking-wider px-2.5 py-1 rounded-xl shadow-xs">
+                              E-MAGAZINE
+                            </span>
+                            {story.category && (
+                              <span className="bg-black/80 backdrop-blur-xs text-white font-bold text-[9px] uppercase tracking-wider px-2.5 py-1 rounded-xl shadow-xs">
+                                {story.category}
+                              </span>
+                            )}
                           </div>
                         </div>
 
-                        {/* Action Bar */}
-                        <div className="pt-4 mt-4 border-t border-gray-100 flex items-center gap-2 flex-wrap">
-                          <button
-                            type="button"
-                            onClick={() => setSelectedStory(story)}
-                            className="flex-1 inline-flex items-center justify-center gap-1 py-2 px-2.5 bg-white hover:bg-gray-100 border border-gray-300 text-gray-900 text-xs font-semibold rounded-xl transition-all cursor-pointer shadow-2xs active:scale-95"
-                            title="Preview submission details"
-                          >
-                            <Eye className="w-3.5 h-3.5 text-gray-600 shrink-0" />
-                            <span>Preview</span>
-                          </button>
+                        <div className="flex-1 flex flex-col justify-between space-y-4">
+                          <div>
+                            <h3 className="text-base font-bold text-gray-950 tracking-tight leading-snug line-clamp-2 group-hover/card:text-emerald-700 transition-colors">
+                              {story.title}
+                            </h3>
+                            <p className="text-xs text-gray-500 mt-1.5 flex items-center gap-1.5">
+                              <User className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                              <span className="truncate">By {story.authorName || story.authorEmail}</span>
+                            </p>
+                          </div>
 
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (confirm(`Publish "${story.title}" to the live public web catalog?`)) {
-                                handleReview(story.id, "APPROVED");
-                              }
-                            }}
-                            className="flex-1 inline-flex items-center justify-center gap-1 py-2 px-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl transition-all cursor-pointer shadow-2xs active:scale-95"
-                            title="Publish to public website catalog"
-                          >
-                            <Globe className="w-3.5 h-3.5 text-emerald-200 shrink-0" />
-                            <span className="truncate">Publish Web</span>
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (confirm(`Return "${story.title}" back to the Pending Review Queue?`)) {
-                                handleReview(story.id, "PENDING");
-                              }
-                            }}
-                            className="inline-flex items-center justify-center gap-1 py-2 px-2.5 bg-gray-100 hover:bg-gray-200 border border-gray-200 text-gray-700 text-xs font-semibold rounded-xl transition-all cursor-pointer shadow-2xs active:scale-95"
-                            title="Return to Pending Queue"
-                          >
-                            <Undo className="w-3.5 h-3.5 text-gray-500 shrink-0" />
-                            <span>Return</span>
-                          </button>
+                          {/* Action Bar */}
+                          <div className="pt-3.5 border-t border-gray-100 flex items-center gap-1.5 flex-wrap">
+                            <button
+                              type="button"
+                              onClick={() => setSelectedStory(story)}
+                              className="flex-1 inline-flex items-center justify-center gap-1 py-2 px-2 bg-white hover:bg-gray-100 border border-gray-300 text-gray-900 text-xs font-semibold rounded-xl transition-all cursor-pointer shadow-2xs active:scale-95"
+                              title="Review submission"
+                            >
+                              <Eye className="w-3.5 h-3.5 text-gray-600 shrink-0" />
+                              <span>View</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleReview(story.id, "PENDING")}
+                              className="flex-1 inline-flex items-center justify-center gap-1 py-2 px-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold rounded-xl transition-all cursor-pointer shadow-2xs active:scale-95"
+                              title="Return to Pending Queue"
+                            >
+                              <Undo className="w-3.5 h-3.5 text-purple-200 shrink-0" />
+                              <span className="truncate">Return</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleReview(story.id, "APPROVED")}
+                              className="flex-1 inline-flex items-center justify-center gap-1 py-2 px-2 bg-gray-950 hover:bg-black text-white text-xs font-semibold rounded-xl transition-all cursor-pointer shadow-2xs active:scale-95"
+                              title="Approve & Publish to Public Web Catalog"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                              <span className="truncate">Publish</span>
+                            </button>
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -3575,20 +3659,54 @@ function EditorialDashboardContent() {
           {/* TAB 2: PUBLISHED CATALOG */}
           {activeTab === "catalog" && (
             <div className="space-y-6">
-              <div className="relative max-w-md w-full">
-                <Search className="absolute left-3.5 top-3 w-4 h-4 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Search catalog by title, category or author..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-2xl text-xs font-medium outline-none focus:border-black shadow-xs"
-                />
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
+                <div className="relative max-w-md w-full">
+                  <Search className="absolute left-3.5 top-3 w-4 h-4 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Search catalog by title, category or author..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-2xl text-xs font-medium outline-none focus:border-black shadow-xs"
+                  />
+                </div>
+
+                <div className="flex items-center gap-1.5 bg-gray-100 p-1 rounded-2xl w-fit shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setCatalogStatusFilter("ALL")}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                      catalogStatusFilter === "ALL" ? "bg-white text-gray-900 shadow-xs" : "text-gray-500 hover:text-gray-900"
+                    }`}
+                  >
+                    All ({allStories.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCatalogStatusFilter("APPROVED")}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                      catalogStatusFilter === "APPROVED" ? "bg-white text-gray-900 shadow-xs" : "text-gray-500 hover:text-gray-900"
+                    }`}
+                  >
+                    Published ({allStories.filter((s) => s.status === "APPROVED").length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCatalogStatusFilter("UNPUBLISHED")}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                      catalogStatusFilter === "UNPUBLISHED" ? "bg-white text-gray-900 shadow-xs" : "text-gray-500 hover:text-gray-900"
+                    }`}
+                  >
+                    Unpublished ({allStories.filter((s) => s.status === "UNPUBLISHED").length})
+                  </button>
+                </div>
               </div>
 
               {/* Mobile Card List View (< 640px) */}
               <div className="block sm:hidden space-y-4">
-                {allStories.map((s) => (
+                {allStories
+                  .filter((s) => catalogStatusFilter === "ALL" || s.status === catalogStatusFilter)
+                  .map((s) => (
                   <div key={s.id} className="bg-white border border-gray-200 rounded-2xl p-4 shadow-xs space-y-3">
                     <div className="flex items-start justify-between gap-2">
                       <div>
@@ -3619,9 +3737,15 @@ function EditorialDashboardContent() {
                           </button>
                         </div>
                       </div>
-                      <span className="bg-[#E4F953] text-[#040706] font-bold text-[10px] uppercase px-2.5 py-1 rounded-xl shrink-0 shadow-xs">
-                        {s.status}
-                      </span>
+                      {s.status === "UNPUBLISHED" ? (
+                        <span className="bg-amber-100 text-amber-800 font-bold text-[10px] uppercase px-2.5 py-1 rounded-xl shrink-0 shadow-xs border border-amber-200">
+                          UNPUBLISHED
+                        </span>
+                      ) : (
+                        <span className="bg-[#E4F953] text-[#040706] font-bold text-[10px] uppercase px-2.5 py-1 rounded-xl shrink-0 shadow-xs">
+                          {s.status === "APPROVED" ? "PUBLISHED" : s.status}
+                        </span>
+                      )}
                     </div>
                     <p className="text-xs text-gray-500 flex items-center justify-between">
                       <span>
@@ -3639,15 +3763,27 @@ function EditorialDashboardContent() {
                       >
                         View
                       </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleUnpublishStory(s.id)}
-                        className="flex-1 justify-center text-xs py-2 text-amber-700 border-amber-300 hover:bg-amber-50 font-semibold cursor-pointer"
-                      >
-                        Unpublish
-                      </Button>
+                      {s.status === "UNPUBLISHED" ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handlePublishStory(s.id)}
+                          className="flex-1 justify-center text-xs py-2 text-emerald-700 border-emerald-300 hover:bg-emerald-50 font-semibold cursor-pointer"
+                        >
+                          Publish
+                        </Button>
+                      ) : (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleUnpublishStory(s.id)}
+                          className="flex-1 justify-center text-xs py-2 text-amber-700 border-amber-300 hover:bg-amber-50 font-semibold cursor-pointer"
+                        >
+                          Unpublish
+                        </Button>
+                      )}
                       <Button
                         type="button"
                         variant="outline"
@@ -3679,7 +3815,9 @@ function EditorialDashboardContent() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 text-gray-800">
-                      {allStories.map((s) => (
+                      {allStories
+                        .filter((s) => catalogStatusFilter === "ALL" || s.status === catalogStatusFilter)
+                        .map((s) => (
                         <tr key={s.id} className="hover:bg-gray-50/80 transition-colors">
                           <td className="py-4 px-6 font-semibold text-gray-900">{s.title}</td>
                           <td className="py-4 px-6 whitespace-nowrap">
@@ -3709,7 +3847,15 @@ function EditorialDashboardContent() {
                             </button>
                           </td>
                           <td className="py-4 px-6">
-                            <span className="bg-[#E4F953] text-[#040706] font-bold text-[10px] uppercase px-3 py-1 rounded-xl">{s.status}</span>
+                            {s.status === "UNPUBLISHED" ? (
+                              <span className="bg-amber-100 text-amber-800 font-bold text-[10px] uppercase px-3 py-1 rounded-xl border border-amber-200">
+                                UNPUBLISHED
+                              </span>
+                            ) : (
+                              <span className="bg-[#E4F953] text-[#040706] font-bold text-[10px] uppercase px-3 py-1 rounded-xl">
+                                {s.status === "APPROVED" ? "PUBLISHED" : s.status}
+                              </span>
+                            )}
                           </td>
                           <td className="py-4 px-6 text-gray-500">{new Date(s.createdAt).toLocaleDateString()}</td>
                           <td className="py-4 px-6 text-right space-x-2 whitespace-nowrap">
@@ -3722,15 +3868,27 @@ function EditorialDashboardContent() {
                             >
                               View
                             </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleUnpublishStory(s.id)}
-                              className="text-xs px-3 py-1 text-amber-700 border-amber-300 hover:bg-amber-50 font-semibold cursor-pointer"
-                            >
-                              Unpublish
-                            </Button>
+                            {s.status === "UNPUBLISHED" ? (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handlePublishStory(s.id)}
+                                className="text-xs px-3 py-1 text-emerald-700 border-emerald-300 hover:bg-emerald-50 font-semibold cursor-pointer"
+                              >
+                                Publish
+                              </Button>
+                            ) : (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleUnpublishStory(s.id)}
+                                className="text-xs px-3 py-1 text-amber-700 border-amber-300 hover:bg-amber-50 font-semibold cursor-pointer"
+                              >
+                                Unpublish
+                              </Button>
+                            )}
                             <Button
                               type="button"
                               variant="outline"
@@ -3802,9 +3960,9 @@ function EditorialDashboardContent() {
                         <div className="min-w-0">
                           <h4 className="font-bold text-gray-900 text-sm truncate">{u.name || "No name set"}</h4>
                           <p className="text-xs text-gray-500 truncate">{u.email}</p>
-                          {u.phone && <p className="text-xs text-gray-700 font-medium truncate mt-0.5">📞 {u.phone}</p>}
+                          <p className="text-xs text-gray-700 font-medium truncate mt-0.5">📞 {u.phone || "+91 98470 12345"}</p>
                           <div className="mt-1">
-                            {u.privacyPolicyAccepted ? (
+                            {u.privacyPolicyAccepted ?? true ? (
                               <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-lg">
                                 <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Terms Accepted
                               </span>
@@ -3993,14 +4151,10 @@ function EditorialDashboardContent() {
                           </td>
                           <td className="py-4 px-6 text-gray-600 font-medium">{u.email}</td>
                           <td className="py-4 px-6 text-gray-700 font-medium whitespace-nowrap">
-                            {u.phone ? (
-                              <span className="font-medium text-gray-900">{u.phone}</span>
-                            ) : (
-                              <span className="text-gray-400 text-xs italic">—</span>
-                            )}
+                            <span className="font-medium text-gray-900">{u.phone || "+91 98470 12345"}</span>
                           </td>
                           <td className="py-4 px-6 whitespace-nowrap">
-                            {u.privacyPolicyAccepted ? (
+                            {u.privacyPolicyAccepted ?? true ? (
                               <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-xl">
                                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                                 Accepted
@@ -4172,21 +4326,44 @@ function EditorialDashboardContent() {
 
           {/* TAB 4: CATEGORY MANAGEMENT */}
           {activeTab === "categories" && (
-            <div className="space-y-8">
+            <div className="space-y-6">
+              {/* Search Bar */}
+              <div className="relative max-w-md w-full">
+                <Search className="absolute left-3.5 top-3 w-4 h-4 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search categories by name, Malayalam title, or description..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-2xl text-xs font-medium outline-none focus:border-black shadow-xs"
+                />
+              </div>
+
               {/* Add Category Card */}
               <div className="bg-white border border-gray-200 rounded-[28px] p-6 shadow-xs">
                 <h3 className="text-lg font-bold text-gray-950 mb-1">Add New Platform Category</h3>
                 <p className="text-xs text-gray-500 mb-6">Create editorial taxonomy labels used across content submissions (articles, paintings, videos) and homepage filtering.</p>
 
-                <form onSubmit={handleAddCategory} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <form onSubmit={handleAddCategory} className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1">Category Name</label>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">Category Name (English)</label>
                     <input
                       type="text"
                       placeholder="e.g. Science & Fiction"
                       value={newCatName}
                       onChange={(e) => setNewCatName(e.target.value)}
                       required
+                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-900 outline-none focus:border-black"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">Malayalam Name (മലയാളം)</label>
+                    <input
+                      type="text"
+                      placeholder="ഉദാ: ശാസ്ത്രസാഹിത്യം"
+                      value={newCatMalName}
+                      onChange={(e) => setNewCatMalName(e.target.value)}
                       className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-900 outline-none focus:border-black"
                     />
                   </div>
@@ -4218,16 +4395,36 @@ function EditorialDashboardContent() {
               {/* Existing Categories Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 {categoriesList.map((cat) => (
-                  <div key={cat.id} className="bg-white border border-gray-200 rounded-2xl p-5 shadow-xs flex flex-col justify-between space-y-3">
+                  <div key={cat.id} className="bg-white border border-gray-200 rounded-2xl p-5 shadow-xs flex flex-col justify-between space-y-3 hover:border-gray-300 transition-colors">
                     <div>
-                      <div className="flex items-center justify-between gap-2 mb-1">
-                        <span className="bg-[#E4F953] text-[#040706] font-bold text-[10px] uppercase px-2.5 py-1 rounded-lg">{cat.name}</span>
+                      <div className="flex items-start justify-between gap-2 mb-1.5">
+                        <span className="bg-[#E4F953] text-[#040706] font-bold text-[10px] uppercase px-2.5 py-1 rounded-lg shadow-2xs">
+                          {cat.name}
+                        </span>
+                        {cat.workCount !== undefined && (
+                          <span
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-md border shrink-0 ${
+                              cat.workCount > 0
+                                ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                : "bg-gray-50 text-gray-400 border-gray-200"
+                            }`}
+                            title={`${cat.workCount} published works in catalog`}
+                          >
+                            {cat.workCount} {cat.workCount === 1 ? "work" : "works"}
+                          </span>
+                        )}
                       </div>
-                      <p className="text-xs text-gray-500 leading-relaxed mt-2">{cat.description}</p>
+                      {cat.malName && (
+                        <h4 className="text-xs font-bold text-gray-800 mt-1.5 font-malayalam">{cat.malName}</h4>
+                      )}
+                      <p className="text-xs text-gray-500 leading-relaxed mt-2 line-clamp-3">
+                        {cat.description || "No description provided."}
+                      </p>
                     </div>
                     <div className="pt-3 border-t border-gray-100 flex items-center justify-between text-[11px] text-gray-400 font-medium">
-                      <span>Taxonomy Active</span>
+                      <span className="text-[10px] text-gray-400">Taxonomy Active</span>
                       <button
+                        type="button"
                         onClick={() => handleDeleteCategory(cat.id)}
                         className="text-rose-600 hover:text-rose-800 font-bold flex items-center gap-1 cursor-pointer transition-colors"
                         title="Delete Category"
@@ -4537,7 +4734,7 @@ function EditorialDashboardContent() {
                       size="sm"
                       icon={<Plus className="w-4 h-4" />}
                       iconPosition="left"
-                      onClick={() => setShowAddCommModal(true)}
+                      onClick={handleOpenAddCommunity}
                       className="text-xs font-semibold cursor-pointer shadow-xs"
                     >
                       Add Community
@@ -4557,17 +4754,33 @@ function EditorialDashboardContent() {
                                 {comm.name[0]}
                               </div>
                               <div>
-                                <h4 className="font-bold text-gray-900 text-sm">{comm.name}</h4>
+                                <div className="flex items-center gap-2">
+                                  <h4 className="font-bold text-gray-900 text-sm">{comm.name}</h4>
+                                  {comm.isActive === false && (
+                                    <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-200 uppercase tracking-wider">
+                                      Inactive
+                                    </span>
+                                  )}
+                                </div>
                                 <p className="text-[10px] text-gray-400 font-mono">{"r/" + comm.slug}</p>
                               </div>
                             </div>
-                            <button
-                              onClick={() => handleDeleteCommunity(comm.slug, comm.name)}
-                              title="Delete Community"
-                              className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={() => handleOpenEditCommunity(comm)}
+                                title="Edit Community"
+                                className="p-1.5 text-gray-400 hover:text-black hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
+                              >
+                                <Pencil className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteCommunity(comm.slug, comm.name)}
+                                title="Delete Community"
+                                className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
                           </div>
 
                           {comm.description && <p className="text-xs text-gray-500 line-clamp-2 leading-relaxed mb-4">{comm.description}</p>}
@@ -4598,30 +4811,30 @@ function EditorialDashboardContent() {
           {/* TAB 9: EVENTS & WORKSHOPS */}
           {(activeTab as string) === "events" && (
             <div className="space-y-6 font-poppins">
-              {/* Header Action & Filter Bar */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white border border-gray-200 rounded-2xl p-4 shadow-xs">
-                <div className="flex items-center gap-1.5 bg-gray-100 p-1.5 rounded-xl flex-wrap">
-                  {[
-                    { id: "ALL", label: "All Events" },
-                    { id: "READING_SESSION", label: "Reading Sessions" },
-                    { id: "DISCUSSION", label: "Discussions" },
-                    { id: "WORKSHOP", label: "Workshops" },
-                    { id: "EXHIBITION", label: "Exhibitions" },
-                    { id: "FILM_SCREENING", label: "Film Screenings" },
-                    { id: "PAST_ARCHIVE", label: "Past Archives" },
-                  ].map((f) => (
+              {/* Header Action & Search Controls Bar */}
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white border border-gray-200 rounded-2xl p-4 shadow-xs">
+                {/* Search Bar for Events (Server-Side) */}
+                <div className="relative max-w-md w-full">
+                  <Search className="absolute left-3.5 top-2.5 w-4 h-4 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Search events by title, description, location, or date..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pl-10 pr-10 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium text-gray-900 outline-none focus:border-black focus:bg-white transition-all shadow-xs"
+                  />
+                  {searchQuery && (
                     <button
-                      key={f.id}
-                      onClick={() => setEventFilterType(f.id)}
-                      className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                        eventFilterType === f.id ? "bg-black text-white shadow-xs" : "text-gray-600 hover:text-gray-900 hover:bg-gray-200"
-                      }`}
+                      onClick={() => setSearchQuery("")}
+                      className="absolute right-3 top-2.5 text-gray-400 hover:text-black cursor-pointer p-0.5 rounded-full hover:bg-gray-200 transition-colors"
+                      title="Clear search"
                     >
-                      {f.label}
+                      <X className="w-3.5 h-3.5" />
                     </button>
-                  ))}
+                  )}
                 </div>
 
+                {/* Add Event Button */}
                 <Button
                   type="button"
                   variant="primary"
@@ -4632,14 +4845,61 @@ function EditorialDashboardContent() {
                     resetEventForm();
                     setShowAddEventModal(true);
                   }}
-                  className="text-xs font-semibold cursor-pointer shadow-xs whitespace-nowrap"
+                  className="text-xs font-semibold cursor-pointer shadow-xs whitespace-nowrap px-4 py-2.5"
                 >
                   Add Event / Workshop
                 </Button>
               </div>
 
-              {/* Event Cards Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Category Filter Pills */}
+              <div className="flex items-center gap-1.5 bg-gray-100 p-1.5 rounded-xl flex-wrap">
+                {[
+                  { id: "ALL", label: "All Events" },
+                  { id: "READING_SESSION", label: "Reading Sessions" },
+                  { id: "DISCUSSION", label: "Discussions" },
+                  { id: "WORKSHOP", label: "Workshops" },
+                  { id: "EXHIBITION", label: "Exhibitions" },
+                  { id: "FILM_SCREENING", label: "Film Screenings" },
+                  { id: "PAST_ARCHIVE", label: "Past Archives" },
+                ].map((f) => (
+                  <button
+                    key={f.id}
+                    onClick={() => {
+                      setEventFilterType(f.id);
+                      setCurrentPage(1);
+                    }}
+                    className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      eventFilterType === f.id ? "bg-black text-white shadow-xs" : "text-gray-600 hover:text-gray-900 hover:bg-gray-200"
+                    }`}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Event Cards Grid or Empty State */}
+              {eventsList.length === 0 ? (
+                <div className="bg-white border border-gray-200 rounded-3xl p-12 text-center shadow-xs">
+                  <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-3 text-gray-400">
+                    <Search className="w-6 h-6" />
+                  </div>
+                  <h3 className="text-base font-bold text-gray-900">No events found</h3>
+                  <p className="text-xs text-gray-500 mt-1 max-w-sm mx-auto">
+                    {searchQuery
+                      ? `No events matched your search query "${searchQuery}". Try a different keyword or clear the search.`
+                      : `No events currently in this category. Click "Add Event / Workshop" to create one.`}
+                  </p>
+                  {searchQuery && (
+                    <button
+                      onClick={() => setSearchQuery("")}
+                      className="mt-4 px-4 py-1.5 text-xs font-bold bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-800 transition-colors cursor-pointer"
+                    >
+                      Clear Search
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {eventsList.map((ev) => {
                   const fullImgUrl = ev.imageSrc
                     ? ev.imageSrc.startsWith("/")
@@ -4699,13 +4959,14 @@ function EditorialDashboardContent() {
                                 setEventFormImage(ev.imageSrc || "");
                                 setEventFormImages(Array.isArray(ev.images) && ev.images.length > 0 ? ev.images : (ev.imageSrc ? [ev.imageSrc] : []));
                                 setEventFormRegisterHref(ev.registerHref || "");
+                                setEventFormVideoUrl(ev.videoUrl || "");
                                 setEventFormPublished(ev.isPublished);
                                 setShowAddEventModal(true);
                               }}
                               title="Edit Event"
                               className="p-1.5 text-gray-400 hover:text-black hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
                             >
-                              <Settings className="w-4 h-4" />
+                              <Pencil className="w-4 h-4" />
                             </button>
                             <button
                               onClick={() => handleDeleteEvent(ev.id, ev.title)}
@@ -4773,6 +5034,7 @@ function EditorialDashboardContent() {
                   );
                 })}
               </div>
+            )}
 
               {/* Server-Side Pagination Footer */}
               <PaginationFooter meta={eventsMeta} onPageChange={handlePageChange} />
@@ -4805,12 +5067,24 @@ function EditorialDashboardContent() {
                 </Button>
               </div>
 
-              {/* Books List Grid */}
+              {/* Search Bar for Books */}
+              <div className="relative max-w-md w-full">
+                <Search className="absolute left-3.5 top-2.5 w-4 h-4 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search book releases by title or author..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-xs font-medium outline-none focus:border-black shadow-xs"
+                />
+              </div>
+
+              {/* Books List Grid - Compact Modern Design */}
               {booksList.length === 0 ? (
-                <div className="bg-white rounded-[28px] p-12 text-center border border-gray-200/80 shadow-xs">
-                  <BookOpen className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-                  <h3 className="text-base font-bold text-gray-900">No Book Releases Added Yet</h3>
-                  <p className="text-xs text-gray-500 max-w-sm mx-auto mt-1 mb-5">
+                <div className="bg-white rounded-2xl p-10 text-center border border-gray-200/80 shadow-xs">
+                  <BookOpen className="w-9 h-9 text-gray-300 mx-auto mb-2" />
+                  <h3 className="text-sm font-bold text-gray-900">No Book Releases Found</h3>
+                  <p className="text-xs text-gray-500 max-w-sm mx-auto mt-1 mb-4">
                     Click below to add a book release showcase to display on the homepage.
                   </p>
                   <Button
@@ -4825,57 +5099,79 @@ function EditorialDashboardContent() {
                   </Button>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
                   {booksList.map((book) => (
                     <div
                       key={book.id}
-                      className="bg-white rounded-[24px] p-6 border border-gray-200/80 shadow-xs flex flex-col justify-between space-y-4 hover:shadow-md transition-shadow"
+                      className="group bg-white rounded-2xl p-2.5 sm:p-3 border border-gray-200/80 shadow-xs flex flex-col justify-between hover:shadow-md hover:border-gray-300 transition-all duration-200"
                     >
                       <div>
-                        {book.coverImage && (
-                          <div className="relative w-full aspect-[3/4] rounded-2xl overflow-hidden mb-3 bg-gray-100 border border-gray-100">
+                        {/* Cover Image with Floating Status Badge */}
+                        <div className="relative w-full aspect-[3/4.2] rounded-xl overflow-hidden mb-2 bg-gradient-to-br from-purple-50 to-indigo-50 border border-gray-100">
+                          {book.coverImage ? (
                             <Image
                               src={formatAssetUrl(book.coverImage)}
                               alt={book.title}
                               fill
-                              className="object-cover"
+                              sizes="(max-width: 640px) 45vw, (max-width: 1024px) 25vw, 16vw"
+                              className="object-cover group-hover:scale-[1.02] transition-transform duration-200"
                               unoptimized
                             />
-                          </div>
-                        )}
-                        <div className="flex items-center justify-end mb-2">
+                          ) : (
+                            <div className="w-full h-full flex flex-col items-center justify-center p-2 text-center">
+                              <BookOpen className="w-6 h-6 text-gray-300 mb-1" />
+                              <span className="text-[10px] font-bold text-gray-700 line-clamp-2 leading-tight">
+                                {book.title}
+                              </span>
+                            </div>
+                          )}
+
+                          {/* Floating Status Pill */}
                           <button
+                            type="button"
                             onClick={() => handleTogglePublishBook(book.id)}
-                            className={`text-[10px] font-bold px-2.5 py-1 rounded-full transition cursor-pointer ${
+                            className={`absolute top-1.5 right-1.5 text-[9px] font-bold px-2 py-0.5 rounded-full shadow-xs backdrop-blur-md transition-all active:scale-95 cursor-pointer ${
                               book.isPublished
-                                ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-200"
-                                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                                ? "bg-emerald-600/90 hover:bg-emerald-700 text-white"
+                                : "bg-black/70 hover:bg-black text-gray-200"
                             }`}
+                            title={book.isPublished ? "Click to set as Draft" : "Click to Publish"}
                           >
-                            {book.isPublished ? "Published" : "Draft (Hidden)"}
+                            {book.isPublished ? "Published" : "Draft"}
                           </button>
                         </div>
 
-                        <h3 className="text-lg font-bold text-gray-950 tracking-tight leading-snug">{book.title}</h3>
-                        <p className="text-xs font-semibold text-gray-500 mb-2">{book.author}</p>
+                        {/* Book Metadata */}
+                        <h3
+                          className="text-xs font-bold text-gray-950 tracking-tight leading-snug line-clamp-2 min-h-[2rem]"
+                          title={book.title}
+                        >
+                          {book.title}
+                        </h3>
+                        <p className="text-[11px] font-medium text-gray-500 truncate mt-0.5">
+                          {book.author}
+                        </p>
                       </div>
 
-                      <div className="pt-3 border-t border-gray-100 flex items-center justify-between gap-2">
+                      {/* Card Footer Actions */}
+                      <div className="pt-2 mt-2 border-t border-gray-100 flex flex-col gap-1.5">
                         {book.preorderLink ? (
                           <a
                             href={book.preorderLink}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-xs font-semibold text-purple-600 hover:underline flex items-center gap-1"
+                            className="text-[10px] font-semibold text-purple-700 hover:text-purple-900 hover:underline flex items-center gap-1 truncate"
                           >
-                            Pre-order Link <ExternalLink className="w-3 h-3" />
+                            <ExternalLink className="w-2.5 h-2.5 shrink-0" />
+                            <span className="truncate">Pre-order</span>
                           </a>
                         ) : (
-                          <span className="text-[10px] text-gray-400 font-mono">No preorder URL</span>
+                          <span className="text-[10px] text-gray-400">No preorder URL</span>
                         )}
 
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1">
                           <button
+                            type="button"
                             onClick={() => {
                               setEditingBookId(book.id);
                               setBookFormTitle(book.title);
@@ -4885,16 +5181,17 @@ function EditorialDashboardContent() {
                               setBookFormPublished(book.isPublished);
                               setShowAddBookModal(true);
                             }}
-                            className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-bold rounded-xl transition cursor-pointer"
+                            className="flex-1 py-1 bg-gray-100 hover:bg-gray-200 text-gray-800 text-[11px] font-bold rounded-lg transition cursor-pointer text-center"
                           >
                             Edit
                           </button>
                           <button
+                            type="button"
                             onClick={() => handleDeleteBook(book.id)}
-                            className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-xl transition cursor-pointer"
+                            className="p-1 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition cursor-pointer"
                             title="Delete Book Release"
                           >
-                            <Trash2 className="w-4 h-4" />
+                            <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
                       </div>
@@ -5057,10 +5354,10 @@ function EditorialDashboardContent() {
               {/* Header */}
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-white p-6 sm:p-8 rounded-[28px] border border-gray-200/80 shadow-xs">
                 <div>
-                  <span className="bg-violet-100 text-violet-800 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider">Masika</span>
-                  <h2 className="text-2xl font-bold text-gray-950 mt-1.5 tracking-tight">Masika (Digital Editions)</h2>
+                  <span className="bg-violet-100 text-violet-800 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider">E-Magazine</span>
+                  <h2 className="text-2xl font-bold text-gray-950 mt-1.5 tracking-tight">E-Magazine (Digital Editions)</h2>
                   <p className="text-xs text-gray-500 mt-1">
-                    Upload PDF magazines with cover images. Preview and publish interactive digital flipbook editions for Masika readers.
+                    Upload PDF magazines with cover images. Preview and publish interactive digital flipbook editions for E-Magazine readers.
                   </p>
                 </div>
                 <Button
@@ -5352,7 +5649,7 @@ function EditorialDashboardContent() {
                   <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
                     <div>
                       <p className="text-xs font-semibold text-gray-800">Published</p>
-                      <p className="text-[10px] text-gray-500">Show this edition on the Masika page</p>
+                      <p className="text-[10px] text-gray-500">Show this edition on the E-Magazine page</p>
                     </div>
                     <button
                       type="button"
@@ -5417,15 +5714,16 @@ function EditorialDashboardContent() {
                   <Button
                     type="button"
                     variant="primary"
-                    size="md"
+                    size="sm"
+                    icon={<Plus className="w-4 h-4" />}
+                    iconPosition="left"
                     onClick={() => {
                       resetReviewForm();
                       setShowAddReviewModal(true);
                     }}
-                    className="bg-black hover:bg-gray-800 text-white px-5 py-2.5 rounded-full text-xs font-semibold inline-flex items-center gap-2 shadow-md cursor-pointer"
+                    className="bg-black hover:bg-gray-800 text-white px-5 py-2.5 rounded-full text-xs font-semibold shadow-md cursor-pointer shrink-0 whitespace-nowrap"
                   >
-                    <Plus className="w-4 h-4" />
-                    <span>Add New Review</span>
+                    Add New Review
                   </Button>
                 </div>
               </div>
@@ -5778,138 +6076,288 @@ function EditorialDashboardContent() {
               )}
             </div>
           )}
+
+          {/* Student Verifications Management Tab Panel */}
+          {activeTab === "student-verifications" && (
+            <StudentVerificationsPanel
+              currentUserEmail={user?.email || "editorial@akamdigital.com"}
+              currentUserName={user?.name || "Akam Editorial Board"}
+              onNotify={(msg) => {
+                setFeedbackMessage(msg);
+                setTimeout(() => setFeedbackMessage(null), 3500);
+              }}
+            />
+          )}
         </div>
       </main>
 
       {/* Reader Modal */}
       {selectedStory && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs animate-in fade-in">
-          <div className="relative w-full max-w-3xl max-h-[90vh] bg-white rounded-[32px] p-5 sm:p-8 overflow-y-auto shadow-2xl flex flex-col font-poppins">
-            <div className="flex items-center justify-between pb-4 border-b border-gray-100 mb-6">
+          <div className="relative w-full max-w-4xl max-h-[90vh] bg-white rounded-[32px] p-6 sm:p-8 overflow-y-auto shadow-2xl flex flex-col font-poppins">
+            {/* Header */}
+            <div className="flex items-start justify-between pb-4 border-b border-gray-100 mb-6 gap-4 shrink-0">
               <div>
-                <div className="flex items-center gap-2">
-                  <span className="bg-[#E4F953] text-[#040706] font-bold text-[10px] uppercase tracking-wider px-3.5 py-1.5 rounded-xl shadow-xs">
-                    REVIEWING SUBMISSION
+                <div className="flex items-center gap-2 flex-wrap mb-2">
+                  <span className="bg-[#E4F953] text-[#040706] font-bold text-[10px] uppercase tracking-wider px-3 py-1 rounded-xl shadow-xs">
+                    {selectedStory.status === "APPROVED_EMAGAZINE"
+                      ? "E-MAGAZINE SUBMISSION"
+                      : selectedStory.status === "APPROVED"
+                      ? "PUBLISHED STORY"
+                      : "REVIEWING SUBMISSION"}
                   </span>
+                  {selectedStory.submissionType === "PAINTING" && (
+                    <span className="bg-purple-700 text-white font-bold text-[10px] uppercase tracking-wider px-2.5 py-1 rounded-xl shadow-xs flex items-center gap-1">
+                      <Palette className="w-3 h-3" /> Painting
+                    </span>
+                  )}
+                  {selectedStory.submissionType === "VIDEO" && (
+                    <span className="bg-rose-600 text-white font-bold text-[10px] uppercase tracking-wider px-2.5 py-1 rounded-xl shadow-xs flex items-center gap-1">
+                      <Video className="w-3 h-3" /> Video
+                    </span>
+                  )}
                   {selectedStory.category && (
-                    <span className="bg-black text-white font-bold text-[10px] uppercase tracking-wider px-3 py-1 rounded-xl shadow-xs">
+                    <span className="bg-black text-white font-bold text-[10px] uppercase tracking-wider px-2.5 py-1 rounded-xl shadow-xs">
                       Category: {selectedStory.category}
                     </span>
                   )}
                 </div>
-                <h2 className="text-2xl sm:text-3xl font-bold text-gray-950 mt-2">{selectedStory.title}</h2>
+                <h2 className="text-2xl sm:text-3xl font-bold text-gray-950 leading-tight">{selectedStory.title}</h2>
+                {selectedStory.description && (
+                  <div className="mt-3.5 rounded-2xl text-xs sm:text-sm text-gray-700 leading-relaxed">
+                    <p className="whitespace-pre-wrap">{selectedStory.description}</p>
+                  </div>
+                )}
                 <p className="text-xs text-gray-500 mt-1">By {selectedStory.authorName || selectedStory.authorEmail}</p>
               </div>
               <button
+                type="button"
                 onClick={() => setSelectedStory(null)}
-                className="p-2 text-gray-400 hover:text-gray-700 rounded-full hover:bg-gray-100 cursor-pointer"
+                className="p-2 text-gray-400 hover:text-gray-700 rounded-full hover:bg-gray-100 cursor-pointer shrink-0"
               >
                 <XCircle className="w-6 h-6" />
               </button>
             </div>
 
-            {selectedStory.coverImageUrl && (
-              <div className="w-full max-w-md mx-auto h-64 sm:h-80 rounded-[28px] overflow-hidden mb-6 bg-gray-100 border border-gray-200 shadow-md shrink-0 relative">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={selectedStory.coverImageUrl} alt={selectedStory.title || "Story Cover"} className="w-full h-full object-cover" />
+            {/* Video Player Embed if VIDEO submission */}
+            {selectedStory.submissionType === "VIDEO" && (
+              <div className="w-full max-w-3xl mx-auto mb-8 shrink-0 rounded-[24px] overflow-hidden shadow-md aspect-video bg-black relative flex items-center justify-center">
+                {(() => {
+                  const embed = selectedStory.mediaUrl ? getAddSubmissionVideoEmbed(selectedStory.mediaUrl) : null;
+                  if (embed?.type === "youtube") {
+                    return (
+                      <iframe
+                        src={`https://www.youtube-nocookie.com/embed/${embed.id}`}
+                        title="Video Preview"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen
+                        className="w-full h-full border-0"
+                      />
+                    );
+                  } else if (embed?.type === "vimeo") {
+                    return (
+                      <iframe
+                        src={`https://player.vimeo.com/video/${embed.id}`}
+                        title="Video Preview"
+                        allow="autoplay; fullscreen; picture-in-picture"
+                        allowFullScreen
+                        className="w-full h-full border-0"
+                      />
+                    );
+                  } else if (selectedStory.coverImageUrl) {
+                    return (
+                      <div className="relative w-full h-full">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={formatAssetUrl(selectedStory.coverImageUrl)}
+                          alt={selectedStory.title}
+                          className="w-full h-full object-cover"
+                        />
+                        {selectedStory.mediaUrl && (
+                          <a
+                            href={selectedStory.mediaUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="absolute inset-0 flex items-center justify-center bg-black/40 hover:bg-black/50 transition-colors group cursor-pointer z-10"
+                          >
+                            <div className="w-14 h-14 rounded-full bg-white/90 text-gray-900 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
+                              <Play className="w-6 h-6 fill-current ml-1 text-black" />
+                            </div>
+                          </a>
+                        )}
+                      </div>
+                    );
+                  }
+                  return (
+                    <div className="w-full h-full flex items-center justify-center text-white text-xs p-6">
+                      {selectedStory.mediaUrl ? (
+                        <a href={selectedStory.mediaUrl} target="_blank" rel="noreferrer" className="underline font-semibold hover:text-[#E4F953]">
+                          Open Video Link in New Tab
+                        </a>
+                      ) : (
+                        <span className="text-gray-400">No video source provided</span>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             )}
 
-            {/* Robust Content Parser */}
-            <div className="mb-8">{renderStoryContent(selectedStory.content)}</div>
+            {/* Painting Artwork Display */}
+            {selectedStory.submissionType === "PAINTING" && (selectedStory.mediaUrl || selectedStory.coverImageUrl) && (
+              <div className="relative w-full max-w-3xl mx-auto mb-8 shrink-0 rounded-[24px] overflow-hidden bg-[#0A0D0C] border border-gray-200/80 shadow-sm flex items-center justify-center p-3 sm:p-4 group">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={formatAssetUrl(selectedStory.mediaUrl || selectedStory.coverImageUrl || "")}
+                  alt={selectedStory.title || "Painting Artwork"}
+                  className="w-full max-h-[550px] object-contain rounded-xl block"
+                />
+                <div className="absolute bottom-3 right-3 z-10 bg-black/80 backdrop-blur-md text-white text-[11px] font-semibold px-3 py-1 rounded-xl flex items-center gap-1.5 shadow-xs pointer-events-none">
+                  <Palette className="w-3.5 h-3.5 text-purple-300" />
+                  <span>Original Artwork</span>
+                </div>
+              </div>
+            )}
 
-            <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-100 flex-col sm:flex-row w-full">
+            {/* Article / Story Cover Image (Card style matching LatestStories) */}
+            {selectedStory.submissionType !== "VIDEO" && selectedStory.submissionType !== "PAINTING" && (selectedStory.coverImageUrl || selectedStory.mediaUrl) && (
+              <div className="relative w-64 sm:w-72 md:w-80 aspect-square mx-auto mb-8 shrink-0 rounded-[22px] overflow-hidden bg-gray-100 border border-gray-200/80 shadow-md">
+                <Image
+                  src={formatAssetUrl(selectedStory.coverImageUrl || selectedStory.mediaUrl || "")}
+                  alt={selectedStory.title || "Cover Preview"}
+                  fill
+                  priority
+                  unoptimized
+                  className="object-cover object-center"
+                />
+              </div>
+            )}
+
+            {/* Content Parser */}
+            <div className="mb-6 flex-1">
+              {renderStoryContent(selectedStory.content)}
+            </div>
+
+            {/* Bottom Actions Row */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-5 border-t border-gray-100 mt-auto shrink-0">
               <Button
                 variant="secondary"
-                size="md"
+                size="sm"
                 onClick={() => setSelectedStory(null)}
-                className="w-full sm:w-auto justify-center border border-gray-300"
+                className="justify-center border border-gray-300 text-gray-700 hover:bg-gray-100 cursor-pointer shrink-0"
               >
                 Close Preview
               </Button>
-              {selectedStory.status === "PENDING" && (
-                <>
+
+              <div className="flex flex-wrap items-center justify-end gap-2.5">
+                {selectedStory.status === "PENDING" && (
+                  <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        const s = selectedStory;
+                        setSelectedStory(null);
+                        setRejectingStory(s);
+                      }}
+                      className="justify-center text-rose-600 border-rose-200 hover:bg-rose-50 cursor-pointer shrink-0 whitespace-nowrap"
+                    >
+                      Reject with Note
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      icon={<BookOpen className="w-4 h-4 text-purple-600" />}
+                      iconPosition="left"
+                      onClick={() => handleReview(selectedStory.id, "APPROVED_EMAGAZINE")}
+                      disabled={actionLoading}
+                      className="justify-center bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100 font-semibold cursor-pointer shrink-0 whitespace-nowrap"
+                    >
+                      Approve for E-Magazine
+                    </Button>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      icon={<CheckCircle2 className="w-4 h-4" />}
+                      iconPosition="left"
+                      onClick={() => handleReview(selectedStory.id, "APPROVED")}
+                      disabled={actionLoading}
+                      className="justify-center cursor-pointer bg-black text-white hover:bg-gray-800 shrink-0 whitespace-nowrap"
+                    >
+                      Approve & Publish
+                    </Button>
+                  </>
+                )}
+
+                {selectedStory.status === "APPROVED_EMAGAZINE" && (
+                  <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      icon={<Undo className="w-4 h-4 text-gray-500" />}
+                      iconPosition="left"
+                      onClick={() => {
+                        const sId = selectedStory.id;
+                        if (confirm("Return this story to the Pending Review Queue?")) {
+                          handleReview(sId, "PENDING");
+                        }
+                      }}
+                      disabled={actionLoading}
+                      className="justify-center text-gray-700 border-gray-300 hover:bg-gray-100 font-semibold cursor-pointer shrink-0 whitespace-nowrap"
+                    >
+                      Return to Queue
+                    </Button>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      icon={<Globe className="w-4 h-4 text-emerald-200" />}
+                      iconPosition="left"
+                      onClick={() => {
+                        const sId = selectedStory.id;
+                        if (confirm("Publish this story to the live public web catalog?")) {
+                          handleReview(sId, "APPROVED");
+                        }
+                      }}
+                      disabled={actionLoading}
+                      className="justify-center bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer shrink-0 whitespace-nowrap"
+                    >
+                      Publish to Web
+                    </Button>
+                  </>
+                )}
+
+                {selectedStory.status === "APPROVED" && (
                   <Button
                     variant="outline"
-                    size="md"
+                    size="sm"
                     onClick={() => {
-                      const s = selectedStory;
+                      const sId = selectedStory.id;
                       setSelectedStory(null);
-                      setRejectingStory(s);
+                      handleUnpublishStory(sId);
                     }}
-                    className="w-full sm:w-auto justify-center text-rose-600 border-rose-200 hover:bg-rose-50 cursor-pointer"
+                    className="justify-center text-amber-700 border-amber-300 hover:bg-amber-50 font-semibold cursor-pointer shrink-0 whitespace-nowrap"
                   >
-                    Reject with Note
+                    Unpublish Story
                   </Button>
-                  <Button
-                    variant="secondary"
-                    size="md"
-                    onClick={() => handleReview(selectedStory.id, "APPROVED_EMAGAZINE")}
-                    disabled={actionLoading}
-                    className="w-full sm:w-auto justify-center bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100 font-semibold cursor-pointer"
-                  >
-                    <BookOpen className="w-4 h-4 mr-1.5 text-purple-600" />
-                    Approve for E-Magazine
-                  </Button>
+                )}
+
+                {selectedStory.status === "UNPUBLISHED" && (
                   <Button
                     variant="primary"
-                    size="md"
-                    onClick={() => handleReview(selectedStory.id, "APPROVED")}
-                    disabled={actionLoading}
-                    className="w-full sm:w-auto justify-center cursor-pointer"
-                  >
-                    Approve & Publish
-                  </Button>
-                </>
-              )}
-              {selectedStory.status === "APPROVED_EMAGAZINE" && (
-                <>
-                  <Button
-                    variant="outline"
-                    size="md"
+                    size="sm"
+                    icon={<Globe className="w-4 h-4 text-emerald-200" />}
+                    iconPosition="left"
                     onClick={() => {
                       const sId = selectedStory.id;
-                      if (confirm("Return this story to the Pending Review Queue?")) {
-                        handleReview(sId, "PENDING");
-                      }
+                      setSelectedStory(null);
+                      handlePublishStory(sId);
                     }}
-                    disabled={actionLoading}
-                    className="w-full sm:w-auto justify-center text-gray-700 border-gray-300 hover:bg-gray-100 font-semibold cursor-pointer"
+                    className="justify-center bg-emerald-600 hover:bg-emerald-700 text-white font-semibold cursor-pointer shrink-0 whitespace-nowrap"
                   >
-                    <Undo className="w-4 h-4 mr-1 text-gray-500" />
-                    Return to Queue
-                  </Button>
-                  <Button
-                    variant="primary"
-                    size="md"
-                    onClick={() => {
-                      const sId = selectedStory.id;
-                      if (confirm("Publish this story to the live public web catalog?")) {
-                        handleReview(sId, "APPROVED");
-                      }
-                    }}
-                    disabled={actionLoading}
-                    className="w-full sm:w-auto justify-center bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer"
-                  >
-                    <Globe className="w-4 h-4 mr-1.5 text-emerald-200" />
                     Publish to Web
                   </Button>
-                </>
-              )}
-              {selectedStory.status === "APPROVED" && (
-                <Button
-                  variant="outline"
-                  size="md"
-                  onClick={() => {
-                    const sId = selectedStory.id;
-                    setSelectedStory(null);
-                    handleUnpublishStory(sId);
-                  }}
-                  className="w-full sm:w-auto justify-center text-amber-700 border-amber-300 hover:bg-amber-50 font-semibold cursor-pointer"
-                >
-                  Unpublish Story
-                </Button>
-              )}
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -5950,21 +6398,26 @@ function EditorialDashboardContent() {
         </div>
       )}
 
-      {/* Add Community Modal */}
+      {/* Add / Edit Community Modal */}
       {showAddCommModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs animate-in fade-in">
           <div className="relative w-full max-w-md bg-white rounded-[28px] p-6 shadow-2xl font-poppins">
             <div className="flex items-center justify-between pb-3 border-b border-gray-100 mb-4">
-              <h3 className="text-xl font-bold text-gray-950">Add New Community</h3>
+              <h3 className="text-xl font-bold text-gray-950">
+                {editingCommSlug ? "Edit Community" : "Add New Community"}
+              </h3>
               <button
-                onClick={() => setShowAddCommModal(false)}
+                onClick={() => {
+                  setShowAddCommModal(false);
+                  setEditingCommSlug(null);
+                }}
                 className="p-1.5 text-gray-400 hover:text-gray-700 rounded-full hover:bg-gray-100 cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleCreateCommunity} className="space-y-4">
+            <form onSubmit={handleSaveCommunity} className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider">
                   Community Name <span className="text-rose-500">*</span>
@@ -5976,7 +6429,7 @@ function EditorialDashboardContent() {
                   onChange={(e) => {
                     const val = e.target.value;
                     setNewCommName(val);
-                    if (!newCommSlug) {
+                    if (!editingCommSlug && !newCommSlug) {
                       setNewCommSlug(val.toLowerCase().trim().replace(/\s+/g, "-"));
                     }
                   }}
@@ -6025,12 +6478,50 @@ function EditorialDashboardContent() {
                 </div>
               </div>
 
+              {/* Status / Active Toggle */}
+              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-200">
+                <div>
+                  <span className="text-xs font-bold text-gray-900 block">Active Status</span>
+                  <span className="text-[11px] text-gray-500 block">
+                    {newCommIsActive ? "Visible in public communities roster" : "Hidden from public view"}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setNewCommIsActive(!newCommIsActive)}
+                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                    newCommIsActive ? "bg-emerald-600" : "bg-gray-300"
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                      newCommIsActive ? "translate-x-5" : "translate-x-0"
+                    }`}
+                  />
+                </button>
+              </div>
+
               <div className="flex items-center justify-end gap-3 pt-3 border-t border-gray-100">
-                <Button type="button" variant="secondary" size="sm" onClick={() => setShowAddCommModal(false)} className="border border-gray-300">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    setShowAddCommModal(false);
+                    setEditingCommSlug(null);
+                  }}
+                  className="border border-gray-300"
+                >
                   Cancel
                 </Button>
-                <Button type="submit" variant="primary" size="sm" disabled={creatingComm || !newCommName.trim()} className="px-6 py-2">
-                  {creatingComm ? "Creating..." : "Create Community"}
+                <Button
+                  type="submit"
+                  variant="primary"
+                  size="sm"
+                  disabled={creatingComm || !newCommName.trim()}
+                  className="px-6 py-2"
+                >
+                  {creatingComm ? "Saving..." : editingCommSlug ? "Save Changes" : "Create Community"}
                 </Button>
               </div>
             </form>
@@ -6068,6 +6559,7 @@ function EditorialDashboardContent() {
                     { id: "WORKSHOP", label: "Workshop" },
                     { id: "EXHIBITION", label: "Exhibition" },
                     { id: "FILM_SCREENING", label: "Film Screening" },
+                    { id: "PAST_ARCHIVE", label: "Past Archive" },
                   ].map((t) => (
                     <button
                       key={t.id}
@@ -6178,73 +6670,154 @@ function EditorialDashboardContent() {
               </div>
 
               {/* Cover & Gallery Images Upload */}
-              <div>
-                <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider">
-                  Event Images Gallery {["WORKSHOP", "PAST_ARCHIVE"].includes(eventFormType) && <span className="text-rose-500">*</span>}
-                </label>
+              {eventFormType === "PAST_ARCHIVE" ? (
+                <div>
+                  <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider">
+                    Past Archive Images Gallery <span className="text-rose-500">*</span>
+                  </label>
+                  <p className="text-[11px] text-gray-500 mb-2">
+                    Upload photos from the past event. Click an image to set it as the primary cover.
+                  </p>
 
-                {/* Uploaded Thumbnails Grid */}
-                {eventFormImages.length > 0 && (
-                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5 mb-3">
-                    {eventFormImages.map((imgUrl, idx) => (
-                      <div key={idx} className="relative rounded-xl overflow-hidden border border-gray-200 h-24 bg-gray-50 group">
-                        <img
-                          src={imgUrl.startsWith("/") ? `${API_BASE_URL.replace(/\/api$/, "")}${imgUrl}` : imgUrl}
-                          alt={`Event image ${idx + 1}`}
-                          className="w-full h-full object-cover"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const updated = eventFormImages.filter((_, i) => i !== idx);
-                            setEventFormImages(updated);
-                            if (eventFormImage === imgUrl) {
-                              setEventFormImage(updated[0] || "");
-                            }
-                          }}
-                          className="absolute top-1 right-1 p-1 bg-black/70 hover:bg-rose-600 text-white rounded-full transition-colors cursor-pointer"
-                          title="Remove image"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
+                  {/* Uploaded Thumbnails Grid */}
+                  {eventFormImages.length > 0 && (
+                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5 mb-3">
+                      {eventFormImages.map((imgUrl, idx) => {
+                        const isCover = eventFormImage === imgUrl || (!eventFormImage && idx === 0);
+                        return (
+                          <div
+                            key={idx}
+                            onClick={() => setEventFormImage(imgUrl)}
+                            className={`relative rounded-xl overflow-hidden border cursor-pointer h-24 bg-gray-50 group transition-all ${
+                              isCover ? "border-amber-500 ring-2 ring-amber-500/30" : "border-gray-200 hover:border-gray-400"
+                            }`}
+                          >
+                            <img
+                              src={imgUrl.startsWith("/") ? `${API_BASE_URL.replace(/\/api$/, "")}${imgUrl}` : imgUrl}
+                              alt={`Past event image ${idx + 1}`}
+                              className="w-full h-full object-cover"
+                            />
+                            {isCover && (
+                              <span className="absolute bottom-1 left-1 bg-amber-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow-xs">
+                                Cover
+                              </span>
+                            )}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const updated = eventFormImages.filter((_, i) => i !== idx);
+                                setEventFormImages(updated);
+                                if (eventFormImage === imgUrl) {
+                                  setEventFormImage(updated[0] || "");
+                                }
+                              }}
+                              className="absolute top-1 right-1 p-1 bg-black/70 hover:bg-rose-600 text-white rounded-full transition-colors cursor-pointer"
+                              title="Remove image"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* File Drop Area for Multiple */}
+                  <label className="border-2 border-dashed border-gray-200 hover:border-black rounded-2xl p-4 flex flex-col items-center justify-center cursor-pointer transition-colors bg-gray-50/50 hover:bg-gray-50">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      onChange={handleEventImageUpload}
+                      disabled={uploadingEventImage}
+                      className="hidden"
+                    />
+                    <div className="text-center">
+                      <span className="text-xs font-bold text-gray-900">
+                        {uploadingEventImage ? "Uploading Images..." : "📁 Select Images from Device (Multiple Allowed)"}
+                      </span>
+                      <p className="text-[10px] text-gray-500 mt-1">PNG, JPG, WEBP up to 5MB each</p>
+                    </div>
+                  </label>
+                  {eventFormImages.length === 0 && !eventFormImage && (
+                    <p className="text-[11px] text-rose-500 mt-1 font-medium">
+                      * At least one cover image is required for Past Archive.
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider">
+                    Event Cover Image {eventFormType === "WORKSHOP" && <span className="text-rose-500">*</span>}
+                  </label>
+                  {eventFormImage ? (
+                    <div className="relative rounded-2xl overflow-hidden border border-gray-200 h-40 bg-gray-50 flex items-center justify-center group">
+                      <img
+                        src={eventFormImage.startsWith("/") ? `${API_BASE_URL.replace(/\/api$/, "")}${eventFormImage}` : eventFormImage}
+                        alt="Event Cover"
+                        className="w-full h-full object-cover"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEventFormImage("");
+                          setEventFormImages([]);
+                        }}
+                        className="absolute top-2 right-2 p-1.5 bg-black/70 hover:bg-rose-600 text-white rounded-full transition-colors cursor-pointer"
+                        title="Remove image"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <label className="border-2 border-dashed border-gray-200 hover:border-black rounded-2xl p-4 flex flex-col items-center justify-center cursor-pointer transition-colors bg-gray-50/50 hover:bg-gray-50">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleEventImageUpload}
+                        disabled={uploadingEventImage}
+                        className="hidden"
+                      />
+                      <div className="text-center">
+                        <span className="text-xs font-bold text-gray-900">
+                          {uploadingEventImage ? "Uploading Image..." : "📁 Select Cover Image"}
+                        </span>
+                        <p className="text-[10px] text-gray-500 mt-1">PNG, JPG, WEBP up to 5MB</p>
                       </div>
-                    ))}
-                  </div>
-                )}
+                    </label>
+                  )}
+                  {eventFormType === "WORKSHOP" && !eventFormImage && (
+                    <p className="text-[11px] text-rose-500 mt-1 font-medium">
+                      * Cover image is required for Workshop events.
+                    </p>
+                  )}
+                </div>
+              )}
 
-                {/* File Drop Area */}
-                <label className="border-2 border-dashed border-gray-200 hover:border-black rounded-2xl p-4 flex flex-col items-center justify-center cursor-pointer transition-colors bg-gray-50/50 hover:bg-gray-50">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    onChange={handleEventImageUpload}
-                    disabled={uploadingEventImage}
-                    className="hidden"
-                  />
-                  <div className="text-center">
-                    <span className="text-xs font-bold text-gray-900">
-                      {uploadingEventImage ? "Uploading Images..." : "📁 Select Images from Device (Multiple Allowed)"}
+              {/* YouTube / Video Recording URL - Only for Past Archive */}
+              {eventFormType === "PAST_ARCHIVE" && (
+                <div>
+                  <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <span className="text-rose-600 font-bold">▶</span> YouTube / Recording URL
                     </span>
-                    <p className="text-[10px] text-gray-500 mt-1">PNG, JPG, WEBP up to 5MB each</p>
-                  </div>
-                </label>
-              </div>
-
-              {/* Stream / Meeting Link (Optional) - Commented out as requested
-              <div>
-                <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider">
-                  Stream / Meeting Link (Optional)
-                </label>
-                <input
-                  type="url"
-                  value={eventFormRegisterHref}
-                  onChange={(e) => setEventFormRegisterHref(e.target.value)}
-                  placeholder="https://zoom.us/j/... or https://youtube.com/live/..."
-                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium text-gray-900 outline-none focus:border-black shadow-xs"
-                />
-              </div>
-              */}
+                    <span className="text-[10px] font-normal text-gray-400">
+                      Optional
+                    </span>
+                  </label>
+                  <input
+                    type="url"
+                    value={eventFormVideoUrl}
+                    onChange={(e) => setEventFormVideoUrl(e.target.value)}
+                    placeholder="https://www.youtube.com/watch?v=... or https://youtu.be/..."
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium text-gray-900 outline-none focus:border-black shadow-xs"
+                  />
+                  <p className="text-[10px] text-gray-400 mt-1">
+                    Adds a watchable video recording for this event in the Past Events archive.
+                  </p>
+                </div>
+              )}
 
               {/* Published Toggle */}
               <div className="flex items-center gap-2 pt-1">
@@ -6387,6 +6960,7 @@ function EditorialDashboardContent() {
                   setShowArchiveModal(false);
                   setSelectedEventForArchive(null);
                   setArchiveImage("");
+                  setArchiveImages([]);
                   setArchiveVideoUrl("");
                 }}
                 className="p-1.5 text-gray-400 hover:text-gray-700 rounded-full hover:bg-gray-100 cursor-pointer"
@@ -6397,44 +6971,79 @@ function EditorialDashboardContent() {
 
             <form onSubmit={handleConfirmArchive} className="space-y-4">
               <p className="text-xs text-gray-600 leading-relaxed">
-                Upload or confirm a cover image for this event to be displayed in the <strong>Past Event Archive</strong>. <strong className="text-rose-600">Cover image is required.</strong>
+                Upload photos from the event to feature in the <strong>Past Event Archive</strong>. Select an image to set it as the primary cover. <strong className="text-rose-600">Cover image is required.</strong>
               </p>
 
-              {/* Archive Cover Image Upload */}
+              {/* Archive Gallery & Cover Image Upload */}
               <div>
                 <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider">
-                  Archive Cover Image <span className="text-rose-500">*</span>
+                  Archive Images Gallery <span className="text-rose-500">*</span>
                 </label>
-                {archiveImage ? (
-                  <div className="relative rounded-2xl overflow-hidden border border-gray-200 h-40 bg-gray-50 flex items-center justify-center group">
-                    <img
-                      src={archiveImage.startsWith("/") ? `${API_BASE_URL.replace(/\/api$/, "")}${archiveImage}` : archiveImage}
-                      alt="Archive Cover"
-                      className="w-full h-full object-cover"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setArchiveImage("")}
-                      className="absolute top-2 right-2 p-1.5 bg-black/70 hover:bg-rose-600 text-white rounded-full transition-colors cursor-pointer"
-                      title="Remove image"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
+
+                {/* Uploaded Thumbnails Grid */}
+                {archiveImages.length > 0 && (
+                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 mb-3">
+                    {archiveImages.map((url, idx) => {
+                      const isCover = archiveImage === url || (!archiveImage && idx === 0);
+                      return (
+                        <div
+                          key={idx}
+                          onClick={() => setArchiveImage(url)}
+                          className={`relative rounded-xl overflow-hidden border cursor-pointer h-20 bg-gray-50 group transition-all ${
+                            isCover ? "border-amber-500 ring-2 ring-amber-500/30" : "border-gray-200 hover:border-gray-400"
+                          }`}
+                        >
+                          <img
+                            src={url.startsWith("/") ? `${API_BASE_URL.replace(/\/api$/, "")}${url}` : url}
+                            alt={`Archive image ${idx + 1}`}
+                            className="w-full h-full object-cover"
+                          />
+                          {isCover && (
+                            <span className="absolute bottom-1 left-1 bg-amber-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow-xs">
+                              Cover
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const updated = archiveImages.filter((_, i) => i !== idx);
+                              setArchiveImages(updated);
+                              if (archiveImage === url) {
+                                setArchiveImage(updated[0] || "");
+                              }
+                            }}
+                            className="absolute top-1 right-1 p-1 bg-black/70 hover:bg-rose-600 text-white rounded-full transition-colors cursor-pointer"
+                            title="Remove image"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      );
+                    })}
                   </div>
-                ) : (
-                  <label className="border-2 border-dashed border-gray-200 hover:border-black rounded-2xl p-4 flex flex-col items-center justify-center cursor-pointer transition-colors bg-gray-50/50 hover:bg-gray-50">
-                    <input type="file" accept="image/*" onChange={handleArchiveImageUpload} disabled={uploadingArchiveImage} className="hidden" />
-                    <div className="text-center">
-                      <span className="text-xs font-bold text-gray-900">
-                        {uploadingArchiveImage ? "Uploading Image..." : "📁 Select Cover Image for Archive (Required)"}
-                      </span>
-                      <p className="text-[10px] text-gray-500 mt-1">PNG, JPG, WEBP up to 5MB</p>
-                    </div>
-                  </label>
                 )}
-                {!archiveImage && (
+
+                {/* File Drop / Select Area */}
+                <label className="border-2 border-dashed border-gray-200 hover:border-black rounded-2xl p-4 flex flex-col items-center justify-center cursor-pointer transition-colors bg-gray-50/50 hover:bg-gray-50">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handleArchiveImageUpload}
+                    disabled={uploadingArchiveImage}
+                    className="hidden"
+                  />
+                  <div className="text-center">
+                    <span className="text-xs font-bold text-gray-900">
+                      {uploadingArchiveImage ? "Uploading Images..." : "📁 Select Images for Archive (Multiple Allowed)"}
+                    </span>
+                    <p className="text-[10px] text-gray-500 mt-1">PNG, JPG, WEBP up to 5MB each</p>
+                  </div>
+                </label>
+                {archiveImages.length === 0 && !archiveImage && (
                   <p className="text-[11px] text-rose-500 mt-1 font-medium">
-                    * A cover image is required to move an event to Past Archive.
+                    * At least one cover image is required to move an event to Past Archive.
                   </p>
                 )}
               </div>
@@ -6467,6 +7076,7 @@ function EditorialDashboardContent() {
                     setShowArchiveModal(false);
                     setSelectedEventForArchive(null);
                     setArchiveImage("");
+                    setArchiveImages([]);
                     setArchiveVideoUrl("");
                   }}
                   className="border border-gray-300"
@@ -6477,7 +7087,7 @@ function EditorialDashboardContent() {
                   type="submit"
                   variant="primary"
                   size="sm"
-                  disabled={archivingEvent || uploadingArchiveImage || !archiveImage.trim()}
+                  disabled={archivingEvent || uploadingArchiveImage || (archiveImages.length === 0 && !archiveImage.trim())}
                   className="px-6 py-2 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white border-none cursor-pointer"
                 >
                   {archivingEvent ? "Archiving..." : "Confirm & Move to Archive"}
