@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Swiper, SwiperSlide } from "swiper/react";
@@ -18,6 +18,284 @@ export interface ReviewItem {
   image?: string | null;
   isPublished?: boolean;
 }
+
+interface BubblePoint {
+  id: number;
+  x0: number;
+  y0: number;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  pinned: boolean;
+}
+
+// 24 sampled points along the exact cubic bezier path of the ReaderReviews bottom-left blob
+const REVIEWS_BLOB_POINTS: { id: number; x0: number; y0: number; pinned: boolean }[] = [
+  { id: 0, x0: 239.66, y0: 297.49, pinned: false },
+  { id: 1, x0: 293.75, y0: 260.33, pinned: false },
+  { id: 2, x0: 330.39, y0: 195.96, pinned: false },
+  { id: 3, x0: 329.99, y0: 110.87, pinned: false },
+  { id: 4, x0: 302.97, y0: 57.11, pinned: false },
+  { id: 5, x0: 227.86, y0: 6.43, pinned: false },
+  { id: 6, x0: 142.03, y0: 5.19, pinned: false },
+  { id: 7, x0: 78.14, y0: 40.14, pinned: false },
+  { id: 8, x0: 37.66, y0: 103.64, pinned: false },
+  { id: 9, x0: 18.09, y0: 187.94, pinned: false },
+  { id: 10, x0: -31.53, y0: 241.36, pinned: true },
+  { id: 11, x0: -106.30, y0: 254.37, pinned: true },
+  { id: 12, x0: -172.27, y0: 232.03, pinned: true },
+  { id: 13, x0: -247.85, y0: 244.23, pinned: true },
+  { id: 14, x0: -301.74, y0: 302.94, pinned: true },
+  { id: 15, x0: -310.51, y0: 371.69, pinned: true },
+  { id: 16, x0: -265.29, y0: 444.94, pinned: true },
+  { id: 17, x0: -194.39, y0: 468.35, pinned: true },
+  { id: 18, x0: -124.48, y0: 446.72, pinned: true },
+  { id: 19, x0: -78.40, y0: 381.66, pinned: true },
+  { id: 20, x0: -54.74, y0: 318.04, pinned: true },
+  { id: 21, x0: 18.70, y0: 269.03, pinned: false },
+  { id: 22, x0: 88.76, y0: 277.38, pinned: false },
+  { id: 23, x0: 162.39, y0: 306.80, pinned: false },
+];
+
+function buildSvgPath(points: BubblePoint[]): string {
+  const n = points.length;
+  if (n === 0) return "";
+  const m0x = (points[0].x + points[1].x) / 2;
+  const m0y = (points[0].y + points[1].y) / 2;
+  let d = `M ${m0x.toFixed(2)} ${m0y.toFixed(2)}`;
+
+  for (let i = 1; i < n; i++) {
+    const next = (i + 1) % n;
+    const mx = (points[i].x + points[next].x) / 2;
+    const my = (points[i].y + points[next].y) / 2;
+    d += ` Q ${points[i].x.toFixed(2)} ${points[i].y.toFixed(2)} ${mx.toFixed(2)} ${my.toFixed(2)}`;
+  }
+
+  d += ` Q ${points[0].x.toFixed(2)} ${points[0].y.toFixed(2)} ${m0x.toFixed(2)} ${m0y.toFixed(2)} Z`;
+  return d;
+}
+
+const ReviewsJellyBlob: React.FC = () => {
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  const pathRef = useRef<SVGPathElement | null>(null);
+
+  const pointsRef = useRef<BubblePoint[]>(
+    REVIEWS_BLOB_POINTS.map((p) => ({
+      ...p,
+      x: p.x0,
+      y: p.y0,
+      vx: 0,
+      vy: 0,
+    }))
+  );
+
+  const cursorRef = useRef<{
+    svgX: number | null;
+    svgY: number | null;
+    prevSvgX: number | null;
+    prevSvgY: number | null;
+    hasCursor: boolean;
+    intensity: number;
+  }>({
+    svgX: null,
+    svgY: null,
+    prevSvgX: null,
+    prevSvgY: null,
+    hasCursor: false,
+    intensity: 0,
+  });
+
+  const getSvgCoordinates = (clientX: number, clientY: number) => {
+    if (!svgRef.current) return { x: 0, y: 0 };
+    const svg = svgRef.current;
+    const ctm = svg.getScreenCTM();
+    if (!ctm) return { x: 0, y: 0 };
+    const pt = svg.createSVGPoint();
+    pt.x = clientX;
+    pt.y = clientY;
+    const transformed = pt.matrixTransform(ctm.inverse());
+    return { x: transformed.x, y: transformed.y };
+  };
+
+  // ── Global Pointer Tracking for Hover & Proximity Reactions ──
+  useEffect(() => {
+    const handlePointerMoveGlobal = (e: PointerEvent) => {
+      if (!svgRef.current) return;
+      const coords = getSvgCoordinates(e.clientX, e.clientY);
+      const cursor = cursorRef.current;
+      cursor.prevSvgX = cursor.svgX ?? coords.x;
+      cursor.prevSvgY = cursor.svgY ?? coords.y;
+      cursor.svgX = coords.x;
+      cursor.svgY = coords.y;
+      cursor.hasCursor = true;
+    };
+
+    const handlePointerLeaveGlobal = () => {
+      const cursor = cursorRef.current;
+      cursor.hasCursor = false;
+      cursor.svgX = null;
+      cursor.svgY = null;
+    };
+
+    window.addEventListener("pointermove", handlePointerMoveGlobal, { passive: true });
+    window.addEventListener("pointercancel", handlePointerLeaveGlobal);
+    window.addEventListener("mouseleave", handlePointerLeaveGlobal);
+
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMoveGlobal);
+      window.removeEventListener("pointercancel", handlePointerLeaveGlobal);
+      window.removeEventListener("mouseleave", handlePointerLeaveGlobal);
+    };
+  }, []);
+
+  // ── Fluid Simulation Loop with Bouncy Jelly Hover & Return Wobble ──
+  useEffect(() => {
+    let animId: number;
+    let time = 0;
+
+    const tick = () => {
+      time += 0.0022;
+      const points = pointsRef.current;
+      const cursor = cursorRef.current;
+
+      // Smooth cursor presence intensity (gentle fade in / out)
+      const targetIntensity = cursor.hasCursor ? 1 : 0;
+      cursor.intensity += (targetIntensity - cursor.intensity) * 0.025;
+
+      const cursorVx =
+        cursor.svgX !== null && cursor.prevSvgX !== null
+          ? cursor.svgX - cursor.prevSvgX
+          : 0;
+      const cursorVy =
+        cursor.svgY !== null && cursor.prevSvgY !== null
+          ? cursor.svgY - cursor.prevSvgY
+          : 0;
+      cursor.prevSvgX = cursor.svgX;
+      cursor.prevSvgY = cursor.svgY;
+
+      const n = points.length;
+
+      for (let i = 0; i < n; i++) {
+        const pt = points[i];
+        if (pt.pinned) continue;
+
+        // Taper near anchored base points
+        let taper = 1.0;
+        if (i === 9 || i === 21) taper = 0.55;
+        else if (i === 8 || i === 22) taper = 0.85;
+
+        // 1. Gentle, slow organic ambient fluid waves
+        const current1 = Math.sin(time * 0.45 - i * 0.38) * 3.8;
+        const current2 = Math.cos(time * 0.32 + i * 0.28) * 2.6;
+        const current3 = Math.sin(time * 0.65 - i * 0.48) * 1.5;
+        const fluidWave = (current1 + current2 + current3) * taper;
+
+        // Direction normal from internal core (-100, 350)
+        const radX = pt.x0 - (-100);
+        const radY = pt.y0 - 350;
+        const radLen = Math.hypot(radX, radY) || 1;
+        const normX = radX / radLen;
+        const normY = radY / radLen;
+
+        let targetX = pt.x0 + normX * fluidWave;
+        let targetY = pt.y0 + normY * fluidWave;
+
+        // 2. Smooth, graceful jelly bulge when cursor approaches
+        if (cursor.intensity > 0.01 && cursor.svgX !== null && cursor.svgY !== null) {
+          const cdx = cursor.svgX - pt.x0;
+          const cdy = cursor.svgY - pt.y0;
+          const cdist = Math.hypot(cdx, cdy);
+          const radius = 260;
+          if (cdist < radius && cdist > 1) {
+            const normDist = cdist / radius;
+            const pull = Math.pow(1 - normDist, 2.2) * 42 * cursor.intensity * taper;
+            targetX += (cdx / cdist) * pull;
+            targetY += (cdy / cdist) * pull;
+
+            // Subtle fluid inertia when cursor drifts across
+            const speed = Math.hypot(cursorVx, cursorVy);
+            if (speed > 0.5) {
+              const impulse = Math.min(speed, 18) * Math.pow(1 - normDist, 2) * 0.035 * taper;
+              pt.vx += (cursorVx / (speed || 1)) * impulse;
+              pt.vy += (cursorVy / (speed || 1)) * impulse;
+            }
+          }
+        }
+
+        // 3. Slow, silky spring relaxation & gentle harmonic return wobble
+        const springK = 0.024;
+        const damping = 0.92;
+        const fx = (targetX - pt.x) * springK;
+        const fy = (targetY - pt.y) * springK;
+
+        pt.vx = (pt.vx + fx) * damping;
+        pt.vy = (pt.vy + fy) * damping;
+
+        pt.x += pt.vx;
+        pt.y += pt.vy;
+      }
+
+      // 4. Surface tension smoothing pass across neighbors for fluid cohesion
+      for (let i = 0; i < n; i++) {
+        const pt = points[i];
+        if (pt.pinned) continue;
+        const prev = points[(i - 1 + n) % n];
+        const next = points[(i + 1) % n];
+        const avgX = (prev.x + next.x) / 2;
+        const avgY = (prev.y + next.y) / 2;
+        const tension = 0.22;
+        pt.x = pt.x * (1 - tension) + avgX * tension;
+        pt.y = pt.y * (1 - tension) + avgY * tension;
+      }
+
+      if (pathRef.current) {
+        pathRef.current.setAttribute("d", buildSvgPath(points));
+      }
+
+      animId = requestAnimationFrame(tick);
+    };
+
+    animId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(animId);
+  }, []);
+
+  return (
+    <div className="hidden md:block absolute bottom-0 left-0 pointer-events-none select-none z-20 w-[180px] sm:w-[250px] md:w-[337px] h-auto overflow-visible">
+      <svg
+        ref={svgRef}
+        viewBox="0 0 337 325"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+        className="w-full h-auto max-w-[337px] overflow-visible select-none pointer-events-none"
+      >
+        <path
+          ref={pathRef}
+          d={buildSvgPath(pointsRef.current)}
+          fill="url(#paint0_linear_243_113)"
+          className="transition-colors duration-150"
+        />
+        <defs>
+          <linearGradient
+            id="paint0_linear_243_113"
+            x1="317.222"
+            y1="80.2167"
+            x2="-285.952"
+            y2="426.06"
+            gradientUnits="userSpaceOnUse"
+          >
+            <stop stopColor="#28ABE0" />
+            <stop offset="0.288092" stopColor="#25B0A3" />
+            <stop offset="0.520371" stopColor="#2DB76E" />
+            <stop offset="0.6875" stopColor="#56C15B" />
+            <stop offset="0.797922" stopColor="#74C84D" />
+            <stop offset="1" stopColor="#C7DB28" />
+          </linearGradient>
+        </defs>
+      </svg>
+    </div>
+  );
+};
 
 export interface ReaderReviewsProps {
   title?: string;
@@ -65,37 +343,8 @@ export const ReaderReviews: React.FC<ReaderReviewsProps> = ({
 
   return (
     <section className="relative w-full bg-white py-16 sm:py-20 lg:py-24 font-poppins overflow-hidden">
-      {/* Decorative Gradient Blob on Bottom Left */}
-      <div className="absolute bottom-0 left-0 pointer-events-none z-0 w-[180px] sm:w-[250px] md:w-[337px] h-auto overflow-hidden">
-        <svg
-          viewBox="0 0 337 325"
-          fill="none"
-          xmlns="http://www.w3.org/2000/svg"
-          className="w-full h-auto max-w-[337px]"
-        >
-          <path
-            d="M239.66 297.49C300.687 274.308 365.491 191.673 321.701 86.8538C317.198 75.7771 284.169 12.6794 204.046 1.18649C109.35 -9.62177 32.1652 54.2766 27.7575 157.801C16.9609 201.323 3.31777 218.38 -26.2949 238.678C-71.6034 262.638 -100.998 260.22 -138.671 243.497C-175.69 221.306 -250.667 224.234 -289.645 281.124C-319.125 325.844 -327.748 383.625 -269.463 441.903C-208.399 488.059 -119.984 474.818 -81.8159 394.533C-68.9099 349.212 -69.6303 311.131 -2.52576 274.254C46.9769 259.822 72.9869 265.185 116.985 293.309C160.972 311.327 187.646 313.053 239.66 297.49Z"
-            fill="url(#paint0_linear_243_113)"
-          />
-          <defs>
-            <linearGradient
-              id="paint0_linear_243_113"
-              x1="317.222"
-              y1="80.2167"
-              x2="-285.952"
-              y2="426.06"
-              gradientUnits="userSpaceOnUse"
-            >
-              <stop stopColor="#28ABE0" />
-              <stop offset="0.288092" stopColor="#25B0A3" />
-              <stop offset="0.520371" stopColor="#2DB76E" />
-              <stop offset="0.6875" stopColor="#56C15B" />
-              <stop offset="0.797922" stopColor="#74C84D" />
-              <stop offset="1" stopColor="#C7DB28" />
-            </linearGradient>
-          </defs>
-        </svg>
-      </div>
+      {/* ── Decorative Gradient Jelly Bubble Blob on Bottom Left ── */}
+      <ReviewsJellyBlob />
 
       <div className="container px-4 sm:px-6 lg:px-8 mx-auto relative z-10">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 ">

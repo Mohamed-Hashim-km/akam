@@ -32,9 +32,14 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
       await client.query('ALTER TABLE story ADD COLUMN IF NOT EXISTS "isFeatured" BOOLEAN DEFAULT false;');
       await client.query(`ALTER TYPE "EventType" ADD VALUE IF NOT EXISTS 'EXHIBITION';`);
       await client.query(`ALTER TYPE "EventType" ADD VALUE IF NOT EXISTS 'FILM_SCREENING';`);
-      await client.query(`ALTER TABLE "event" ADD COLUMN IF NOT EXISTS images TEXT[] DEFAULT '{}';`);
       await client.query(`ALTER TYPE "StoryStatus" ADD VALUE IF NOT EXISTS 'APPROVED_EMAGAZINE';`);
+      await client.query(`ALTER TYPE "StoryStatus" ADD VALUE IF NOT EXISTS 'UNPUBLISHED';`);
       await client.query(`ALTER TYPE "NotificationType" ADD VALUE IF NOT EXISTS 'STORY_APPROVED_EMAGAZINE';`);
+      await client.query(`ALTER TYPE "NotificationType" ADD VALUE IF NOT EXISTS 'CONTENT_REPORTED';`);
+      await client.query(`ALTER TYPE "NotificationType" ADD VALUE IF NOT EXISTS 'REPORT_RESOLVED';`);
+      await client.query(`ALTER TYPE "NotificationType" ADD VALUE IF NOT EXISTS 'REPORT_DISMISSED';`);
+      await client.query(`ALTER TYPE "NotificationType" ADD VALUE IF NOT EXISTS 'CONTENT_REMOVED';`);
+      await client.query(`CREATE TABLE IF NOT EXISTS site_setting (key TEXT PRIMARY KEY, value JSONB, "updatedAt" TIMESTAMP DEFAULT now());`);
       client.release();
       this.logger.log('✅ Database connection established and schema verified');
     } catch (error) {

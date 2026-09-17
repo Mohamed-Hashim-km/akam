@@ -71,6 +71,15 @@ export class ModerationController {
     return this.moderationService.getReports({ page, limit, status, type, search });
   }
 
+  @Get('editorial/reports/pending-count')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('EDITOR', 'ADMIN')
+  @ApiOperation({ summary: '[Editor] Get pending reports count' })
+  async getPendingCount() {
+    return this.moderationService.getPendingCount();
+  }
+
   @Patch('editorial/reports/:reportId')
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth()

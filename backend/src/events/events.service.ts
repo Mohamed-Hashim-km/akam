@@ -138,7 +138,7 @@ export class EventsService {
 
     if (search && search.trim()) {
       params.push(`%${search.trim()}%`);
-      whereConditions.push(`(e.title ILIKE $${params.length} OR e.description ILIKE $${params.length} OR e.location ILIKE $${params.length})`);
+      whereConditions.push(`(e.title ILIKE $${params.length} OR e.description ILIKE $${params.length} OR e.location ILIKE $${params.length} OR e.type::text ILIKE $${params.length} OR e."monthYear" ILIKE $${params.length})`);
     }
 
     const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
@@ -153,7 +153,7 @@ export class EventsService {
 
     const dataSql = `
       SELECT 
-        e.id, e.type, e.title, e.description, e.location, e.time, e.day, e."monthYear", e."imageSrc", e."videoUrl", e."registerHref", e."isPublished", e."createdAt", e."updatedAt",
+        e.id, e.type, e.title, e.description, e.location, e.time, e.day, e."monthYear", e."imageSrc", e.images, e."videoUrl", e."registerHref", e."isPublished", e."createdAt", e."updatedAt",
         COALESCE((SELECT COUNT(*)::int FROM "event_registration" er WHERE er."eventId" = e.id), 0) AS "registrationCount"
       FROM "event" e
       ${whereClause}

@@ -1,12 +1,16 @@
 import {
   Controller,
   Get,
+  Post,
   Patch,
+  Delete,
   Body,
+  Param,
   UseGuards,
   HttpCode,
   HttpStatus,
   Header,
+  Query,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
@@ -14,6 +18,8 @@ import { RolesGuard } from '../auth/guards/roles.guard.js';
 import { Roles } from '../auth/decorators/roles.decorator.js';
 import { SettingsService } from './settings.service.js';
 import { UpdateEditorsNoteDto } from './dto/update-editors-note.dto.js';
+import { CreateStudentApplicationDto } from './dto/create-student-application.dto.js';
+import { UpdateStudentStatusDto } from './dto/update-student-status.dto.js';
 
 @ApiTags('Settings')
 @Controller()
@@ -36,4 +42,52 @@ export class SettingsController {
   async updateEditorsNote(@Body() dto: UpdateEditorsNoteDto) {
     return this.settingsService.updateEditorsNote(dto);
   }
+
+  // ─── Student Verification Endpoints ──────────────────────────────────────────
+
+  @Post('student-verifications')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Submit student ID card verification application (Public)' })
+  async submitStudentApplication(@Body() dto: CreateStudentApplicationDto) {
+    return this.settingsService.submitStudentApplication(dto);
+  }
+
+  @Get('editorial/student-verifications')
+  @ApiOperation({ summary: 'List all student verification applications for editorial review with pagination and filtering' })
+  async getStudentApplications(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('status') status?: string,
+    @Query('search') search?: string,
+  ) {
+    return this.settingsService.getStudentApplicationsPaginated({
+      page: page ? parseInt(page, 10) : 1,
+      limit: limit ? parseInt(limit, 10) : 9,
+      status,
+      search,
+    });
+  }
+
+  @Patch('editorial/student-verifications/:id/status')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Approve or reject a student verification application' })
+  async updateStudentApplicationStatus(
+    @Param('id') id: string,
+    @Body() dto: UpdateStudentStatusDto,
+  ) {
+    return this.settingsService.updateStudentApplicationStatus(
+      id,
+      dto.status,
+      dto.reviewNotes,
+      dto.reviewedBy,
+    );
+  }
+
+  @Delete('editorial/student-verifications/:id')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Delete a student application record' })
+  async deleteStudentApplication(@Param('id') id: string) {
+    return this.settingsService.deleteStudentApplication(id);
+  }
 }
+

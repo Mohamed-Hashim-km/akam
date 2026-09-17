@@ -24,13 +24,16 @@ import {
   AlertCircle,
   CheckCircle2,
   Send,
+  Play,
+  Video,
+  Palette,
 } from "lucide-react";
 import { Swiper, SwiperSlide } from "swiper/react";
 import { Navigation } from "swiper/modules";
 import type { Swiper as SwiperClass } from "swiper";
 import Button from "@/components/ui/Button";
 import AuthModal from "@/components/AuthModal";
-import { API_BASE_URL, apiFetch } from "@/lib/config";
+import { API_BASE_URL, apiFetch, formatAssetUrl } from "@/lib/config";
 
 // Swiper CSS imports
 import "swiper/css";
@@ -40,9 +43,12 @@ interface StoryDetail {
   id: string;
   title: string;
   slug: string;
+  description?: string | null;
   content?: string;
   category?: string;
   coverImageUrl: string | null;
+  submissionType?: string;
+  mediaUrl?: string | null;
   status: string;
   createdAt: string;
   updatedAt?: string;
@@ -399,9 +405,7 @@ export default function WorkDetailPage() {
   const renderStoryBody = (contentStr?: string) => {
     if (!contentStr || !contentStr.trim()) {
       return (
-        <p className="text-gray-400 italic py-8 text-center">
-          No narrative content available for this work.
-        </p>
+       null
       );
     }
 
@@ -459,7 +463,7 @@ export default function WorkDetailPage() {
                 <img
                   src={part.src}
                   alt={part.alt}
-                  className="w-full max-w-3xl h-auto max-h-[500px] object-cover rounded-2xl shadow-xs"
+                  className="w-full max-w-4xl h-auto max-h-[600px] object-cover rounded-2xl shadow-xs"
                 />
               </div>
             );
@@ -594,17 +598,17 @@ export default function WorkDetailPage() {
       </div>
 
       {/* Story Main Reader Content */}
-      <main className="container max-w-4xl px-4 mx-auto py-10 sm:py-16">
+      <main className="container max-w-5xl lg:max-w-6xl px-4 sm:px-6 lg:px-8 mx-auto py-10 sm:py-16">
         <article>
           {/* Header Metadata Section */}
-          <header className="mb-10 text-center max-w-2xl mx-auto">
+          <header className="mb-12 text-center max-w-3xl lg:max-w-4xl mx-auto">
             <div className="flex items-center justify-center gap-2 mb-4">
               <span className="bg-[#E4F953] text-[#040706] font-bold text-[10px] uppercase tracking-wider px-3.5 py-1.5 rounded-xl shadow-xs inline-block">
                 {(story.category || "Fiction").toUpperCase()}
               </span>
             </div>
 
-            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-gray-950 tracking-tight leading-[1.2] mb-6">
+            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-gray-950 tracking-tight text-balance leading-[1.2] mb-6">
               {story.title}
             </h1>
 
@@ -641,27 +645,68 @@ export default function WorkDetailPage() {
             </div>
           </header>
 
-          {/* Featured Cover Image */}
-          {story.coverImageUrl && (
-            <div className="relative w-full max-w-3xl mx-auto aspect-[16/9] rounded-[32px] overflow-hidden mb-12 bg-gray-100 border border-gray-200 shadow-md">
-              <Image
-                src={story.coverImageUrl}
+          {/* Featured Video Embed or Cover Image */}
+          {(story.submissionType?.toUpperCase() === "VIDEO" || story.category?.toLowerCase() === "video") && story.mediaUrl ? (
+            <div className="w-full max-w-4xl lg:max-w-5xl mx-auto aspect-video rounded-[32px] overflow-hidden mb-12 bg-black shadow-lg">
+              {(() => {
+                const ytMatch = story.mediaUrl.match(
+                  /(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/
+                );
+                if (ytMatch && ytMatch[1]) {
+                  return (
+                    <iframe
+                      src={`https://www.youtube-nocookie.com/embed/${ytMatch[1]}`}
+                      title={story.title}
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                      className="w-full h-full border-0"
+                    />
+                  );
+                }
+                const vimeoMatch = story.mediaUrl.match(/vimeo\.com\/(?:video\/)?(\d+)/);
+                if (vimeoMatch && vimeoMatch[1]) {
+                  return (
+                    <iframe
+                      src={`https://player.vimeo.com/video/${vimeoMatch[1]}`}
+                      title={story.title}
+                      allow="autoplay; fullscreen; picture-in-picture"
+                      allowFullScreen
+                      className="w-full h-full border-0"
+                    />
+                  );
+                }
+                return (
+                  <div className="w-full h-full flex flex-col items-center justify-center p-8 text-white gap-3">
+                    <Play className="w-12 h-12 text-[#E4F953]" />
+                    <a
+                      href={story.mediaUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline text-sm font-semibold hover:text-[#E4F953]"
+                    >
+                      Watch Video on External Source
+                    </a>
+                  </div>
+                );
+              })()}
+            </div>
+          ) : story.submissionType === "PAINTING" && (story.mediaUrl || story.coverImageUrl) ? (
+            <div className="relative w-full max-w-4xl lg:max-w-5xl mx-auto rounded-[32px] overflow-hidden mb-12 bg-gray-100 border border-gray-200 shadow-md">
+              <img
+                src={formatAssetUrl(story.mediaUrl || story.coverImageUrl || "")}
                 alt={story.title}
-                fill
-                priority
-                unoptimized
-                className="object-cover"
+                className="w-full h-auto max-h-[75vh] object-contain mx-auto"
               />
             </div>
-          )}
+          ) : null}
 
           {/* Narrative Body Text */}
-          <div ref={storyContentRef} className="max-w-2xl mx-auto font-serif">
+          <div ref={storyContentRef} className="max-w-3xl lg:max-w-4xl mx-auto">
             {renderStoryBody(story.content)}
           </div>
 
           {/* Social Engagement Floating Pill Bar */}
-          <div className="max-w-2xl mx-auto mt-12 pt-8 border-t border-gray-200">
+          <div className="max-w-3xl lg:max-w-4xl mx-auto mt-12 pt-8 border-t border-gray-200">
             <div className="flex items-center justify-between bg-white border border-gray-200 rounded-2xl p-4 shadow-xs">
               <div className="flex items-center gap-3">
                 {/* Like Button */}
@@ -716,7 +761,7 @@ export default function WorkDetailPage() {
 
           {/* Author Card Footer */}
           {story.authorBio && (
-            <div className="max-w-2xl mx-auto mt-10 bg-white border border-gray-200 rounded-3xl p-6 sm:p-8 flex items-start gap-4 shadow-xs">
+            <div className="max-w-3xl lg:max-w-4xl mx-auto mt-10 bg-white border border-gray-200 rounded-3xl p-6 sm:p-8 flex items-start gap-4 shadow-xs">
               <div className="w-14 h-14 rounded-full bg-gray-200 overflow-hidden relative shadow-xs shrink-0">
                 {story.authorAvatarUrl ? (
                   <Image
@@ -740,7 +785,7 @@ export default function WorkDetailPage() {
           )}
 
           {/* Reader Discussion / Comments Section */}
-          <section id="comments-section" className="max-w-2xl mx-auto mt-14 pt-8 border-t border-gray-200">
+          <section id="comments-section" className="max-w-3xl lg:max-w-4xl mx-auto mt-14 pt-8 border-t border-gray-200">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-bold text-gray-950 flex items-center gap-2">
                 <MessageSquare className="w-5 h-5 text-gray-700" />
@@ -897,47 +942,84 @@ export default function WorkDetailPage() {
               }}
               className="w-full !pb-4 overflow-visible"
             >
-              {relatedStories.map((otherStory) => (
-                <SwiperSlide key={otherStory.id} className="h-auto">
-                  <Link
-                    href={`/works/${otherStory.slug || otherStory.id}`}
-                    className="flex flex-col h-full bg-white border border-gray-200 rounded-2xl p-4 hover:shadow-md transition-all duration-300 group/card cursor-pointer shadow-xs"
-                  >
-                    <div className="relative w-full aspect-[16/10] rounded-xl overflow-hidden bg-gray-100 mb-3 shadow-xs">
-                      <Image
-                        src={otherStory.coverImageUrl || "/images/stories/ramachi.jpg"}
-                        alt={otherStory.title}
-                        fill
-                        unoptimized
-                        className="object-cover group-hover/card:scale-105 transition-transform duration-500"
-                      />
-                      <div className="absolute top-2 left-2 z-10">
-                        <span className="bg-[#E4F953] text-[#040706] font-bold text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-lg shadow-xs">
-                          {(otherStory.category || "Fiction").toUpperCase()}
-                        </span>
-                      </div>
-                    </div>
+              {relatedStories.map((otherStory) => {
+                const isVideo =
+                  otherStory.submissionType?.toUpperCase() === "VIDEO" ||
+                  otherStory.category?.toLowerCase() === "video";
+                const isPainting =
+                  otherStory.submissionType?.toUpperCase() === "PAINTING" ||
+                  otherStory.category?.toLowerCase() === "painting" ||
+                  otherStory.category?.toLowerCase() === "art";
 
-                    <div className="flex-1 flex flex-col justify-between space-y-3">
-                      <div>
-                        <h4 className="text-sm sm:text-base font-bold text-gray-950 tracking-tight leading-snug line-clamp-2 group-hover/card:text-gray-700 transition-colors">
-                          {otherStory.title}
-                        </h4>
-                        <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
-                          <User className="w-3 h-3 text-gray-400 shrink-0" />
-                          <span className="truncate">By {otherStory.authorName || otherStory.authorEmail || "Unknown Author"}</span>
-                        </p>
+                let imageSource = otherStory.coverImageUrl || (isPainting ? otherStory.mediaUrl : null);
+                if (!imageSource && isVideo && otherStory.mediaUrl) {
+                  const ytMatch = otherStory.mediaUrl.match(
+                    /(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/
+                  );
+                  if (ytMatch && ytMatch[1]) {
+                    imageSource = `https://img.youtube.com/vi/${ytMatch[1]}/hqdefault.jpg`;
+                  }
+                }
+                if (!imageSource) {
+                  imageSource = otherStory.mediaUrl || "/images/stories/ramachi.jpg";
+                }
+                if (imageSource && imageSource.startsWith("/")) {
+                  imageSource = formatAssetUrl(imageSource);
+                }
+
+                return (
+                  <SwiperSlide key={otherStory.id} className="h-auto">
+                    <Link
+                      href={`/works/${otherStory.slug || otherStory.id}`}
+                      className="flex flex-col h-full bg-white border border-gray-200 rounded-2xl p-4 hover:shadow-md transition-all duration-300 group/card cursor-pointer shadow-xs"
+                    >
+                      <div className="relative w-full aspect-[16/10] rounded-xl overflow-hidden bg-gray-100 mb-3 shadow-xs">
+                        <Image
+                          src={imageSource}
+                          alt={otherStory.title}
+                          fill
+                          unoptimized
+                          className="object-cover group-hover/card:scale-105 transition-transform duration-500"
+                        />
+
+                        <div className="absolute top-2 left-2 z-10">
+                          <span className="bg-[#E4F953] text-[#040706] font-bold text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-lg shadow-xs">
+                            {(otherStory.category || "Story").toUpperCase()}
+                          </span>
+                        </div>
+
+                        {/* Video play indicator */}
+                        {isVideo && (
+                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                            <div className="w-10 h-10 rounded-full bg-white/75 backdrop-blur-xs flex items-center justify-center shadow-md group-hover/card:scale-110 transition-transform">
+                              <Play className="w-4 h-4 fill-current ml-0.5 text-gray-900" />
+                            </div>
+                          </div>
+                        )}
                       </div>
 
-                      <div className="pt-2 border-t border-gray-100 flex items-center justify-end text-xs">
-                        <span className="font-bold text-[11px] text-gray-900 group-hover/card:text-black flex items-center gap-1">
-                          Explore Work <ArrowRight className="w-3 h-3 transition-transform group-hover/card:translate-x-1" />
-                        </span>
+                      <div className="flex-1 flex flex-col justify-between space-y-3">
+                        <div>
+                          <h4 className="text-sm sm:text-base font-bold text-gray-950 tracking-tight leading-snug line-clamp-2 group-hover/card:text-gray-700 transition-colors">
+                            {otherStory.title}
+                          </h4>
+                          <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
+                            <User className="w-3 h-3 text-gray-400 shrink-0" />
+                            <span className="truncate">By {otherStory.authorName || otherStory.authorEmail || "Unknown Author"}</span>
+                          </p>
+                        </div>
+
+                        <div className="pt-2 border-t border-gray-100 flex items-center justify-end text-xs">
+                          <span className="font-bold text-[11px] text-gray-900 group-hover/card:text-black flex items-center gap-1">
+                            {isVideo ? "Watch Video" : isPainting ? "View Artwork" : "Explore Work"}
+                            <ArrowRight className="w-3 h-3 transition-transform group-hover/card:translate-x-1" />
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                  </Link>
-                </SwiperSlide>
-              ))}
+                    </Link>
+                  </SwiperSlide>
+                );
+              })}
             </Swiper>
           </div>
         </section>

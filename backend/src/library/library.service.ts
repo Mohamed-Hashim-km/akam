@@ -9,6 +9,8 @@ export interface LibraryStoryItem {
   slug: string;
   coverImageUrl: string | null;
   category: string | null;
+  submissionType?: string;
+  mediaUrl?: string | null;
   authorName: string | null;
   authorEmail: string;
   authorAvatarUrl: string | null;
@@ -58,6 +60,7 @@ export class LibraryService {
     const history = await this.prisma.query<LibraryStoryItem>(
       `SELECT
          rp.id, rp."storyId", s.title, s.slug, s."coverImageUrl", s.category,
+         s."submissionType", s."mediaUrl",
          rp."progressPercent", rp."lastScrollPosition", rp."isCompleted", rp."lastReadAt",
          u.name AS "authorName", u.email AS "authorEmail", u."avatarUrl" AS "authorAvatarUrl"
        FROM reading_progress rp
@@ -72,6 +75,7 @@ export class LibraryService {
     const bookmarked = await this.prisma.query<LibraryStoryItem>(
       `SELECT
          b.id, b."storyId", s.title, s.slug, s."coverImageUrl", s.category,
+         s."submissionType", s."mediaUrl",
          b."createdAt" AS "savedAt",
          u.name AS "authorName", u.email AS "authorEmail", u."avatarUrl" AS "authorAvatarUrl"
        FROM story_bookmark b
@@ -86,6 +90,7 @@ export class LibraryService {
     const liked = await this.prisma.query<LibraryStoryItem>(
       `SELECT
          l.id, l."storyId", s.title, s.slug, s."coverImageUrl", s.category,
+         s."submissionType", s."mediaUrl",
          l."createdAt" AS "likedAt",
          u.name AS "authorName", u.email AS "authorEmail", u."avatarUrl" AS "authorAvatarUrl"
        FROM story_like l
@@ -105,6 +110,139 @@ export class LibraryService {
       liked,
       completed,
       history,
+    };
+  }
+
+  async getUserLibraryPaginated(
+    userId: string,
+    tab: string = 'inProgress',
+    page: number = 1,
+    limit: number = 9,
+  ) {
+    const validTab = ['inProgress', 'bookmarked', 'liked', 'completed'].includes(tab)
+      ? tab
+      : 'inProgress';
+
+    const offset = (page - 1) * limit;
+
+    // 1. Get counts for all tabs concurrently
+    const [inProgressCountRow, bookmarkedCountRow, likedCountRow, completedCountRow] = await Promise.all([
+      this.prisma.queryOne<{ count: string }>(
+        `SELECT COUNT(*) AS count
+         FROM reading_progress rp
+         JOIN story s ON s.id = rp."storyId"
+         WHERE rp."userId" = $1 AND (rp."isCompleted" = false AND COALESCE(rp."progressPercent", 0) < 95)`,
+        [userId],
+      ),
+      this.prisma.queryOne<{ count: string }>(
+        `SELECT COUNT(*) AS count
+         FROM story_bookmark b
+         JOIN story s ON s.id = b."storyId"
+         WHERE b."userId" = $1`,
+        [userId],
+      ),
+      this.prisma.queryOne<{ count: string }>(
+        `SELECT COUNT(*) AS count
+         FROM story_like l
+         JOIN story s ON s.id = l."storyId"
+         WHERE l."userId" = $1`,
+        [userId],
+      ),
+      this.prisma.queryOne<{ count: string }>(
+        `SELECT COUNT(*) AS count
+         FROM reading_progress rp
+         JOIN story s ON s.id = rp."storyId"
+         WHERE rp."userId" = $1 AND (rp."isCompleted" = true OR COALESCE(rp."progressPercent", 0) >= 95)`,
+        [userId],
+      ),
+    ]);
+
+    const counts = {
+      inProgress: parseInt(inProgressCountRow?.count || '0', 10),
+      bookmarked: parseInt(bookmarkedCountRow?.count || '0', 10),
+      liked: parseInt(likedCountRow?.count || '0', 10),
+      completed: parseInt(completedCountRow?.count || '0', 10),
+    };
+
+    // 2. Fetch paginated items for the requested tab
+    let items: LibraryStoryItem[] = [];
+
+    if (validTab === 'bookmarked') {
+      items = await this.prisma.query<LibraryStoryItem>(
+        `SELECT
+           b.id, b."storyId", s.title, s.slug, s."coverImageUrl", s.category,
+           s."submissionType", s."mediaUrl",
+           b."createdAt" AS "savedAt",
+           u.name AS "authorName", u.email AS "authorEmail", u."avatarUrl" AS "authorAvatarUrl"
+         FROM story_bookmark b
+         JOIN story s ON s.id = b."storyId"
+         JOIN "user" u ON u.id = s."authorId"
+         WHERE b."userId" = $1
+         ORDER BY b."createdAt" DESC
+         LIMIT $2 OFFSET $3`,
+        [userId, limit, offset],
+      );
+    } else if (validTab === 'liked') {
+      items = await this.prisma.query<LibraryStoryItem>(
+        `SELECT
+           l.id, l."storyId", s.title, s.slug, s."coverImageUrl", s.category,
+           s."submissionType", s."mediaUrl",
+           l."createdAt" AS "likedAt",
+           u.name AS "authorName", u.email AS "authorEmail", u."avatarUrl" AS "authorAvatarUrl"
+         FROM story_like l
+         JOIN story s ON s.id = l."storyId"
+         JOIN "user" u ON u.id = s."authorId"
+         WHERE l."userId" = $1
+         ORDER BY l."createdAt" DESC
+         LIMIT $2 OFFSET $3`,
+        [userId, limit, offset],
+      );
+    } else if (validTab === 'completed') {
+      items = await this.prisma.query<LibraryStoryItem>(
+        `SELECT
+           rp.id, rp."storyId", s.title, s.slug, s."coverImageUrl", s.category,
+           s."submissionType", s."mediaUrl",
+           rp."progressPercent", rp."lastScrollPosition", rp."isCompleted", rp."lastReadAt",
+           u.name AS "authorName", u.email AS "authorEmail", u."avatarUrl" AS "authorAvatarUrl"
+         FROM reading_progress rp
+         JOIN story s ON s.id = rp."storyId"
+         JOIN "user" u ON u.id = s."authorId"
+         WHERE rp."userId" = $1 AND (rp."isCompleted" = true OR COALESCE(rp."progressPercent", 0) >= 95)
+         ORDER BY rp."lastReadAt" DESC
+         LIMIT $2 OFFSET $3`,
+        [userId, limit, offset],
+      );
+    } else {
+      // inProgress
+      items = await this.prisma.query<LibraryStoryItem>(
+        `SELECT
+           rp.id, rp."storyId", s.title, s.slug, s."coverImageUrl", s.category,
+           s."submissionType", s."mediaUrl",
+           rp."progressPercent", rp."lastScrollPosition", rp."isCompleted", rp."lastReadAt",
+           u.name AS "authorName", u.email AS "authorEmail", u."avatarUrl" AS "authorAvatarUrl"
+         FROM reading_progress rp
+         JOIN story s ON s.id = rp."storyId"
+         JOIN "user" u ON u.id = s."authorId"
+         WHERE rp."userId" = $1 AND (rp."isCompleted" = false AND COALESCE(rp."progressPercent", 0) < 95)
+         ORDER BY rp."lastReadAt" DESC
+         LIMIT $2 OFFSET $3`,
+        [userId, limit, offset],
+      );
+    }
+
+    const total = counts[validTab as keyof typeof counts] || 0;
+    const totalPages = Math.ceil(total / limit) || 1;
+
+    return {
+      items,
+      counts,
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages,
+        hasMore: page < totalPages,
+      },
     };
   }
 }

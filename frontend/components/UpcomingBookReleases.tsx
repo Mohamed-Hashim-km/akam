@@ -125,7 +125,7 @@ export const UpcomingBookReleases: React.FC<UpcomingBookReleasesProps> = ({
     <section className="relative w-full bg-[#EECAA6] py-14 sm:py-20 lg:py-24 font-poppins overflow-hidden">
       <div className="container px-4 sm:px-6 lg:px-8 mx-auto relative z-10">
         {/* Section Header */}
-        <div className="flex flex-row items-center justify-between gap-4 mb-8 sm:mb-12">
+        <div className="flex flex-col md:flex-row items-center justify-between gap-4 mb-8 sm:mb-12">
           <h2 className="text-3xl sm:text-4xl lg:text-5xl font-medium text-dark-text tracking-tight">
             {title}
           </h2>

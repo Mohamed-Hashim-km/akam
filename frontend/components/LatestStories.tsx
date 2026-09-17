@@ -3,11 +3,11 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { ArrowRight, ChevronLeft, ChevronRight, BookOpen, Play } from "lucide-react";
+import { ArrowRight, ChevronLeft, ChevronRight, BookOpen, Play, Video } from "lucide-react";
 import { Swiper, SwiperSlide } from "swiper/react";
 import { Navigation } from "swiper/modules";
 import type { Swiper as SwiperClass } from "swiper";
-import { API_BASE_URL, apiFetch } from "@/lib/config";
+import { API_BASE_URL, apiFetch, formatAssetUrl } from "@/lib/config";
 
 // Swiper CSS imports
 import "swiper/css";
@@ -25,6 +25,8 @@ export interface Story {
   imageSrc: string;
   href?: string;
   contentType?: string; // "STORY" | "VIDEO" | "POEM" | etc.
+  submissionType?: string;
+  mediaUrl?: string | null;
 }
 
 export interface LatestStoriesProps {
@@ -34,17 +36,19 @@ export interface LatestStoriesProps {
 }
 
 const CATEGORY_BADGE_MAP: Record<string, { bg: string; text: string }> = {
-  FICTION:      { bg: "bg-amber-400",   text: "text-amber-900" },
-  "NON-FICTION":{ bg: "bg-sky-500",     text: "text-white" },
+  FICTION:      { bg: "bg-[#DF7E26]",   text: "text-white" },
+  "NON-FICTION":{ bg: "bg-[#38A9E4]",   text: "text-white" },
   POETRY:       { bg: "bg-purple-500",  text: "text-white" },
   CULTURE:      { bg: "bg-rose-500",    text: "text-white" },
   TECHNOLOGY:   { bg: "bg-emerald-500", text: "text-white" },
-  OPINION:      { bg: "bg-amber-500",   text: "text-white" },
+  OPINION:      { bg: "bg-[#DF7E26]",   text: "text-white" },
   LITERATURE:   { bg: "bg-blue-600",    text: "text-white" },
-  STORY:        { bg: "bg-amber-400",   text: "text-amber-900" },
-  VIDEO:        { bg: "bg-teal-500",    text: "text-white" },
+  STORY:        { bg: "bg-[#DF7E26]",   text: "text-white" },
+  BLOG:         { bg: "bg-[#38A9E4]",   text: "text-white" },
+  VIDEO:        { bg: "bg-[#38A9E4]",   text: "text-white" },
+  PAINTING:     { bg: "bg-purple-600",  text: "text-white" },
   POEM:         { bg: "bg-purple-500",  text: "text-white" },
-  GENERAL:      { bg: "bg-gray-500",    text: "text-white" },
+  GENERAL:      { bg: "bg-[#DF7E26]",   text: "text-white" },
 };
 
 function getCategoryBadge(cat?: string) {
@@ -54,7 +58,12 @@ function getCategoryBadge(cat?: string) {
 }
 
 function normalizeStory(s: any): Story {
-  const cat = (s.category || s.contentType || "Story").toUpperCase();
+  const isVideo =
+    s.submissionType === "VIDEO" ||
+    s.contentType === "VIDEO" ||
+    (typeof s.category === "string" && s.category.toUpperCase() === "VIDEO");
+
+  const cat = (s.category || s.contentType || (isVideo ? "Video" : "Story")).toUpperCase();
   const rawAuthor =
     s.authorName || s.authorEmail || s.author || "Unknown Author";
   const author =
@@ -71,6 +80,22 @@ function normalizeStory(s: any): Story {
     s.shortDescription ||
     "";
 
+  let img = s.imageSrc || s.coverImageUrl;
+  if (!img && isVideo && s.mediaUrl) {
+    const ytMatch = s.mediaUrl.match(
+      /(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/
+    );
+    if (ytMatch && ytMatch[1]) {
+      img = `https://img.youtube.com/vi/${ytMatch[1]}/hqdefault.jpg`;
+    }
+  }
+  if (!img) {
+    img = s.mediaUrl || "/images/stories/ramachi.jpg";
+  }
+  if (img && typeof img === "string" && img.startsWith("/")) {
+    img = formatAssetUrl(img);
+  }
+
   return {
     id: s.id,
     category: cat,
@@ -79,9 +104,11 @@ function normalizeStory(s: any): Story {
     title: s.title,
     description: rawDesc,
     author,
-    imageSrc: s.imageSrc || s.coverImageUrl || "/images/stories/ramachi.jpg",
+    imageSrc: img,
     href: s.href || `/works/${s.slug || s.id}`,
-    contentType: (s.contentType || cat).toUpperCase(),
+    contentType: isVideo ? "VIDEO" : (s.contentType || s.submissionType || cat).toUpperCase(),
+    submissionType: s.submissionType,
+    mediaUrl: s.mediaUrl,
   };
 }
 
@@ -214,14 +241,14 @@ export const LatestStories: React.FC<LatestStoriesProps> = ({
             <Swiper
               modules={[Navigation]}
               onSwiper={setSwiperInstance}
-              spaceBetween={20}
+              spaceBetween={24}
               slidesPerView={1.15}
               breakpoints={{
                 480:  { slidesPerView: 1.6,  spaceBetween: 20 },
-                640:  { slidesPerView: 2.15, spaceBetween: 22 },
+                640:  { slidesPerView: 2.2,  spaceBetween: 24 },
                 768:  { slidesPerView: 2.8,  spaceBetween: 24 },
-                1024: { slidesPerView: 3.5,  spaceBetween: 28 },
-                1280: { slidesPerView: 4.1,  spaceBetween: 28 },
+                1024: { slidesPerView: 4,    spaceBetween: 28 },
+                1280: { slidesPerView: 4,    spaceBetween: 32 },
               }}
               className="latest-stories-swiper w-full !pb-4 !overflow-visible"
             >
@@ -229,6 +256,7 @@ export const LatestStories: React.FC<LatestStoriesProps> = ({
                 const badge = getCategoryBadge(story.category);
                 const isVideo =
                   story.contentType === "VIDEO" ||
+                  story.submissionType === "VIDEO" ||
                   story.category === "VIDEO";
 
                 return (
@@ -238,51 +266,46 @@ export const LatestStories: React.FC<LatestStoriesProps> = ({
                       className="flex flex-col h-full group/card cursor-pointer"
                     >
                       {/* ── Image ── */}
-                      <div className="relative w-full aspect-[4/5] rounded-2xl overflow-hidden bg-gray-100 mb-3 sm:mb-4 shadow-xs">
+                      <div className="relative w-full aspect-square rounded-[22px] overflow-hidden bg-gray-100 mb-3 sm:mb-4 shadow-xs">
                         <Image
                           src={story.imageSrc}
                           alt={story.title}
                           fill
                           priority={index < 2}
                           unoptimized
-                          sizes="(max-width: 640px) 85vw, (max-width: 1024px) 40vw, 28vw"
+                          sizes="(max-width: 640px) 85vw, (max-width: 1024px) 40vw, 33vw"
                           className="object-cover group-hover/card:scale-[1.04] transition-transform duration-500 ease-out"
                         />
 
-                        {/* Gradient overlay for text contrast */}
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/25 via-transparent to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-300" />
-
                         {/* Video play indicator */}
                         {isVideo && (
-                          <div className="absolute inset-0 flex items-center justify-center">
-                            <div className="w-12 h-12 rounded-full bg-white/90 flex items-center justify-center shadow-md">
-                              <Play className="w-5 h-5 text-gray-900 ml-0.5" fill="currentColor" />
+                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                            <div className="w-12 h-12 rounded-full bg-white/75 backdrop-blur-xs flex items-center justify-center shadow-md group-hover/card:scale-110 transition-transform">
+                              <Play className="w-5 h-5 fill-current ml-0.5 text-gray-900" />
                             </div>
                           </div>
                         )}
-
-                        {/* Category badge – bottom right */}
-                        <div className="absolute bottom-3 right-3 z-10">
-                          <span
-                            className={`${badge.bg} ${badge.text} font-bold text-[10px] sm:text-[11px] tracking-widest uppercase px-2.5 py-1 rounded-lg shadow-xs`}
-                          >
-                            {story.category}
-                          </span>
-                        </div>
                       </div>
 
-                      {/* ── Text Content ── */}
-                      <h3 className="text-base sm:text-lg font-semibold text-gray-950 tracking-tight leading-snug mb-1.5 group-hover/card:text-gray-700 transition-colors line-clamp-2">
-                        {story.title}
-                      </h3>
+                      {/* ── Title & Category Badge Row ── */}
+                      <div className="flex items-center justify-between gap-2 mb-1.5">
+                        <h3 className="text-base sm:text-lg font-bold text-gray-950 tracking-tight leading-snug group-hover/card:text-gray-700 transition-colors line-clamp-1">
+                          {story.title}
+                        </h3>
+                        <span
+                          className={`${badge.bg} ${badge.text} font-bold text-[10px] sm:text-[11px] tracking-wider uppercase px-2.5 py-0.5 rounded-lg shrink-0 shadow-2xs`}
+                        >
+                          {story.category}
+                        </span>
+                      </div>
 
                       {story.description && (
-                        <p className="text-xs sm:text-sm text-gray-500 leading-relaxed line-clamp-2 mb-2">
+                        <p className="text-xs sm:text-[13px] text-gray-500 leading-relaxed line-clamp-2 mb-2">
                           {story.description}
                         </p>
                       )}
 
-                      <p className="text-xs text-gray-400 font-medium mt-auto pt-1">
+                      <p className="text-xs text-gray-700 font-medium mt-auto pt-0.5">
                         {story.author}
                       </p>
                     </Link>

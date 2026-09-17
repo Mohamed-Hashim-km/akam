@@ -61,24 +61,11 @@ export const AboutKairaliBooks: React.FC<AboutKairaliBooksProps> = ({
           {/* Right Column: Kairali Books Logo Graphic */}
           <div className="lg:col-span-5 flex items-center justify-center p-6 lg:p-10">
             {logoSrc ? (
-              <div className="relative w-full max-w-[340px] aspect-[4/3] flex items-center justify-center">
-                <Image
-                  src={logoSrc}
-                  alt="Kairali Books Logo"
-                  width={340}
-                  height={220}
-                  className="object-contain max-h-[220px] w-auto"
-                  onError={(e) => {
-                    // Fallback SVG if image not uploaded yet
-                    const target = e.currentTarget;
-                    target.style.display = "none";
-                    const fallback = target.parentElement?.querySelector(".logo-fallback");
-                    if (fallback) fallback.classList.remove("hidden");
-                  }}
-                />
+              <div className="relative w-full   flex items-center justify-center">
+                
                 
                 {/* SVG Logo Graphic Fallback */}
-                <div className="logo-fallback hidden flex items-center justify-center gap-6">
+                <div className="logo-fallback  flex items-center justify-center gap-6">
                 <svg width="280" height="100" viewBox="0 0 524 188" fill="none" xmlns="http://www.w3.org/2000/svg">
 <g clip-path="url(#clip0_127_1357)">
 <path d="M514.387 76.1905V16.9224H524.001V76.164H514.387V76.1905ZM475.267 76.1905V16.9224H484.881V67.5571H506.441V76.164H475.294L475.267 76.1905ZM459.534 76.1905L452.833 60.9365H429.34L422.454 76.1905H412.336L441.021 14.6184L469.678 76.1905H459.508H459.534ZM432.916 52.8858H449.443L443.378 39.3796C443.033 38.5322 442.663 37.5259 442.292 36.4136C441.921 35.3013 441.524 34.0566 441.153 32.6795C440.835 33.9772 440.491 35.1689 440.12 36.3077C439.749 37.4199 439.378 38.4528 439.008 39.4061L432.942 52.9123L432.916 52.8858ZM383.016 49.6549V76.164H373.984V16.9224H387.413C391.359 16.9224 394.405 17.1872 396.577 17.6904C398.749 18.1936 400.603 19.041 402.139 20.2327C403.967 21.6628 405.397 23.5166 406.403 25.7941C407.41 28.0716 407.887 30.5345 407.887 33.2357C407.887 37.9761 406.748 41.6836 404.443 44.3849C402.139 47.0596 398.775 48.675 394.299 49.2312L414.693 76.1905H403.834L384.102 49.6814H383.016V49.6549ZM383.599 42.2133H385.347C390.432 42.2133 393.822 41.6307 395.491 40.4389C397.16 39.2472 398.007 37.1551 398.007 34.1361C398.007 30.8787 397.107 28.5747 395.306 27.2506C393.505 25.9 390.194 25.2379 385.32 25.2379H383.572V42.2133H383.599ZM350.518 76.1905V16.9224H360.132V76.164H350.518V76.1905ZM334.626 76.1905L327.925 60.9365H304.432L297.546 76.1905H287.428L316.112 14.6184L344.77 76.1905H334.6H334.626ZM307.981 52.8858H324.508L318.443 39.3796C318.099 38.5322 317.728 37.5259 317.357 36.4136C316.986 35.3013 316.589 34.0566 316.218 32.6795C315.9 33.9772 315.556 35.1689 315.185 36.3077C314.815 37.4199 314.444 38.4528 314.073 39.4061L308.008 52.9123L307.981 52.8858ZM244.07 76.1905V16.9224H253.685V41.4453L274.98 16.9224H286.766L263.273 43.2726L289.547 76.164H277.125L253.685 45.8944V76.164H244.07V76.1905Z" fill="black"/>

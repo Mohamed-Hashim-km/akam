@@ -108,7 +108,7 @@ export class EngagementController {
     return this.engagementService.createComment(user.id, storyId, dto.content);
   }
 
-  @Delete('comments/:commentId')
+  @Delete(['comments/:commentId', 'stories/comments/:commentId'])
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)

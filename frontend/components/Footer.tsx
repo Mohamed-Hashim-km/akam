@@ -16,6 +16,8 @@ export interface FooterProps {
   mediaHref?: string;
   aboutHref?: string;
   contactHref?: string;
+  termsHref?: string;
+  privacyHref?: string;
   whatsappHref?: string;
   facebookHref?: string;
   instagramHref?: string;
@@ -32,6 +34,8 @@ export const Footer: React.FC<FooterProps> = ({
   mediaHref = "/media",
   aboutHref = "/about",
   contactHref = "/contact",
+  termsHref = "/terms",
+  privacyHref = "/privacy-policy",
   whatsappHref = "https://wa.me/918129811311",
   facebookHref = "https://www.facebook.com/people/AKAM/61577932417864",
   instagramHref = "https://www.instagram.com/akam_digital?stkn=c3JxNmhyZXkwenlr",
@@ -179,6 +183,12 @@ export const Footer: React.FC<FooterProps> = ({
             </Link>
             <Link href={contactHref} className="hover:text-white hover:underline transition-colors">
               Contact Us
+            </Link>
+            <Link href={termsHref} className="hover:text-white hover:underline transition-colors">
+              Terms of Service
+            </Link>
+            <Link href={privacyHref} className="hover:text-white hover:underline transition-colors">
+              Privacy Policy
             </Link>
           </div>
         </div>

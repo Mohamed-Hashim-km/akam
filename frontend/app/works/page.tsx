@@ -18,17 +18,23 @@ import {
   CheckCircle2,
   ChevronRight,
   Layers,
+  Play,
+  Video,
+  Palette,
 } from "lucide-react";
 import Button from "@/components/ui/Button";
-import { API_BASE_URL, apiFetch } from "@/lib/config";
+import { API_BASE_URL, apiFetch, formatAssetUrl } from "@/lib/config";
 
 interface Story {
   id: string;
   title: string;
   slug: string;
+  description?: string;
   content?: string;
   category?: string;
   coverImageUrl: string | null;
+  submissionType?: string;
+  mediaUrl?: string | null;
   status: string;
   authorId: string;
   authorName?: string | null;
@@ -391,48 +397,86 @@ function WorksCatalogContent() {
           ) : (
             <div>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                {stories.map((story) => (
-                  <Link
-                    key={story.id}
-                    href={`/works/${story.slug || story.id}`}
-                    className="flex flex-col bg-white border border-gray-200 rounded-2xl p-3.5 hover:shadow-md transition-all duration-300 group/card cursor-pointer shadow-xs"
-                  >
-                    {/* Story Cover */}
-                    <div className="relative w-full aspect-[16/10] rounded-xl overflow-hidden bg-gray-100 mb-3 shadow-xs">
-                      <Image
-                        src={story.coverImageUrl || "/images/stories/ramachi.jpg"}
-                        alt={story.title}
-                        fill
-                        unoptimized
-                        className="object-cover group-hover/card:scale-105 transition-transform duration-500"
-                      />
+                {stories.map((story) => {
+                  const isVideo =
+                    story.submissionType?.toUpperCase() === "VIDEO" ||
+                    story.category?.toLowerCase() === "video" ||
+                    (story as any).contentType?.toUpperCase() === "VIDEO";
+                  const isPainting =
+                    story.submissionType?.toUpperCase() === "PAINTING" ||
+                    story.category?.toLowerCase() === "painting" ||
+                    story.category?.toLowerCase() === "art";
 
-                      <div className="absolute top-2 left-2 z-10 flex gap-1.5 flex-wrap">
-                        <span className="bg-[#E4F953] text-[#040706] font-bold text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-lg shadow-xs">
-                          {(story.category || "Fiction").toUpperCase()}
-                        </span>
-                      </div>
-                    </div>
+                  let imageSource = story.coverImageUrl || (isPainting ? story.mediaUrl : null);
+                  if (!imageSource && isVideo && story.mediaUrl) {
+                    const ytMatch = story.mediaUrl.match(
+                      /(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/
+                    );
+                    if (ytMatch && ytMatch[1]) {
+                      imageSource = `https://img.youtube.com/vi/${ytMatch[1]}/hqdefault.jpg`;
+                    }
+                  }
+                  if (!imageSource) {
+                    imageSource = story.mediaUrl || "/images/stories/ramachi.jpg";
+                  }
+                  if (imageSource && imageSource.startsWith("/")) {
+                    imageSource = formatAssetUrl(imageSource);
+                  }
 
-                    <div className="flex-1 flex flex-col justify-between space-y-3">
-                      <div>
-                        <h3 className="text-sm font-bold text-gray-950 tracking-tight leading-snug line-clamp-2 group-hover/card:text-gray-700 transition-colors">
-                          {story.title}
-                        </h3>
-                        <p className="text-[11px] text-gray-500 mt-1 flex items-center gap-1">
-                          <User className="w-3 h-3 text-gray-400 shrink-0" />
-                          <span className="truncate">By {story.authorName || story.authorEmail || "Unknown Author"}</span>
-                        </p>
+                  return (
+                    <Link
+                      key={story.id}
+                      href={`/works/${story.slug || story.id}`}
+                      className="flex flex-col bg-white border border-gray-200 rounded-2xl p-3.5 hover:shadow-md transition-all duration-300 group/card cursor-pointer shadow-xs"
+                    >
+                      {/* Story / Work Cover */}
+                      <div className="relative w-full aspect-[16/10] rounded-xl overflow-hidden bg-gray-100 mb-3 shadow-xs">
+                        <Image
+                          src={imageSource}
+                          alt={story.title}
+                          fill
+                          unoptimized
+                          className="object-cover group-hover/card:scale-105 transition-transform duration-500"
+                        />
+
+                        {/* Category Badge */}
+                        <div className="absolute top-2 left-2 z-10">
+                          <span className="bg-[#E4F953] text-[#040706] font-bold text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-lg shadow-xs">
+                            {(story.category || "Story").toUpperCase()}
+                          </span>
+                        </div>
+
+                        {/* Video play indicator */}
+                        {isVideo && (
+                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                            <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-white/75 backdrop-blur-xs flex items-center justify-center shadow-md group-hover/card:scale-110 transition-transform">
+                              <Play className="w-4 h-4 sm:w-5 sm:h-5 fill-current ml-0.5 text-gray-900" />
+                            </div>
+                          </div>
+                        )}
                       </div>
 
-                      <div className="pt-2.5 border-t border-gray-100 flex items-center justify-end text-xs">
-                        <span className="font-bold text-[11px] text-gray-900 group-hover/card:text-black flex items-center gap-1">
-                          Explore Work <ArrowRight className="w-3 h-3 transition-transform group-hover/card:translate-x-1" />
-                        </span>
+                      <div className="flex-1 flex flex-col justify-between space-y-3">
+                        <div>
+                          <h3 className="text-sm font-bold text-gray-950 tracking-tight leading-snug line-clamp-2 group-hover/card:text-gray-700 transition-colors">
+                            {story.title}
+                          </h3>
+                          <p className="text-[11px] text-gray-500 mt-1 flex items-center gap-1">
+                            <User className="w-3 h-3 text-gray-400 shrink-0" />
+                            <span className="truncate">By {story.authorName || story.authorEmail || "Unknown Author"}</span>
+                          </p>
+                        </div>
+
+                        <div className="pt-2.5 border-t border-gray-100 flex items-center justify-end text-xs">
+                          <span className="font-bold text-[11px] text-gray-900 group-hover/card:text-black flex items-center gap-1">
+                            {isVideo ? "Watch Video" : isPainting ? "View Artwork" : "Explore Work"}
+                            <ArrowRight className="w-3 h-3 transition-transform group-hover/card:translate-x-1" />
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                  </Link>
-                ))}
+                    </Link>
+                  );
+                })}
               </div>
 
               {/* Sentinel div for Infinite Scroll */}

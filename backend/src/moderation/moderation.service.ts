@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service.js';
 import { CreateReportDto } from './dto/create-report.dto.js';
 import { UpdateReportStatusDto } from './dto/update-report-status.dto.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 
 export interface ReportRow {
   id: string;
@@ -22,7 +23,10 @@ export interface ReportRow {
 
 @Injectable()
 export class ModerationService implements OnModuleInit {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notificationsService: NotificationsService,
+  ) {}
 
   async onModuleInit() {
     try {
@@ -45,8 +49,8 @@ export class ModerationService implements OnModuleInit {
   }
 
   async createReport(reporterId: string, targetStoryId: string, dto: CreateReportDto) {
-    const story = await this.prisma.queryOne<{ id: string }>(
-      `SELECT id FROM story WHERE id = $1 OR slug = $1 LIMIT 1`,
+    const story = await this.prisma.queryOne<{ id: string; title: string }>(
+      `SELECT id, title FROM story WHERE id = $1 OR slug = $1 LIMIT 1`,
       [targetStoryId],
     );
     if (!story) throw new NotFoundException('Story not found');
@@ -58,12 +62,21 @@ export class ModerationService implements OnModuleInit {
       [story.id, reporterId, dto.reason, dto.details ?? null],
     );
 
+    try {
+      await this.notificationsService.notifyEditorsOfReport(story.title, dto.reason, story.id);
+    } catch (e) {
+      console.error('Error sending report notifications', e);
+    }
+
     return report!;
   }
 
   async createCommentReport(reporterId: string, commentId: string, dto: CreateReportDto) {
-    const comment = await this.prisma.queryOne<{ id: string; storyId: string }>(
-      `SELECT id, "storyId" FROM story_comment WHERE id = $1 LIMIT 1`,
+    const comment = await this.prisma.queryOne<{ id: string; storyId: string; storyTitle: string }>(
+      `SELECT c.id, c."storyId", s.title AS "storyTitle"
+       FROM story_comment c
+       LEFT JOIN story s ON s.id = c."storyId"
+       WHERE c.id = $1 LIMIT 1`,
       [commentId],
     );
     if (!comment) throw new NotFoundException('Comment not found');
@@ -74,6 +87,13 @@ export class ModerationService implements OnModuleInit {
        RETURNING id, "storyId", "commentId", "reporterId", reason, details, status, "createdAt"`,
       [comment.storyId, commentId, reporterId, dto.reason, dto.details ?? null],
     );
+
+    try {
+      const displayTitle = comment.storyTitle ? `Comment on "${comment.storyTitle}"` : 'A user comment';
+      await this.notificationsService.notifyEditorsOfReport(displayTitle, dto.reason, comment.storyId);
+    } catch (e) {
+      console.error('Error sending comment report notifications', e);
+    }
 
     return report!;
   }
@@ -158,8 +178,17 @@ export class ModerationService implements OnModuleInit {
   }
 
   async updateReportStatus(reportId: string, dto: UpdateReportStatusDto) {
-    const existing = await this.prisma.queryOne<{ id: string }>(
-      `SELECT id FROM story_report WHERE id = $1`,
+    const existing = await this.prisma.queryOne<{
+      id: string;
+      reporterId: string;
+      storyId: string | null;
+      commentId: string | null;
+      storyTitle: string | null;
+    }>(
+      `SELECT r.id, r."reporterId", r."storyId", r."commentId", s.title AS "storyTitle"
+       FROM story_report r
+       LEFT JOIN story s ON s.id = r."storyId"
+       WHERE r.id = $1`,
       [reportId],
     );
     if (!existing) throw new NotFoundException('Report not found');
@@ -169,7 +198,27 @@ export class ModerationService implements OnModuleInit {
       [dto.status, reportId],
     );
 
+    try {
+      const contentTitle = existing.storyTitle || 'the reported content';
+      const statusType: 'RESOLVED' | 'DISMISSED' = dto.status === 'DISMISSED' ? 'DISMISSED' : 'RESOLVED';
+      await this.notificationsService.notifyReporterOfStatus(
+        existing.reporterId,
+        contentTitle,
+        statusType,
+        existing.storyId ?? undefined,
+      );
+    } catch (e) {
+      console.error('Error sending report status notification', e);
+    }
+
     return { id: reportId, status: dto.status };
+  }
+
+  async getPendingCount(): Promise<{ count: number }> {
+    const row = await this.prisma.queryOne<{ count: string }>(
+      `SELECT COUNT(*) AS count FROM story_report WHERE status = 'PENDING'`,
+    );
+    return { count: parseInt(row?.count ?? '0', 10) };
   }
 
   async createContactInquiry(dto: { name: string; email: string; phone?: string; subject: string; message: string }) {

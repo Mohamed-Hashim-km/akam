@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import { Search, X, Bell, User, Menu, ChevronRight, CheckCheck, LogOut, Loader2, BookOpen, ArrowRight } from "lucide-react";
+import { Search, X, Bell, User, Menu, ChevronRight, CheckCheck, LogOut, Loader2, BookOpen, ArrowRight, Flag, AlertTriangle, CheckCircle2, ShieldAlert } from "lucide-react";
 import Button from "./ui/Button";
 import AuthModal from "./AuthModal";
 import { API_BASE_URL, apiFetch } from "@/lib/config";
@@ -245,6 +245,33 @@ export const Navbar: React.FC<NavbarProps> = ({
     }
   };
 
+  const handleNotificationClick = async (n: any) => {
+    if (!n.read && n.id && !n.id.startsWith("sample-")) {
+      await handleMarkRead(n.id);
+    }
+    setNotificationsOpen(false);
+
+    // If report notification or editorial alert
+    if (n.type === "CONTENT_REPORTED" || n.message?.includes("flagged for review") || n.message?.includes("reported")) {
+      if (user?.role === "EDITOR" || user?.role === "ADMIN") {
+        router.push("/editorial?tab=reports&page=1");
+        return;
+      }
+    }
+
+    // If story submission notification
+    if (n.type === "STORY_SUBMITTED" && (user?.role === "EDITOR" || user?.role === "ADMIN")) {
+      router.push("/editorial?tab=queue&page=1");
+      return;
+    }
+
+    // If related story is present and not removed
+    if (n.relatedStoryId && n.type !== "CONTENT_REMOVED") {
+      router.push(`/works/${n.relatedStoryId}`);
+      return;
+    }
+  };
+
   const getUserDisplayName = (u: any) => {
     if (!u) return "";
     if (u.name && u.name.trim().length > 0) {
@@ -307,10 +334,9 @@ export const Navbar: React.FC<NavbarProps> = ({
     { name: "About", href: "/about" },
   ];
 
-  // Commented out Library page link in navbar per user request
-  // if (user) {
-  //   navLinks.splice(1, 0, { name: "Library", href: "/library" });
-  // }
+  if (user) {
+    navLinks.splice(4, 0, { name: "Library", href: "/library" });
+  }
 
   if (user && ['EDITOR', 'ADMIN'].includes(user.role)) {
     navLinks.push({ name: "Editorial", href: "/editorial" });
@@ -795,6 +821,8 @@ export const Navbar: React.FC<NavbarProps> = ({
                   : [
                       {
                         id: "sample-1",
+                        type: "RECOMMENDATION",
+                        relatedStoryId: null,
                         message:
                           "Since you enjoyed 'Pranayadhwani', check out these 3 trending reads this week.",
                         read: false,
@@ -802,6 +830,8 @@ export const Navbar: React.FC<NavbarProps> = ({
                       },
                       {
                         id: "sample-2",
+                        type: "EDITORIAL_PICKS",
+                        relatedStoryId: null,
                         message:
                           "This Week's Editor's Picks are live! Featuring top stories, podcasts, and digital art",
                         read: true,
@@ -809,25 +839,70 @@ export const Navbar: React.FC<NavbarProps> = ({
                       },
                       {
                         id: "sample-3",
+                        type: "STUDIO_DRAFT",
+                        relatedStoryId: null,
                         message:
                           "You have an unfinished draft in your studio. Ready to finish and publish?",
                         read: true,
                         createdAt: new Date().toISOString(),
                       },
                     ]
-                ).map((n) => (
-                  <div
-                    key={n.id}
-                    onClick={() => !n.read && handleMarkRead(n.id)}
-                    className={`py-3.5 px-3 transition-colors cursor-pointer rounded-xl ${
-                      !n.read ? "bg-[#F4FBF7]" : "bg-white hover:bg-gray-50/50"
-                    }`}
-                  >
-                    <p className="text-xs sm:text-[13px] text-gray-800 leading-relaxed font-normal">
-                      {renderNotificationText(n.message)}
-                    </p>
-                  </div>
-                ))}
+                ).map((n) => {
+                  const isReportType = n.type === "CONTENT_REPORTED";
+                  const isRemovalType = n.type === "CONTENT_REMOVED";
+                  const isResolvedType = n.type === "REPORT_RESOLVED";
+                  const isDismissedType = n.type === "REPORT_DISMISSED";
+
+                  return (
+                    <div
+                      key={n.id}
+                      onClick={() => handleNotificationClick(n)}
+                      className={`py-3 px-3 transition-colors cursor-pointer rounded-xl ${
+                        !n.read
+                          ? isReportType
+                            ? "bg-rose-50/70 border border-rose-100 my-2"
+                            : isRemovalType
+                              ? "bg-amber-50/70 border border-amber-100 my-2"
+                              : "bg-[#F4FBF7] my-2 first:mt-0 last:mb-0 !border-none"
+                          : "bg-white hover:bg-gray-50/50"
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                        {isReportType && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-700">
+                            <Flag className="w-2.5 h-2.5" /> Moderation Flag
+                          </span>
+                        )}
+                        {isRemovalType && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800">
+                            <AlertTriangle className="w-2.5 h-2.5" /> Action Notice
+                          </span>
+                        )}
+                        {isResolvedType && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                            <CheckCircle2 className="w-2.5 h-2.5" /> Resolved
+                          </span>
+                        )}
+                        {isDismissedType && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-gray-100 text-gray-700">
+                            Reviewed
+                          </span>
+                        )}
+                        {n.createdAt && (
+                          <span className="text-[10px] text-gray-400 ml-auto">
+                            {new Date(n.createdAt).toLocaleDateString("en-US", {
+                              month: "short",
+                              day: "numeric",
+                            })}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs sm:text-[13px] text-gray-800 leading-relaxed font-normal">
+                        {renderNotificationText(n.message)}
+                      </p>
+                    </div>
+                  );
+                })}
 
                 {isLoadingNotifs && (
                   <div className="py-3 text-center text-xs text-gray-400 flex items-center justify-center gap-2">

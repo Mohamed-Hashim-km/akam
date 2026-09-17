@@ -10,10 +10,14 @@ export class CategoriesController {
   constructor(private readonly categoriesService: CategoriesService) {}
 
   @Get()
-  async findAll(@Query('page') page?: string, @Query('limit') limit?: string) {
+  async findAll(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('search') search?: string,
+  ) {
     const pageNum = page ? parseInt(page, 10) : undefined;
     const limitNum = limit ? parseInt(limit, 10) : undefined;
-    return this.categoriesService.findAll(pageNum, limitNum);
+    return this.categoriesService.findAll(pageNum, limitNum, search);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
