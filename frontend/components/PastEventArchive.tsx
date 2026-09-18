@@ -151,7 +151,9 @@ export const PastEventArchive: React.FC<PastEventArchiveProps> = ({
             const videoThumbnail = item.imageSrc ? getImageUrl(item.imageSrc) : getYouTubeThumbnail(item.videoUrl || "");
             const cardImages = Array.isArray(item.images) && item.images.length > 0
               ? item.images
-              : [getImageUrl(item.imageSrc) || "https://images.unsplash.com/photo-1511578314322-379afb476865?auto=format&fit=crop&q=80&w=800"];
+              : getImageUrl(item.imageSrc)
+                ? [getImageUrl(item.imageSrc)]
+                : [];
 
             return (
               <div
@@ -172,11 +174,6 @@ export const PastEventArchive: React.FC<PastEventArchiveProps> = ({
                         sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
                         className="object-cover group-hover:scale-105 transition-transform duration-500"
                         unoptimized
-                        onError={(e) => {
-                          const target = e.currentTarget as HTMLImageElement;
-                          target.srcset = "";
-                          target.src = "https://images.unsplash.com/photo-1511578314322-379afb476865?auto=format&fit=crop&q=80&w=800";
-                        }}
                       />
                       {/* Dark overlay */}
                       <div className="absolute inset-0 bg-black/25 group-hover/video:bg-black/40 transition-colors" />
@@ -212,7 +209,7 @@ export const PastEventArchive: React.FC<PastEventArchiveProps> = ({
                         </SwiperSlide>
                       ))}
                     </Swiper>
-                  ) : (
+                  ) : cardImages.length === 1 ? (
                     <Image
                       src={cardImages[0]}
                       alt={item.title}
@@ -220,13 +217,8 @@ export const PastEventArchive: React.FC<PastEventArchiveProps> = ({
                       sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
                       className="object-cover group-hover:scale-103 transition-transform duration-500"
                       unoptimized
-                      onError={(e) => {
-                        const target = e.currentTarget as HTMLImageElement;
-                        target.srcset = "";
-                        target.src = "https://images.unsplash.com/photo-1511578314322-379afb476865?auto=format&fit=crop&q=80&w=800";
-                      }}
                     />
-                  )}
+                  ) : null}
                 </div>
 
                 {/* Card Content with Padding */}
