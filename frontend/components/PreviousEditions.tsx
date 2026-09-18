@@ -29,33 +29,6 @@ export interface PreviousEditionsProps {
   title?: string;
 }
 
-const SAMPLE_EDITIONS: EditionItem[] = [
-  {
-    id: "sample-1",
-    title: "August 2025",
-    pdfUrl: "/uploads/pdfs/edition_1788754468993.pdf",
-    coverImage: "http://localhost:3000/uploads/inline-images/post-1789115092135_1789115092136.png",
-  },
-  {
-    id: "sample-2",
-    title: "May 2025",
-    pdfUrl: "/uploads/pdfs/edition_1788345988530.pdf",
-    coverImage: "https://akam-a701.onrender.com/uploads/inline-images/post-1789022831572_1789022831572.png",
-  },
-  {
-    id: "sample-3",
-    title: "Febraury 2025",
-    pdfUrl: "/uploads/pdfs/edition_1788754468993.pdf",
-    coverImage: "http://localhost:3000/uploads/inline-images/post-1789115092135_1789115092136.png",
-  },
-  {
-    id: "sample-4",
-    title: "December 2024",
-    pdfUrl: "/uploads/pdfs/edition_1788345988530.pdf",
-    coverImage: "https://akam-a701.onrender.com/uploads/inline-images/post-1789022831572_1789022831572.png",
-  },
-];
-
 export const PreviousEditions: React.FC<PreviousEditionsProps> = ({
   title = "Previous Editions",
 }) => {
@@ -103,7 +76,7 @@ export const PreviousEditions: React.FC<PreviousEditionsProps> = ({
           setEditions(items);
           setHasMore(more);
         } else {
-          setEditions(SAMPLE_EDITIONS);
+          setEditions([]);
           setHasMore(false);
         }
         setLoading(false);
@@ -150,7 +123,7 @@ export const PreviousEditions: React.FC<PreviousEditionsProps> = ({
     setImgErrors((prev) => ({ ...prev, [id]: true }));
   };
 
-  const displayList = editions.length > 0 ? editions : SAMPLE_EDITIONS;
+  const displayList = editions;
 
   return (
     <>
