@@ -10,7 +10,8 @@ import UpcomingBookReleases from "@/components/UpcomingBookReleases";
 import ReaderReviews from "@/components/ReaderReviews";
 import { API_BASE_URL } from "@/lib/config";
 
-export const dynamic = "force-dynamic";
+// ISR: revalidate every 60 seconds via fetch-level tags
+export const revalidate = 60;
 
 export const metadata: Metadata = {
   title: "Akam Digital — Storytelling, Literature & Cultural Platform",
@@ -75,36 +76,34 @@ function getCategoryColor(cat?: string) {
 
 async function getHomePageData() {
   try {
-    const timeoutSignal = AbortSignal.timeout(8000);
-
     const [storiesRes, categoriesRes, eventsRes, booksRes, videosRes, reviewsRes, editorsNoteRes] = await Promise.allSettled([
       fetch(`${API_BASE_URL}/stories?status=APPROVED&featured=true&limit=10`, {
         next: { tags: ["homepage", "stories"], revalidate: 60 },
-        signal: timeoutSignal,
+        signal: AbortSignal.timeout(8000),
       }),
       fetch(`${API_BASE_URL}/communities`, {
         next: { tags: ["homepage", "categories"], revalidate: 60 },
-        signal: timeoutSignal,
+        signal: AbortSignal.timeout(8000),
       }),
       fetch(`${API_BASE_URL}/events`, {
         next: { tags: ["homepage", "events"], revalidate: 60 },
-        signal: timeoutSignal,
+        signal: AbortSignal.timeout(8000),
       }),
       fetch(`${API_BASE_URL}/books`, {
         next: { tags: ["homepage", "books"], revalidate: 60 },
-        signal: timeoutSignal,
+        signal: AbortSignal.timeout(8000),
       }),
       fetch(`${API_BASE_URL}/media?featured=true&limit=4`, {
         next: { tags: ["homepage", "media"], revalidate: 60 },
-        signal: timeoutSignal,
+        signal: AbortSignal.timeout(8000),
       }),
       fetch(`${API_BASE_URL}/reviews`, {
         next: { tags: ["homepage", "reviews"], revalidate: 60 },
-        signal: timeoutSignal,
+        signal: AbortSignal.timeout(8000),
       }),
       fetch(`${API_BASE_URL}/settings/editors-note`, {
         next: { tags: ["homepage", "editors-note"], revalidate: 60 },
-        signal: timeoutSignal,
+        signal: AbortSignal.timeout(8000),
       }),
     ]);
 

@@ -816,93 +816,74 @@ export const Navbar: React.FC<NavbarProps> = ({
                 onScroll={handleNotifScroll}
                 className="max-h-80 overflow-y-auto divide-y divide-gray-100/60 pr-1"
               >
-                {(notifications.length > 0
-                  ? notifications
-                  : [
-                      {
-                        id: "sample-1",
-                        type: "RECOMMENDATION",
-                        relatedStoryId: null,
-                        message:
-                          "Since you enjoyed 'Pranayadhwani', check out these 3 trending reads this week.",
-                        read: false,
-                        createdAt: new Date().toISOString(),
-                      },
-                      {
-                        id: "sample-2",
-                        type: "EDITORIAL_PICKS",
-                        relatedStoryId: null,
-                        message:
-                          "This Week's Editor's Picks are live! Featuring top stories, podcasts, and digital art",
-                        read: true,
-                        createdAt: new Date().toISOString(),
-                      },
-                      {
-                        id: "sample-3",
-                        type: "STUDIO_DRAFT",
-                        relatedStoryId: null,
-                        message:
-                          "You have an unfinished draft in your studio. Ready to finish and publish?",
-                        read: true,
-                        createdAt: new Date().toISOString(),
-                      },
-                    ]
-                ).map((n) => {
-                  const isReportType = n.type === "CONTENT_REPORTED";
-                  const isRemovalType = n.type === "CONTENT_REMOVED";
-                  const isResolvedType = n.type === "REPORT_RESOLVED";
-                  const isDismissedType = n.type === "REPORT_DISMISSED";
-
-                  return (
-                    <div
-                      key={n.id}
-                      onClick={() => handleNotificationClick(n)}
-                      className={`py-3 px-3 transition-colors cursor-pointer rounded-xl ${
-                        !n.read
-                          ? isReportType
-                            ? "bg-rose-50/70 border border-rose-100 my-2"
-                            : isRemovalType
-                              ? "bg-amber-50/70 border border-amber-100 my-2"
-                              : "bg-[#F4FBF7] my-2 first:mt-0 last:mb-0 !border-none"
-                          : "bg-white hover:bg-gray-50/50"
-                      }`}
-                    >
-                      <div className="flex items-center gap-1.5 mb-1 flex-wrap">
-                        {isReportType && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-700">
-                            <Flag className="w-2.5 h-2.5" /> Moderation Flag
-                          </span>
-                        )}
-                        {isRemovalType && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800">
-                            <AlertTriangle className="w-2.5 h-2.5" /> Action Notice
-                          </span>
-                        )}
-                        {isResolvedType && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
-                            <CheckCircle2 className="w-2.5 h-2.5" /> Resolved
-                          </span>
-                        )}
-                        {isDismissedType && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-gray-100 text-gray-700">
-                            Reviewed
-                          </span>
-                        )}
-                        {n.createdAt && (
-                          <span className="text-[10px] text-gray-400 ml-auto">
-                            {new Date(n.createdAt).toLocaleDateString("en-US", {
-                              month: "short",
-                              day: "numeric",
-                            })}
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-xs sm:text-[13px] text-gray-800 leading-relaxed font-normal">
-                        {renderNotificationText(n.message)}
-                      </p>
+                {notifications.length === 0 ? (
+                  <div className="py-8 px-4 text-center">
+                    <div className="w-10 h-10 rounded-2xl bg-gray-50 border border-gray-100 flex items-center justify-center mx-auto mb-2 text-gray-400">
+                      <Bell className="w-5 h-5 text-gray-300" />
                     </div>
-                  );
-                })}
+                    <p className="text-xs font-bold text-gray-800">No notifications yet</p>
+                    <p className="text-[11px] text-gray-400 mt-0.5">
+                      You will be notified about updates to your stories, approvals, and comments.
+                    </p>
+                  </div>
+                ) : (
+                  notifications.map((n) => {
+                    const isReportType = n.type === "CONTENT_REPORTED";
+                    const isRemovalType = n.type === "CONTENT_REMOVED";
+                    const isResolvedType = n.type === "REPORT_RESOLVED";
+                    const isDismissedType = n.type === "REPORT_DISMISSED";
+
+                    return (
+                      <div
+                        key={n.id}
+                        onClick={() => handleNotificationClick(n)}
+                        className={`py-3 px-3 transition-colors cursor-pointer rounded-xl ${
+                          !n.read
+                            ? isReportType
+                              ? "bg-rose-50/70 border border-rose-100 my-2"
+                              : isRemovalType
+                                ? "bg-amber-50/70 border border-amber-100 my-2"
+                                : "bg-[#F4FBF7] my-2 first:mt-0 last:mb-0 !border-none"
+                            : "bg-white hover:bg-gray-50/50"
+                        }`}
+                      >
+                        <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                          {isReportType && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-700">
+                              <Flag className="w-2.5 h-2.5" /> Moderation Flag
+                            </span>
+                          )}
+                          {isRemovalType && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800">
+                              <AlertTriangle className="w-2.5 h-2.5" /> Action Notice
+                            </span>
+                          )}
+                          {isResolvedType && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                              <CheckCircle2 className="w-2.5 h-2.5" /> Resolved
+                            </span>
+                          )}
+                          {isDismissedType && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-gray-100 text-gray-700">
+                              Reviewed
+                            </span>
+                          )}
+                          {n.createdAt && (
+                            <span className="text-[10px] text-gray-400 ml-auto">
+                              {new Date(n.createdAt).toLocaleDateString("en-US", {
+                                month: "short",
+                                day: "numeric",
+                              })}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs sm:text-[13px] text-gray-800 leading-relaxed font-normal">
+                          {renderNotificationText(n.message)}
+                        </p>
+                      </div>
+                    );
+                  })
+                )}
 
                 {isLoadingNotifs && (
                   <div className="py-3 text-center text-xs text-gray-400 flex items-center justify-center gap-2">
