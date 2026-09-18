@@ -5,7 +5,8 @@ import EventSessions, { SessionItem } from "@/components/EventSessions";
 import PastEventArchive, { PastEventItem } from "@/components/PastEventArchive";
 import { API_BASE_URL } from "@/lib/config";
 
-export const dynamic = "force-dynamic";
+// ISR: revalidate every 60 seconds
+export const revalidate = 60;
 
 export const metadata: Metadata = {
   title: "Literary Events & Workshops | Akam Digital",
@@ -96,10 +97,30 @@ function compareEventsDesc(a: any, b: any): number {
   return dateB.getTime() - dateA.getTime();
 }
 
+// ─── helpers ──────────────────────────────────────────────────────────────────
+
+/** Maps a raw API event to a typed SessionItem. */
+function mapSession<C extends string>(e: any, category: C) {
+  return {
+    id:           e.id,
+    category,
+    title:        e.title,
+    description:  e.description,
+    location:     e.location,
+    time:         e.time        || "",
+    day:          e.day         || "",
+    monthYear:    e.monthYear   || "",
+    imageSrc:     e.imageSrc    || undefined,
+    registerHref: e.registerHref || undefined,
+  };
+}
+
+// ─── data fetcher ─────────────────────────────────────────────────────────────
+
 async function getEventsData(): Promise<any[]> {
   try {
     const res = await fetch(`${API_BASE_URL}/events`, {
-      cache: "no-store",
+      next: { tags: ["events"], revalidate: 60 },
       signal: AbortSignal.timeout(8000),
     });
 
@@ -109,7 +130,7 @@ async function getEventsData(): Promise<any[]> {
     }
 
     const json = await res.json();
-    return Array.isArray(json) ? json : json.data || [];
+    return Array.isArray(json) ? json : json.data ?? [];
   } catch (err) {
     console.error("[EventsPage] Error fetching events:", err);
     return [];
@@ -144,66 +165,11 @@ export default async function EventsPage() {
     .sort(compareEventsAsc);
 
   const sessions: SessionItem[] = [
-    ...readingSessions.map((e: any) => ({
-      id: e.id,
-      category: "reading" as const,
-      title: e.title,
-      description: e.description,
-      location: e.location,
-      time: e.time || "",
-      day: e.day || "",
-      monthYear: e.monthYear || "",
-      imageSrc: e.imageSrc || undefined,
-      registerHref: e.registerHref || undefined,
-    })),
-    ...discussionSessions.map((e: any) => ({
-      id: e.id,
-      category: "discussions" as const,
-      title: e.title,
-      description: e.description,
-      location: e.location,
-      time: e.time || "",
-      day: e.day || "",
-      monthYear: e.monthYear || "",
-      imageSrc: e.imageSrc || undefined,
-      registerHref: e.registerHref || undefined,
-    })),
-    ...workshopEvents.map((e: any) => ({
-      id: e.id,
-      category: "workshop" as const,
-      title: e.title,
-      description: e.description,
-      location: e.location,
-      time: e.time || "",
-      day: e.day || "",
-      monthYear: e.monthYear || "",
-      imageSrc: e.imageSrc || undefined,
-      registerHref: e.registerHref || undefined,
-    })),
-    ...exhibitionEvents.map((e: any) => ({
-      id: e.id,
-      category: "exhibition" as const,
-      title: e.title,
-      description: e.description,
-      location: e.location,
-      time: e.time || "",
-      day: e.day || "",
-      monthYear: e.monthYear || "",
-      imageSrc: e.imageSrc || undefined,
-      registerHref: e.registerHref || undefined,
-    })),
-    ...filmScreeningEvents.map((e: any) => ({
-      id: e.id,
-      category: "film_screening" as const,
-      title: e.title,
-      description: e.description,
-      location: e.location,
-      time: e.time || "",
-      day: e.day || "",
-      monthYear: e.monthYear || "",
-      imageSrc: e.imageSrc || undefined,
-      registerHref: e.registerHref || undefined,
-    })),
+    ...readingSessions.map((e: any)       => mapSession(e, "reading"       as const)),
+    ...discussionSessions.map((e: any)    => mapSession(e, "discussions"   as const)),
+    ...workshopEvents.map((e: any)        => mapSession(e, "workshop"      as const)),
+    ...exhibitionEvents.map((e: any)      => mapSession(e, "exhibition"    as const)),
+    ...filmScreeningEvents.map((e: any)   => mapSession(e, "film_screening" as const)),
   ];
 
   // 2. Past events archive: items marked as PAST_ARCHIVE or whose date has passed
