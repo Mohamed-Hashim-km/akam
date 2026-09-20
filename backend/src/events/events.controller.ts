@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Param, Query, Body, Req, UseGuards, Header } from '@nestjs/common';
+import { Controller, Get, Post, Param, Query, Body, Req, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { EventsService } from './events.service.js';
 import { EventType } from './events.types.js';
@@ -11,7 +11,6 @@ export class EventsController {
   constructor(private readonly eventsService: EventsService) {}
 
   @Get()
-  @Header('Cache-Control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=120')
   @ApiOperation({ summary: 'List all published events, workshops, reading sessions, and past archives' })
   @ApiQuery({ name: 'type', enum: EventType, required: false })
   findAllPublished(@Query('type') type?: EventType) {
@@ -19,7 +18,6 @@ export class EventsController {
   }
 
   @Get('past-archives')
-  @Header('Cache-Control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=120')
   @ApiOperation({ summary: 'Get paginated past event archives' })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
@@ -33,7 +31,6 @@ export class EventsController {
   }
 
   @Get(':id')
-  @Header('Cache-Control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=120')
   @ApiOperation({ summary: 'Get published event by ID' })
   findOne(@Param('id') id: string) {
     return this.eventsService.findOne(id);
