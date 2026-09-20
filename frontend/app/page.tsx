@@ -189,14 +189,14 @@ export default async function Home() {
       {/* Explore By Interest Section */}
       <ExploreByInterest categories={categories} />
 
-      {/* Upcoming Events Section */}
-      <UpcomingEvents events={events} />
+      {/* Upcoming Events Section - fetches live from API (no ISR cache) */}
+      <UpcomingEvents />
 
-      {/* Featured Video Section */}
-      <FeaturedVideo initialVideos={videos} />
+      {/* Featured Video Section - fetches live from API (no ISR cache) */}
+      <FeaturedVideo />
 
-      {/* Upcoming Book Releases Section */}
-      <UpcomingBookReleases releases={books} />
+      {/* Upcoming Book Releases Section - fetches live from API (no ISR cache) */}
+      <UpcomingBookReleases />
 
       {/* Reader Reviews Section */}
       <ReaderReviews reviews={reviews} />
