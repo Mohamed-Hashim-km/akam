@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Poppins, Open_Sans } from "next/font/google";
 import LayoutShell from "@/components/LayoutShell";
 import "./globals.css";
+import Script from "next/script";
 
 const poppins = Poppins({
   subsets: ["latin"],
@@ -58,6 +59,7 @@ export default function RootLayout({
     >
       <body className="flex flex-col min-h-screen text-dark-bg font-poppins">
         <LayoutShell>{children}</LayoutShell>
+        <Script src="/smoothScroll/smoothScroll.js" strategy="afterInteractive" />
       </body>
     </html>
   );
