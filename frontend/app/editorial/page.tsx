@@ -945,6 +945,7 @@ function EditorialDashboardContent() {
   const [savingSettings, setSavingSettings] = useState(false);
   const [loading, setLoading] = useState(true);
   const [selectedStory, setSelectedStory] = useState<PendingStory | null>(null);
+  const [emPreviewStory, setEmPreviewStory] = useState<PendingStory | null>(null);
   const [rejectingStory, setRejectingStory] = useState<PendingStory | null>(null);
   const [rejectionNote, setRejectionNote] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
@@ -3277,9 +3278,9 @@ function EditorialDashboardContent() {
                           <div className="pt-3.5 border-t border-gray-100 flex items-center gap-1.5 flex-wrap">
                             <button
                               type="button"
-                              onClick={() => setSelectedStory(story)}
+                              onClick={() => setEmPreviewStory(story)}
                               className="flex-1 inline-flex items-center justify-center gap-1 py-2 px-2 bg-white hover:bg-gray-100 border border-gray-300 text-gray-900 text-xs font-semibold rounded-xl transition-all cursor-pointer shadow-2xs active:scale-95"
-                              title="Review submission"
+                              title="Preview story"
                             >
                               <Eye className="w-3.5 h-3.5 text-gray-600 shrink-0" />
                               <span>View</span>
@@ -6132,6 +6133,113 @@ function EditorialDashboardContent() {
           )}
         </div>
       </main>
+
+      {/* E-Magazine Preview Modal (profile-style) */}
+      {emPreviewStory && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 backdrop-blur-sm p-4 font-poppins animate-in fade-in"
+          onClick={() => setEmPreviewStory(null)}
+        >
+          <div
+            className="relative bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto border border-gray-100"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Close */}
+            <button
+              onClick={() => setEmPreviewStory(null)}
+              className="absolute top-4 right-4 z-10 w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-600 hover:text-black transition-colors cursor-pointer"
+            >
+              <XCircle className="w-4 h-4" />
+            </button>
+
+            {/* Cover Image */}
+            {emPreviewStory.coverImageUrl && (
+              <div className="w-full h-52 rounded-t-3xl overflow-hidden bg-gray-100">
+                <Image
+                  src={formatAssetUrl(emPreviewStory.coverImageUrl)}
+                  alt={emPreviewStory.title}
+                  width={800}
+                  height={208}
+                  className="w-full h-full object-cover"
+                  unoptimized
+                />
+              </div>
+            )}
+
+            <div className="p-6 sm:p-8">
+              {/* Badges */}
+              <div className="flex items-center gap-2 flex-wrap mb-3">
+                <span className="bg-[#E4F953] text-[#040706] font-bold text-[9px] uppercase tracking-wider px-3 py-1 rounded-xl shadow-xs">
+                  E-MAGAZINE SUBMISSION
+                </span>
+                {emPreviewStory.category && (
+                  <span className="bg-black text-white font-bold text-[9px] uppercase tracking-wider px-2.5 py-1 rounded-xl">
+                    {emPreviewStory.category}
+                  </span>
+                )}
+              </div>
+
+              {/* Title */}
+              <h2 className="text-2xl sm:text-3xl font-bold text-gray-950 leading-tight mb-1">
+                {emPreviewStory.title}
+              </h2>
+              <p className="text-xs text-gray-400 mb-4">By {emPreviewStory.authorName || emPreviewStory.authorEmail}</p>
+
+              {/* Description */}
+              {emPreviewStory.description && (
+                <p className="text-sm text-gray-500 leading-relaxed mb-5 border-b border-gray-100 pb-5">
+                  {emPreviewStory.description}
+                </p>
+              )}
+
+              {/* Content */}
+              {emPreviewStory.content ? (
+                <div className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap mb-6">
+                  {renderStoryContent(emPreviewStory.content)}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-400 italic text-center py-6 mb-6">No content available.</p>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex flex-wrap items-center justify-end gap-2.5 pt-5 border-t border-gray-100">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const sId = emPreviewStory.id;
+                    if (confirm("Return this story to the Pending Review Queue?")) {
+                      setEmPreviewStory(null);
+                      handleReview(sId, "PENDING");
+                    }
+                  }}
+                  disabled={actionLoading}
+                  className="justify-center text-gray-700 border-gray-300 hover:bg-gray-100 font-semibold cursor-pointer shrink-0 whitespace-nowrap"
+                >
+                  Return to Queue
+                </Button>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  icon={<Globe className="w-4 h-4 text-emerald-200" />}
+                  iconPosition="left"
+                  onClick={() => {
+                    const sId = emPreviewStory.id;
+                    if (confirm("Publish this story to the live public works catalog?")) {
+                      setEmPreviewStory(null);
+                      handleReview(sId, "APPROVED");
+                    }
+                  }}
+                  disabled={actionLoading}
+                  className="justify-center bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer shrink-0 whitespace-nowrap"
+                >
+                  Publish to Works
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Reader Modal */}
       {selectedStory && (
