@@ -106,6 +106,33 @@ export const Navbar: React.FC<NavbarProps> = ({
     }
   };
 
+  const syncLiveUser = async () => {
+    const token = typeof window !== "undefined" ? localStorage.getItem("akam_token") : null;
+    if (!token) return;
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/users/me`);
+      if (res.ok) {
+        const freshUser = await res.json();
+        if (freshUser && freshUser.id) {
+          const currentSaved = localStorage.getItem("akam_user");
+          const parsed = currentSaved ? JSON.parse(currentSaved) : null;
+          if (
+            !parsed ||
+            parsed.role !== freshUser.role ||
+            parsed.name !== freshUser.name ||
+            parsed.avatarUrl !== freshUser.avatarUrl
+          ) {
+            localStorage.setItem("akam_user", JSON.stringify(freshUser));
+            setUser(freshUser);
+            window.dispatchEvent(new Event("akam_user_updated"));
+          }
+        }
+      }
+    } catch {
+      // Ignore background sync errors
+    }
+  };
+
   const loadUserData = async () => {
     const savedUser = localStorage.getItem("akam_user");
 
@@ -167,13 +194,15 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   useEffect(() => {
     loadUserData();
+    syncLiveUser();
     window.addEventListener("akam_user_updated", loadUserData);
     window.addEventListener("storage", loadUserData);
 
-    // Real-time polling for notifications every 12 seconds
+    // Real-time polling for notifications & live role/profile updates every 12 seconds
     const pollInterval = setInterval(() => {
       if (localStorage.getItem("akam_user")) {
         fetchNotifications();
+        syncLiveUser();
       }
     }, 12000);
 
