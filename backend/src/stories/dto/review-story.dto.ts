@@ -1,8 +1,8 @@
 import { IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class ReviewStoryDto {
-  @IsEnum(['APPROVED', 'REJECTED', 'APPROVED_EMAGAZINE', 'PENDING', 'UNPUBLISHED'])
-  decision: 'APPROVED' | 'REJECTED' | 'APPROVED_EMAGAZINE' | 'PENDING' | 'UNPUBLISHED';
+  @IsEnum(['APPROVED', 'REJECTED', 'APPROVED_EMAGAZINE', 'PUBLISHED_EMAGAZINE', 'PENDING', 'UNPUBLISHED'])
+  decision: 'APPROVED' | 'REJECTED' | 'APPROVED_EMAGAZINE' | 'PUBLISHED_EMAGAZINE' | 'PENDING' | 'UNPUBLISHED';
 
   @IsOptional()
   @IsString()

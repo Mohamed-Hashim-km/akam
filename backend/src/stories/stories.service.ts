@@ -3,7 +3,10 @@ import {
   NotFoundException,
   ForbiddenException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import * as nodemailer from 'nodemailer';
 import { PrismaService } from '../common/prisma/prisma.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
 import { UploadsService } from '../uploads/uploads.service.js';
@@ -44,11 +47,174 @@ type StoryRow = {
 
 @Injectable()
 export class StoriesService {
+  private readonly logger = new Logger(StoriesService.name);
+
   constructor(
     private prisma: PrismaService,
     private notificationsService: NotificationsService,
     private uploadsService: UploadsService,
+    private configService: ConfigService,
   ) {}
+
+  private getTransporter(): nodemailer.Transporter {
+    const host = this.configService.get<string>('SMTP_HOST') || 'smtp.gmail.com';
+    const port = parseInt(this.configService.get<string>('SMTP_PORT') || '587', 10);
+    const secureConfig = this.configService.get<string>('SMTP_SECURE');
+    const secure = secureConfig !== undefined ? secureConfig === 'true' : port === 465;
+    const user = this.configService.get<string>('SMTP_USER');
+    const pass = this.configService.get<string>('SMTP_PASS');
+
+    return nodemailer.createTransport({
+      host,
+      port,
+      secure,
+      auth: {
+        user,
+        pass,
+      },
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 15000,
+      family: 4,
+    } as any);
+  }
+
+  private async sendStoryPublishedEmail(story: StoryRow, type: 'EMAGAZINE' | 'WEB'): Promise<boolean> {
+    const email = story.authorEmail;
+    if (!email) {
+      this.logger.warn(`No email found for author of story ${story.id}`);
+      return false;
+    }
+
+    const authorName = story.authorName || 'Author';
+    const isEmagazine = type === 'EMAGAZINE';
+    const subject = isEmagazine
+      ? `🎉 Your submission "${story.title}" is published in the AKAM E-Magazine!`
+      : `🎉 Your story "${story.title}" has been published on AKAM Digital!`;
+
+    const messageHeading = isEmagazine
+      ? 'Published in AKAM E-Magazine Edition!'
+      : 'Published on AKAM Digital Works Catalog!';
+
+    const messageBody = isEmagazine
+      ? `We are delighted to inform you that your curated submission <strong>"${story.title}"</strong> has been officially published in the AKAM Digital E-Magazine edition.`
+      : `We are pleased to inform you that your story <strong>"${story.title}"</strong> has been approved and published to the live public works catalog on AKAM Digital.`;
+
+    const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: #f7f7f7; margin: 0; padding: 30px 10px; }
+    .container { max-width: 580px; margin: 0 auto; background: #ffffff; border-radius: 20px; overflow: hidden; border: 1px solid #e5e5e5; box-shadow: 0 4px 20px rgba(0,0,0,0.05); }
+    .header { background: #040706; padding: 30px; text-align: center; }
+    .badge { display: inline-block; background: #E4F953; color: #040706; font-size: 11px; font-weight: bold; letter-spacing: 1.5px; padding: 6px 14px; border-radius: 12px; text-transform: uppercase; margin-bottom: 12px; }
+    .header h1 { color: #ffffff; font-size: 22px; margin: 0; font-weight: 700; }
+    .content { padding: 36px 30px; color: #333333; line-height: 1.6; }
+    .content p { margin: 0 0 16px; font-size: 15px; }
+    .highlight-card { background: #fbfbfb; border: 1px solid #eee; border-left: 4px solid #E4F953; border-radius: 12px; padding: 18px 20px; margin: 24px 0; }
+    .highlight-title { font-size: 17px; font-weight: bold; color: #111; margin-bottom: 6px; }
+    .highlight-meta { font-size: 13px; color: #777; }
+    .btn { display: inline-block; background: #040706; color: #ffffff !important; font-size: 14px; font-weight: 600; text-decoration: none; padding: 12px 28px; border-radius: 12px; margin-top: 10px; }
+    .footer { padding: 20px 30px 30px; text-align: center; font-size: 12px; color: #888; border-top: 1px solid #f0f0f0; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="badge">${isEmagazine ? 'E-Magazine Edition' : 'Live Publication'}</div>
+      <h1>${messageHeading}</h1>
+    </div>
+    <div class="content">
+      <p>Dear <strong>${authorName}</strong>,</p>
+      <p>${messageBody}</p>
+      
+      <div class="highlight-card">
+        <div class="highlight-title">${story.title}</div>
+        <div class="highlight-meta">Category: ${story.category || 'General'} • Format: ${story.submissionType || 'Story'}</div>
+      </div>
+
+      <p>Thank you for contributing to AKAM Digital and sharing your creative voice with our reader community.</p>
+      
+      <div style="text-align: center; margin-top: 25px;">
+        <a href="https://akamdigital.vercel.app/profile" class="btn">View on Your Profile</a>
+      </div>
+    </div>
+    <div class="footer">
+      <p>&copy; ${new Date().getFullYear()} AKAM Digital • Editorial Desk</p>
+    </div>
+  </div>
+</body>
+</html>
+    `;
+
+    // 1. Try ZeptoMail
+    const zeptoToken =
+      this.configService.get<string>('ZEPTOMAIL_TOKEN') ||
+      this.configService.get<string>('ZEPTO_API_KEY');
+
+    if (zeptoToken) {
+      try {
+        const response = await fetch('https://api.zeptomail.in/v1.1/email', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Zoho-enczapikey ${zeptoToken}`,
+          },
+          body: JSON.stringify({
+            from: {
+              address:
+                this.configService.get<string>('SMTP_FROM_EMAIL') ||
+                this.configService.get<string>('SMTP_USER') ||
+                'noreply@akamdigital.com',
+              name: 'AKAM Digital Editorial Desk',
+            },
+            to: [
+              {
+                email_address: {
+                  address: email,
+                  name: authorName,
+                },
+              },
+            ],
+            subject,
+            htmlbody: html,
+          }),
+        });
+
+        if (response.ok) {
+          this.logger.log(`✅ Story published email sent to ${email} via ZeptoMail`);
+          return true;
+        } else {
+          const errBody = await response.text();
+          this.logger.warn(`ZeptoMail HTTP failed (${response.status}): ${errBody}`);
+        }
+      } catch (e) {
+        this.logger.warn(`ZeptoMail HTTP error: ${(e as Error).message}`);
+      }
+    }
+
+    // 2. Fallback to SMTP
+    try {
+      const transporter = this.getTransporter();
+      const fromAddress =
+        this.configService.get<string>('SMTP_FROM') ||
+        `"AKAM Digital" <${this.configService.get('SMTP_USER')}>`;
+
+      const info = await transporter.sendMail({
+        from: fromAddress,
+        to: `"${authorName}" <${email}>`,
+        subject,
+        html,
+      });
+      this.logger.log(`✅ Story published email sent to ${email} via SMTP. MsgId: ${info.messageId}`);
+      return true;
+    } catch (error) {
+      this.logger.error(`❌ Failed to send published email to ${email}: ${(error as Error).message}`);
+      return false;
+    }
+  }
 
   async findAll(
     status?: string,
@@ -70,6 +236,8 @@ export class StoriesService {
       whereSql = `WHERE s.status IN ('APPROVED'::"StoryStatus", 'UNPUBLISHED'::"StoryStatus")`;
     } else if (status === 'ALL') {
       whereSql = `WHERE 1=1`;
+    } else if (status === 'EMAGAZINE_ALL') {
+      whereSql = `WHERE s.status IN ('APPROVED_EMAGAZINE'::"StoryStatus", 'PUBLISHED_EMAGAZINE'::"StoryStatus")`;
     } else {
       const storyStatus = status ?? 'APPROVED';
       whereSql = `WHERE s.status = $1::"StoryStatus"`;
@@ -373,6 +541,11 @@ export class StoriesService {
         story.title,
         id,
       );
+      try {
+        await this.sendStoryPublishedEmail(story, 'WEB');
+      } catch (err) {
+        this.logger.error('Failed to send published email to author', err);
+      }
       return { id, status: 'APPROVED' };
     } else if (dto.decision === 'UNPUBLISHED') {
       await this.prisma.execute(
@@ -393,6 +566,23 @@ export class StoriesService {
         id,
       );
       return { id, status: 'APPROVED_EMAGAZINE' };
+    } else if (dto.decision === 'PUBLISHED_EMAGAZINE') {
+      await this.prisma.execute(
+        `UPDATE story SET status = 'PUBLISHED_EMAGAZINE'::"StoryStatus", "rejectionNote" = null, "updatedAt" = now()
+         WHERE id = $1`,
+        [id],
+      );
+      await this.notificationsService.notifyAuthorOfEmagazinePublished(
+        story.authorId,
+        story.title,
+        id,
+      );
+      try {
+        await this.sendStoryPublishedEmail(story, 'EMAGAZINE');
+      } catch (err) {
+        this.logger.error('Failed to send emagazine published email to author', err);
+      }
+      return { id, status: 'PUBLISHED_EMAGAZINE' };
     } else if (dto.decision === 'PENDING') {
       await this.prisma.execute(
         `UPDATE story SET status = 'PENDING'::"StoryStatus", "rejectionNote" = null, "updatedAt" = now()
