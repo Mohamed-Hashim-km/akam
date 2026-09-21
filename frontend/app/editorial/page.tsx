@@ -985,6 +985,7 @@ function EditorialDashboardContent() {
         const uData = await res.json();
         setUser(uData);
         localStorage.setItem("akam_user", JSON.stringify(uData));
+        window.dispatchEvent(new Event("akam_user_updated"));
 
         if (["EDITOR", "ADMIN"].includes(uData.role)) {
           fetchAllPlatformCategories();
@@ -2250,6 +2251,12 @@ function EditorialDashboardContent() {
       });
       if (res.ok) {
         setFeedbackMessage("User role updated successfully!");
+        if (user && userId === user.id) {
+          const updated = { ...user, role: newRole as any };
+          setUser(updated);
+          localStorage.setItem("akam_user", JSON.stringify(updated));
+          window.dispatchEvent(new Event("akam_user_updated"));
+        }
         fetchDashboardData();
         setTimeout(() => setFeedbackMessage(null), 3000);
       } else {
