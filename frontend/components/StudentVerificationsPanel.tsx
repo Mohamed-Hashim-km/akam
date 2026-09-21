@@ -25,6 +25,8 @@ import {
   Sparkles,
   Undo2,
   Loader2,
+  UploadCloud,
+  Image as ImageIcon,
 } from "lucide-react";
 import Button from "@/components/ui/Button";
 import { API_BASE_URL, apiFetch } from "@/lib/config";
@@ -127,6 +129,27 @@ export const StudentVerificationsPanel: React.FC<StudentVerificationsPanelProps>
   const [manualRoll, setManualRoll] = useState("");
   const [manualCourse, setManualCourse] = useState("");
   const [manualEmail, setManualEmail] = useState("");
+  const [manualIdCardFile, setManualIdCardFile] = useState<File | null>(null);
+  const [manualIdCardPreview, setManualIdCardPreview] = useState<string>("");
+  const [manualIdCardName, setManualIdCardName] = useState<string>("");
+  const [manualSubmitting, setManualSubmitting] = useState(false);
+  const manualFileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleManualFileChange = (file: File) => {
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) {
+      alert("File size exceeds 10MB limit. Please choose a smaller image.");
+      return;
+    }
+    setManualIdCardFile(file);
+    setManualIdCardName(file.name);
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      setManualIdCardPreview(e.target?.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
 
   const showToast = (msg: string) => {
     if (onNotify) {
@@ -388,6 +411,33 @@ export const StudentVerificationsPanel: React.FC<StudentVerificationsPanelProps>
       return;
     }
 
+    setManualSubmitting(true);
+    let finalIdCardUrl = manualIdCardPreview || "/images/home/aboutDigital.png";
+    let finalIdCardName = manualIdCardName || "Direct_Editorial_Grant.png";
+
+    if (manualIdCardFile) {
+      try {
+        const formData = new FormData();
+        formData.append("file", manualIdCardFile);
+
+        const uploadRes = await fetch(`${API_BASE_URL}/uploads/image`, {
+          method: "POST",
+          body: formData,
+        });
+
+        if (uploadRes.ok) {
+          const json = await uploadRes.json();
+          if (json?.url) {
+            finalIdCardUrl = json.url.startsWith("http")
+              ? json.url
+              : `${API_BASE_URL.replace(/\/api$/, "")}${json.url.startsWith("/") ? "" : "/"}${json.url}`;
+          }
+        }
+      } catch (err) {
+        console.warn("Upload failed, utilizing preview reference:", err);
+      }
+    }
+
     const refId = `AKAM-STU-${new Date().getFullYear()}-${Math.floor(10000 + Math.random() * 90000)}`;
     const newApp: StudentApplication = {
       id: refId,
@@ -397,8 +447,8 @@ export const StudentVerificationsPanel: React.FC<StudentVerificationsPanelProps>
       studentIdNumber: manualRoll.trim() || "MANUAL-VERIFIED",
       course: manualCourse.trim() || "Degree Student",
       email: manualEmail.trim(),
-      idCardUrl: "/images/home/aboutDigital.png",
-      idCardName: "Direct_Editorial_Grant.png",
+      idCardUrl: finalIdCardUrl,
+      idCardName: finalIdCardName,
       submittedAt: new Date().toISOString(),
       status: "APPROVED",
       reviewedAt: new Date().toISOString(),
@@ -417,25 +467,43 @@ export const StudentVerificationsPanel: React.FC<StudentVerificationsPanelProps>
     showToast(`Complimentary Scholar Pass granted to ${newApp.fullName}.`);
 
     try {
-      await apiFetch(`${API_BASE_URL}/student-verifications`, {
+      const res = await apiFetch(`${API_BASE_URL}/editorial/student-verifications/grant`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newApp),
-      });
-      await apiFetch(`${API_BASE_URL}/editorial/student-verifications/${refId}/status`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          status: "APPROVED",
+          referenceId: refId,
+          fullName: newApp.fullName,
+          institution: newApp.institution,
+          studentIdNumber: newApp.studentIdNumber,
+          course: newApp.course,
+          email: newApp.email,
+          idCardUrl: newApp.idCardUrl,
+          idCardName: newApp.idCardName,
           reviewNotes: newApp.reviewNotes,
           reviewedBy: currentUserName,
         }),
       });
+
+      if (res.ok) {
+        const savedRecord = await res.json();
+        if (savedRecord && savedRecord.referenceId) {
+          setApplications((prev) => [
+            savedRecord,
+            ...prev.filter((p) => (p.referenceId || p.id) !== refId),
+          ]);
+        }
+      } else {
+        const errData = await res.json().catch(() => null);
+        console.error("Could not sync manual grant to backend:", errData);
+      }
+
       if (typeof window !== "undefined") {
         window.dispatchEvent(new Event("akam_subscription_refresh"));
       }
     } catch (err) {
       console.warn("Could not sync manual grant to backend:", err);
+    } finally {
+      setManualSubmitting(false);
     }
 
     setManualName("");
@@ -443,6 +511,9 @@ export const StudentVerificationsPanel: React.FC<StudentVerificationsPanelProps>
     setManualRoll("");
     setManualCourse("");
     setManualEmail("");
+    setManualIdCardFile(null);
+    setManualIdCardPreview("");
+    setManualIdCardName("");
   };
 
   // Optimistically update stats on status change helper
@@ -1212,7 +1283,7 @@ export const StudentVerificationsPanel: React.FC<StudentVerificationsPanelProps>
       {/* ── Manual Add Student Pass Modal ───────────────────────── */}
       {showManualModal && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs animate-in fade-in">
-          <div className="relative w-full max-w-lg bg-white rounded-[24px] p-6 shadow-2xl space-y-4 border border-gray-200/80">
+          <div className="relative w-full max-w-lg max-h-[92vh] overflow-y-auto bg-white rounded-[24px] p-6 shadow-2xl space-y-4 border border-gray-200/80">
             <div className="flex items-center justify-between border-b border-gray-100 pb-3">
               <div className="flex items-center gap-2.5">
                 <div className="p-2.5 rounded-xl bg-gray-950 text-emerald-400">
@@ -1297,6 +1368,90 @@ export const StudentVerificationsPanel: React.FC<StudentVerificationsPanelProps>
                 />
               </div>
 
+              {/* Student ID Card Document / Photo Upload */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold text-gray-700">
+                    Student ID Card Document / Photo
+                  </label>
+                  <span className="text-[10px] text-gray-400 font-normal">
+                    Optional
+                  </span>
+                </div>
+
+                <input
+                  type="file"
+                  ref={manualFileInputRef}
+                  accept="image/png,image/jpeg,image/webp,image/jpg"
+                  className="hidden"
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files[0]) {
+                      handleManualFileChange(e.target.files[0]);
+                    }
+                  }}
+                />
+
+                {!manualIdCardPreview ? (
+                  <div
+                    onClick={() => manualFileInputRef.current?.click()}
+                    className="border-2 border-dashed border-gray-200 hover:border-gray-400 bg-gray-50/70 hover:bg-gray-50 rounded-2xl p-4 text-center cursor-pointer transition flex flex-col items-center justify-center gap-2 group"
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-gray-500 group-hover:text-emerald-600 group-hover:border-emerald-200 shadow-2xs transition">
+                      <UploadCloud className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-gray-800">
+                        Attach student identity card photo
+                      </p>
+                      <p className="text-[10px] text-gray-400 mt-0.5">
+                        PNG, JPG, or WEBP up to 10MB
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="relative border border-gray-200 rounded-2xl p-3 bg-gray-50 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-12 h-12 rounded-xl bg-gray-200 overflow-hidden shrink-0 border border-gray-200">
+                        <img
+                          src={manualIdCardPreview}
+                          alt="ID Card Preview"
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-gray-900 truncate">
+                          {manualIdCardName || "Student_ID_Card.png"}
+                        </p>
+                        <p className="text-[10px] text-emerald-600 font-medium flex items-center gap-1 mt-0.5">
+                          <CheckCircle2 className="w-3 h-3" /> Ready to attach
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => manualFileInputRef.current?.click()}
+                        className="text-[11px] font-semibold text-gray-600 hover:text-gray-900 px-2.5 py-1 rounded-lg hover:bg-gray-200 transition cursor-pointer"
+                      >
+                        Change
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setManualIdCardFile(null);
+                          setManualIdCardPreview("");
+                          setManualIdCardName("");
+                        }}
+                        className="p-1 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                        title="Remove image"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <div className="pt-2 flex items-center justify-end gap-2 border-t border-gray-100">
                 <Button
                   type="button"
@@ -1311,6 +1466,7 @@ export const StudentVerificationsPanel: React.FC<StudentVerificationsPanelProps>
                   type="submit"
                   variant="primary"
                   size="sm"
+                  loading={manualSubmitting}
                   className="bg-gray-950 hover:bg-black text-white text-xs font-semibold px-5 py-2.5 rounded-xl cursor-pointer shadow-xs transition-all active:scale-95"
                 >
                   Grant Active Scholar Pass

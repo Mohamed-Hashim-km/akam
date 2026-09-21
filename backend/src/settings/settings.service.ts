@@ -4,6 +4,7 @@ import * as nodemailer from 'nodemailer';
 import { PrismaService } from '../common/prisma/prisma.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
 import { UpdateEditorsNoteDto } from './dto/update-editors-note.dto.js';
+import { GrantStudentPassDto } from './dto/create-student-application.dto.js';
 
 export interface EditorsNoteValue {
   title: string;
@@ -320,6 +321,69 @@ export class SettingsService {
     return newRecord;
   }
 
+  async grantStudentPassDirectly(
+    dto: GrantStudentPassDto,
+    reviewerName?: string,
+  ): Promise<StudentApplicationRecord> {
+    const list = await this.getStudentApplications();
+    const refId =
+      dto.referenceId ||
+      `AKAM-STU-${new Date().getFullYear()}-${Math.floor(10000 + Math.random() * 90000)}`;
+
+    const newRecord: StudentApplicationRecord = {
+      id: refId,
+      referenceId: refId,
+      fullName: dto.fullName.trim(),
+      institution: dto.institution.trim(),
+      studentIdNumber: dto.studentIdNumber.trim(),
+      course: dto.course.trim(),
+      email: dto.email.trim(),
+      idCardUrl: dto.idCardUrl || '/images/home/aboutDigital.png',
+      idCardName: dto.idCardName || 'Direct_Editorial_Grant.png',
+      submittedAt: new Date().toISOString(),
+      status: 'APPROVED',
+      reviewedAt: new Date().toISOString(),
+      reviewedBy: dto.reviewedBy || reviewerName || 'Akam Editorial Board',
+      reviewNotes: dto.reviewNotes || 'Direct scholar pass granted by Akam Editorial Board.',
+    };
+
+    const existingIndex = list.findIndex(
+      (item) =>
+        item.referenceId === refId ||
+        (item.email && item.email.trim().toLowerCase() === dto.email.trim().toLowerCase()),
+    );
+
+    if (existingIndex >= 0) {
+      list[existingIndex] = {
+        ...list[existingIndex],
+        ...newRecord,
+      };
+    } else {
+      list.unshift(newRecord);
+    }
+
+    await this.prisma.execute(
+      `INSERT INTO site_setting (key, value, "updatedAt")
+       VALUES ('student_applications', $1::jsonb, now())
+       ON CONFLICT (key) DO UPDATE
+       SET value = EXCLUDED.value, "updatedAt" = now()`,
+      [JSON.stringify(list)],
+    );
+
+    // Grant free 6-month subscription to the actual student's email
+    await this.grantStudentSubscription(newRecord.email).catch((err) =>
+      this.logger.error(`Failed to grant student subscription: ${err.message}`),
+    );
+
+    // Send confirmation email
+    this.sendStudentStatusEmail(newRecord, 'APPROVED', newRecord.reviewNotes).catch((err) =>
+      this.logger.error(`Failed to send status email to ${newRecord.email}: ${err.message}`),
+    );
+
+    this.logger.log(`[StudentApp] ✅ Editorial direct grant issued for ${newRecord.fullName} (${newRecord.email})`);
+    return newRecord;
+  }
+
   async updateStudentApplicationStatus(
     refId: string,
     status: 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED',
@@ -330,44 +394,8 @@ export class SettingsService {
     const index = list.findIndex((item) => item.referenceId === refId || item.id === refId);
 
     if (index === -1) {
-      const fallback: StudentApplicationRecord = {
-        id: refId,
-        referenceId: refId,
-        fullName: 'Student Scholar',
-        institution: 'College / University',
-        studentIdNumber: refId,
-        course: 'Literature Degree',
-        email: 'scholar@student.edu',
-        idCardUrl: '/images/home/aboutDigital.png',
-        submittedAt: new Date().toISOString(),
-        status: status,
-        reviewedAt: new Date().toISOString(),
-        reviewedBy: reviewedBy,
-        reviewNotes: reviewNotes,
-      };
-      list.unshift(fallback);
-      await this.prisma.execute(
-        `INSERT INTO site_setting (key, value, "updatedAt")
-         VALUES ('student_applications', $1::jsonb, now())
-         ON CONFLICT (key) DO UPDATE
-         SET value = EXCLUDED.value, "updatedAt" = now()`,
-        [JSON.stringify(list)],
-      );
-
-      if (status === 'APPROVED' || status === 'REJECTED') {
-        this.sendStudentStatusEmail(fallback, status, reviewNotes).catch((err) =>
-          this.logger.error(`Failed to send status email: ${err.message}`),
-        );
-      }
-
-      // Grant free 6-month subscription when student is approved
-      if (status === 'APPROVED' && fallback.email) {
-        this.grantStudentSubscription(fallback.email).catch((err) =>
-          this.logger.error(`Failed to grant student subscription: ${err.message}`),
-        );
-      }
-
-      return fallback;
+      this.logger.warn(`[StudentApp] Application ${refId} not found for status update`);
+      return null;
     }
 
     list[index].status = status;
