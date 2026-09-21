@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { BookOpen, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { BookOpen, ChevronLeft, ChevronRight, Loader2, Lock } from "lucide-react";
 import dynamic from "next/dynamic";
 import { Swiper, SwiperSlide } from "swiper/react";
 import { Navigation } from "swiper/modules";
@@ -10,27 +10,30 @@ import type { Swiper as SwiperClass } from "swiper";
 import "swiper/css";
 import "swiper/css/navigation";
 
-// Dynamically import flipbook to avoid SSR issues
 const EditionFlipbook = dynamic(() => import("./EditionFlipbook"), { ssr: false });
+const SubscriptionGateModal = dynamic(() => import("./SubscriptionGateModal"), { ssr: false });
 
-import { API_BASE_URL, formatAssetUrl } from "@/lib/config";
+import { API_BASE_URL, apiFetch, formatAssetUrl } from "@/lib/config";
 
 export interface EditionItem {
   id: string;
   title: string;
-  pdfUrl: string;
+  pdfUrl?: string | null;
   coverImage?: string | null;
   isPublished?: boolean;
   sortOrder?: number;
   createdAt?: string;
+  hasAccess?: boolean;
 }
 
 export interface PreviousEditionsProps {
   title?: string;
+  isSubscribed?: boolean;
 }
 
 export const PreviousEditions: React.FC<PreviousEditionsProps> = ({
   title = "Previous Editions",
+  isSubscribed = false,
 }) => {
   const [editions, setEditions] = useState<EditionItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -40,10 +43,12 @@ export const PreviousEditions: React.FC<PreviousEditionsProps> = ({
   const [swiperInstance, setSwiperInstance] = useState<SwiperClass | null>(null);
   const [openEdition, setOpenEdition] = useState<EditionItem | null>(null);
   const [imgErrors, setImgErrors] = useState<Record<string, boolean>>({});
+  const [gateOpen, setGateOpen] = useState(false);
+  const [pendingEdition, setPendingEdition] = useState<EditionItem | null>(null);
 
   const fetchEditionsPage = async (pageNum: number) => {
     try {
-      const res = await fetch(`${API_BASE_URL}/editions?page=${pageNum}&limit=10`);
+      const res = await apiFetch(`${API_BASE_URL}/editions?page=${pageNum}&limit=10`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
 
@@ -65,29 +70,22 @@ export const PreviousEditions: React.FC<PreviousEditionsProps> = ({
     }
   };
 
+  const fetchInitial = async () => {
+    setLoading(true);
+    const { items, hasMore: more } = await fetchEditionsPage(1);
+    if (items.length > 0) {
+      setEditions(items);
+      setHasMore(more);
+    } else {
+      setEditions([]);
+      setHasMore(false);
+    }
+    setLoading(false);
+  };
+
   useEffect(() => {
-    let isMounted = true;
-    const fetchInitial = async () => {
-      setLoading(true);
-      const { items, hasMore: more } = await fetchEditionsPage(1);
-
-      if (isMounted) {
-        if (items.length > 0) {
-          setEditions(items);
-          setHasMore(more);
-        } else {
-          setEditions([]);
-          setHasMore(false);
-        }
-        setLoading(false);
-      }
-    };
-
     fetchInitial();
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+  }, [isSubscribed]);
 
   const loadNextPage = async () => {
     if (loadingMore || !hasMore) return;
@@ -171,7 +169,29 @@ export const PreviousEditions: React.FC<PreviousEditionsProps> = ({
                     <SwiperSlide key={edition.id} className="!h-auto">
                       <button
                         type="button"
-                        onClick={() => setOpenEdition(edition)}
+                        onClick={async () => {
+                          if (!isSubscribed) {
+                            setPendingEdition(edition);
+                            setGateOpen(true);
+                          } else if (edition.pdfUrl) {
+                            setOpenEdition(edition);
+                          } else {
+                            try {
+                              const res = await apiFetch(`${API_BASE_URL}/editions/${edition.id}`);
+                              if (res.ok) {
+                                const fullEdition = await res.json();
+                                if (fullEdition.pdfUrl) {
+                                  setOpenEdition(fullEdition);
+                                  return;
+                                }
+                              }
+                            } catch (e) {
+                              console.error(e);
+                            }
+                            setPendingEdition(edition);
+                            setGateOpen(true);
+                          }
+                        }}
                         className="flex flex-col group cursor-pointer text-left w-full h-full"
                       >
                         {/* Cover Image Container */}
@@ -191,8 +211,18 @@ export const PreviousEditions: React.FC<PreviousEditionsProps> = ({
                               </span>
                             </div>
                           )}
+                          {/* Lock overlay for non-subscribers */}
+                          {!isSubscribed && (
+                            <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] flex flex-col items-center justify-center gap-2 rounded-[18px] sm:rounded-[22px] z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                              <div className="w-10 h-10 rounded-full bg-white/90 flex items-center justify-center">
+                                <Lock className="w-5 h-5 text-gray-900" />
+                              </div>
+                              <span className="text-white text-xs font-semibold px-3 py-1 bg-black/60 rounded-full">
+                                Subscribe to Read
+                              </span>
+                            </div>
+                          )}
 
-                         
                         </div>
 
                         {/* Edition Title */}
@@ -234,14 +264,41 @@ export const PreviousEditions: React.FC<PreviousEditionsProps> = ({
         </div>
       </section>
 
-      {/* Flipbook Modal */}
-      {openEdition && (
+      {/* Flipbook Modal — only for subscribers */}
+      {openEdition && openEdition.pdfUrl && (
         <EditionFlipbook
           pdfUrl={openEdition.pdfUrl}
           title={openEdition.title}
           onClose={() => setOpenEdition(null)}
         />
       )}
+
+      {/* Subscription Gate Modal — for non-subscribers clicking an edition */}
+      <SubscriptionGateModal
+        isOpen={gateOpen}
+        onClose={() => { setGateOpen(false); setPendingEdition(null); }}
+        onSubscribed={async () => {
+          setGateOpen(false);
+          const target = pendingEdition;
+          const { items } = await fetchEditionsPage(1);
+          setEditions(items);
+          if (target) {
+            try {
+              const res = await apiFetch(`${API_BASE_URL}/editions/${target.id}`);
+              if (res.ok) {
+                const fresh = await res.json();
+                if (fresh.pdfUrl) {
+                  setOpenEdition(fresh);
+                }
+              }
+            } catch (e) {
+              console.error(e);
+            }
+            setPendingEdition(null);
+          }
+        }}
+        context="edition"
+      />
     </>
   );
 };

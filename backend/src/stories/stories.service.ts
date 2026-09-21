@@ -4,12 +4,14 @@ import {
   ForbiddenException,
   BadRequestException,
   Logger,
+  Optional,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
 import { PrismaService } from '../common/prisma/prisma.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
 import { UploadsService } from '../uploads/uploads.service.js';
+import { SubscriptionService } from '../subscription/subscription.service.js';
 import { CreateStoryDto } from './dto/create-story.dto.js';
 import { UpdateStoryDto } from './dto/update-story.dto.js';
 import { ReviewStoryDto } from './dto/review-story.dto.js';
@@ -54,6 +56,7 @@ export class StoriesService {
     private notificationsService: NotificationsService,
     private uploadsService: UploadsService,
     private configService: ConfigService,
+    @Optional() private subscriptionService?: SubscriptionService,
   ) {}
 
   private getTransporter(): nodemailer.Transporter {
@@ -289,6 +292,16 @@ export class StoriesService {
       queryParams,
     );
 
+    // For public catalog queries (not internal editorial), truncate content to preview only
+    const isEditorialQuery = status === 'CATALOG' || status === 'ALL' || status === 'EMAGAZINE_ALL';
+    if (!isEditorialQuery) {
+      for (const item of data) {
+        if (item.content) {
+          item.content = this.generateContentPreview(item.content);
+        }
+      }
+    }
+
     return {
       data,
       meta: {
@@ -300,7 +313,10 @@ export class StoriesService {
     };
   }
 
-  async findOne(idOrSlug: string): Promise<StoryRow> {
+  /**
+   * Internal helper to fetch full unmodified story record from database.
+   */
+  async findRawStory(idOrSlug: string): Promise<StoryRow> {
     const story = await this.prisma.queryOne<StoryRow>(
       `SELECT
          s.id, s.title, s.slug, s.description, s.content, s.category, s."coverImageUrl",
@@ -318,6 +334,92 @@ export class StoriesService {
     );
     if (!story) throw new NotFoundException('Story not found');
     return story;
+  }
+
+  /**
+   * Truncates content for non-subscribers to provide an engaging preview
+   * while completely preventing full story data leakage over the network.
+   */
+  private generateContentPreview(content: string, maxChars: number = 650): string {
+    if (!content) return '';
+    const trimmed = content.trim();
+    if (trimmed.length <= maxChars) {
+      const halfLen = Math.max(80, Math.floor(trimmed.length * 0.5));
+      const spaceIdx = trimmed.lastIndexOf(' ', halfLen);
+      return (spaceIdx > 0 ? trimmed.slice(0, spaceIdx) : trimmed.slice(0, halfLen)) + '...';
+    }
+
+    // Try finding a paragraph boundary within maxChars
+    const slice = trimmed.slice(0, maxChars);
+    const paragraphBreak = slice.lastIndexOf('\n\n');
+    if (paragraphBreak > 200) {
+      return slice.slice(0, paragraphBreak).trim();
+    }
+
+    // Try finding a sentence boundary
+    const sentenceMatches = [...slice.matchAll(/[.!?]\s+/g)];
+    if (sentenceMatches.length > 0) {
+      const last = sentenceMatches[sentenceMatches.length - 1];
+      if (last.index && last.index > 200) {
+        return slice.slice(0, last.index + 1).trim();
+      }
+    }
+
+    // Fallback: nearest space
+    const spaceIdx = slice.lastIndexOf(' ');
+    if (spaceIdx > 150) {
+      return slice.slice(0, spaceIdx).trim() + '...';
+    }
+
+    return slice.trim() + '...';
+  }
+
+  async findOne(
+    idOrSlug: string,
+    userId?: string,
+    userRole?: string,
+  ): Promise<StoryRow & { hasFullAccess?: boolean; totalLength?: number; previewLength?: number }> {
+    const story = await this.findRawStory(idOrSlug);
+
+    // Determine access permissions
+    const isAuthor = Boolean(userId && story.authorId === userId);
+    const roleUpper = (userRole || '').toUpperCase();
+    const isEditorOrAdmin = ['ADMIN', 'EDITOR', 'EDITORIAL', 'CHIEF_EDITOR', 'STAFF_EDITOR'].includes(roleUpper);
+    let isSubscribed = false;
+
+    if (userId) {
+      try {
+        if (this.subscriptionService) {
+          const sub = await this.subscriptionService.getByUserId(userId);
+          isSubscribed = Boolean(sub && sub.status === 'ACTIVE' && new Date(sub.endDate) > new Date());
+        } else {
+          const subRow = await this.prisma.queryOne<{ active: boolean }>(
+            `SELECT (status = 'ACTIVE' AND "endDate" > now()) AS active
+             FROM subscription WHERE "userId" = $1`,
+            [userId],
+          );
+          isSubscribed = subRow?.active === true;
+        }
+      } catch (err) {
+        this.logger.error(`Error checking subscription status for user ${userId}:`, err);
+      }
+    }
+
+    const hasFullAccess = isAuthor || isEditorOrAdmin || isSubscribed;
+    const totalLength = story.content ? story.content.length : 0;
+    let previewLength = totalLength;
+
+    if (!hasFullAccess && story.content) {
+      story.content = this.generateContentPreview(story.content);
+      previewLength = story.content.length;
+    }
+
+    return {
+      ...story,
+      hasFullAccess,
+      totalLength,
+      previewLength,
+    };
   }
 
   async getAuthorStories(authorId: string): Promise<StoryRow[]> {
@@ -380,7 +482,7 @@ export class StoriesService {
   }
 
   async update(id: string, authorId: string, dto: UpdateStoryDto): Promise<StoryRow> {
-    const story = await this.findOne(id);
+    const story = await this.findRawStory(id);
     if (story.authorId !== authorId) throw new ForbiddenException('Not your story');
     if (!['DRAFT', 'REJECTED'].includes(story.status)) {
       throw new BadRequestException('Only DRAFT or REJECTED stories can be edited');
@@ -426,7 +528,7 @@ export class StoriesService {
   }
 
   async submitForReview(id: string, authorId: string): Promise<{ id: string; status: string }> {
-    const story = await this.findOne(id);
+    const story = await this.findRawStory(id);
     if (story.authorId !== authorId) throw new ForbiddenException('Not your story');
     if (!['DRAFT', 'REJECTED'].includes(story.status)) {
       throw new BadRequestException('Only DRAFT or REJECTED stories can be submitted');
@@ -447,7 +549,7 @@ export class StoriesService {
   }
 
   async uploadCover(id: string, userId: string, coverImageUrl: string) {
-    const story = await this.findOne(id);
+    const story = await this.findRawStory(id);
     const userRow = await this.prisma.queryOne<{ role: string }>(
       `SELECT role FROM "user" WHERE id = $1`,
       [userId],
@@ -517,7 +619,7 @@ export class StoriesService {
   }
 
   async reviewStory(id: string, reviewerId: string, dto: ReviewStoryDto) {
-    const story = await this.findOne(id);
+    const story = await this.findRawStory(id);
     if (story.status === 'DRAFT') {
       throw new BadRequestException('Draft stories cannot be reviewed until submitted');
     }
@@ -607,7 +709,7 @@ export class StoriesService {
   }
 
   async delete(id: string, userId: string, userRole: string) {
-    const story = await this.findOne(id);
+    const story = await this.findRawStory(id);
     if (story.authorId !== userId && !['EDITOR', 'ADMIN'].includes(userRole)) {
       throw new ForbiddenException('Not authorized to delete this story');
     }

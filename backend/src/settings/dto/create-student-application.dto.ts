@@ -41,4 +41,14 @@ export class CreateStudentApplicationDto {
   @IsOptional()
   @IsString()
   referenceId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  submittedAt?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  status?: string;
 }

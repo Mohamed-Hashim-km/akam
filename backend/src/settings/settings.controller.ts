@@ -52,6 +52,16 @@ export class SettingsController {
     return this.settingsService.submitStudentApplication(dto);
   }
 
+  @Get('student-verifications/status/:identifier')
+  @ApiOperation({ summary: 'Check student verification status by referenceId or email (Public)' })
+  async getStudentApplicationStatus(@Param('identifier') identifier: string) {
+    const record = await this.settingsService.getStudentApplicationStatus(identifier);
+    if (!record) {
+      return { status: 'NONE' };
+    }
+    return record;
+  }
+
   @Get('editorial/student-verifications')
   @ApiOperation({ summary: 'List all student verification applications for editorial review with pagination and filtering' })
   async getStudentApplications(

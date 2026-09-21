@@ -10,7 +10,10 @@ export type NotificationType =
   | 'CONTENT_REPORTED'
   | 'REPORT_RESOLVED'
   | 'REPORT_DISMISSED'
-  | 'CONTENT_REMOVED';
+  | 'CONTENT_REMOVED'
+  | 'STUDENT_APPLICATION_SUBMITTED'
+  | 'SUBSCRIPTION_GRANTED'
+  | 'SUBSCRIPTION_CANCELLED';
 
 type NotificationRow = {
   id: string;
@@ -199,5 +202,40 @@ export class NotificationsService {
       msg,
       storyId,
     );
+  }
+
+  async notifyEditorsOfStudentApplication(
+    applicantName: string,
+    institution: string,
+    referenceId: string,
+  ): Promise<void> {
+    const editors = await this.prisma.query<{ id: string }>(
+      `SELECT id FROM "user" WHERE role IN ('EDITOR', 'ADMIN')`,
+    );
+
+    for (const editor of editors) {
+      await this.createNotification(
+        editor.id,
+        'STUDENT_APPLICATION_SUBMITTED',
+        `New Student Scholar Pass Application: "${applicantName}" (${institution}) submitted credentials for review [Ref: ${referenceId}].`,
+      );
+    }
+  }
+
+  async notifySubscriptionGranted(
+    userId: string,
+    durationMonths: number,
+    isStudent: boolean,
+  ): Promise<void> {
+    const planName = isStudent
+      ? 'Complimentary Student / Scholar Pass'
+      : `${durationMonths}-Month Akam Digital Pass`;
+    const message = `🎉 Congratulations! Your ${planName} is active. You now have unlimited access to our digital library and literature archive.`;
+    await this.createNotification(userId, 'SUBSCRIPTION_GRANTED', message);
+  }
+
+  async notifySubscriptionCancelled(userId: string): Promise<void> {
+    const message = `Your Akam Digital subscription pass has been cancelled. If you believe this is an error, please reach out to the editorial desk.`;
+    await this.createNotification(userId, 'SUBSCRIPTION_CANCELLED', message);
   }
 }

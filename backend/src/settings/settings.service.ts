@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
 import { PrismaService } from '../common/prisma/prisma.service.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 import { UpdateEditorsNoteDto } from './dto/update-editors-note.dto.js';
 
 export interface EditorsNoteValue {
@@ -40,6 +41,7 @@ export class SettingsService {
   constructor(
     private prisma: PrismaService,
     private configService: ConfigService,
+    private notificationsService: NotificationsService,
   ) {}
 
   private getTransporter(): nodemailer.Transporter {
@@ -273,11 +275,19 @@ export class SettingsService {
     const existingIndex = list.findIndex(
       (item) =>
         item.referenceId === refId ||
+        (item.email && dto.email && item.email.trim().toLowerCase() === dto.email.trim().toLowerCase()) ||
         (item.email === dto.email && item.studentIdNumber === dto.studentIdNumber),
     );
 
     if (existingIndex >= 0) {
-      list[existingIndex] = { ...list[existingIndex], ...newRecord };
+      list[existingIndex] = {
+        ...list[existingIndex],
+        ...newRecord,
+        status: 'PENDING_APPROVAL',
+        reviewNotes: undefined,
+        reviewedBy: undefined,
+        reviewedAt: undefined,
+      };
     } else {
       list.unshift(newRecord);
     }
@@ -288,6 +298,23 @@ export class SettingsService {
        ON CONFLICT (key) DO UPDATE
        SET value = EXCLUDED.value, "updatedAt" = now()`,
       [JSON.stringify(list)],
+    );
+
+    // Notify all editors / admins with an in-app notification linking to the student verifications panel
+    try {
+      await this.notificationsService.notifyEditorsOfStudentApplication(
+        dto.fullName,
+        dto.institution,
+        newRecord.referenceId,
+      );
+      this.logger.log(`[StudentApp] Notified editorial staff about application ${newRecord.referenceId} from ${dto.email}`);
+    } catch (notifErr: any) {
+      this.logger.warn(`Could not dispatch in-app notification to editors: ${notifErr.message}`);
+    }
+
+    // Also send an email notification to the Editorial Board email
+    this.sendEditorialNewApplicationAlert(newRecord).catch((e) =>
+      this.logger.warn(`Failed to send editorial new application email: ${e.message}`),
     );
 
     return newRecord;
@@ -333,6 +360,13 @@ export class SettingsService {
         );
       }
 
+      // Grant free 6-month subscription when student is approved
+      if (status === 'APPROVED' && fallback.email) {
+        this.grantStudentSubscription(fallback.email).catch((err) =>
+          this.logger.error(`Failed to grant student subscription: ${err.message}`),
+        );
+      }
+
       return fallback;
     }
 
@@ -362,12 +396,97 @@ export class SettingsService {
       );
     }
 
+    // Grant free 6-month subscription when student is approved
+    if (status === 'APPROVED' && updated.email) {
+      this.grantStudentSubscription(updated.email).catch((err) =>
+        this.logger.error(`Failed to grant student subscription: ${err.message}`),
+      );
+    }
+
+    // Cancel/revoke subscription when student is rejected
+    if (status === 'REJECTED' && updated.email) {
+      this.revokeStudentSubscription(updated.email).catch((err) =>
+        this.logger.error(`Failed to revoke student subscription: ${err.message}`),
+      );
+    }
+
     return updated;
+  }
+
+  /** Looks up user by email and creates/extends their free student subscription */
+  private async grantStudentSubscription(email: string): Promise<void> {
+    const cleanEmail = email.trim().toLowerCase();
+    let user = await this.prisma.queryOne<{ id: string }>(
+      `SELECT id FROM "user" WHERE LOWER(email) = $1`,
+      [cleanEmail],
+    );
+    if (!user) {
+      user = await this.prisma.queryOne<{ id: string }>(
+        `INSERT INTO "user" (id, email, role, "createdAt", "updatedAt")
+         VALUES (gen_random_uuid()::text, $1, 'READER', now(), now())
+         ON CONFLICT (email) DO UPDATE SET "updatedAt" = now()
+         RETURNING id`,
+        [cleanEmail],
+      );
+    }
+    if (!user) {
+      this.logger.warn(`[StudentSub] Could not ensure user record for email ${cleanEmail}`);
+      return;
+    }
+    await this.prisma.execute(
+      `INSERT INTO subscription (id, "userId", "planType", status, "startDate", "endDate", "isStudent", "txnId", "createdAt", "updatedAt")
+       VALUES (gen_random_uuid()::text, $1, 'SIX_MONTH', 'ACTIVE', now(), now() + interval '6 months', true, 'STUDENT_EDITORIAL_GRANT', now(), now())
+       ON CONFLICT ("userId") DO UPDATE
+         SET status      = 'ACTIVE',
+             "startDate" = now(),
+             "endDate"   = now() + interval '6 months',
+             "isStudent" = true,
+             "txnId"     = 'STUDENT_EDITORIAL_GRANT',
+             "updatedAt" = now()`,
+      [user.id],
+    );
+    this.logger.log(`[StudentSub] ✅ Free 6-month subscription granted to userId=${user.id} (${cleanEmail})`);
+
+    // Dispatch in-app notification
+    try {
+      await this.notificationsService.notifySubscriptionGranted(user.id, 6, true);
+    } catch (notifErr: any) {
+      this.logger.warn(`Failed to dispatch in-app notification: ${notifErr.message}`);
+    }
+  }
+
+  /** Revokes active subscription for a rejected/cancelled student */
+  private async revokeStudentSubscription(email: string): Promise<void> {
+    const cleanEmail = email.trim().toLowerCase();
+    const user = await this.prisma.queryOne<{ id: string }>(
+      `SELECT id FROM "user" WHERE LOWER(email) = $1`,
+      [cleanEmail],
+    );
+
+    await this.prisma.execute(
+      `UPDATE subscription SET status = 'CANCELLED', "updatedAt" = now()
+       WHERE "userId" IN (SELECT id FROM "user" WHERE LOWER(email) = $1)`,
+      [cleanEmail],
+    );
+    this.logger.log(`[StudentSub] 🚫 Subscription cancelled for email ${cleanEmail}`);
+
+    if (user?.id) {
+      try {
+        await this.notificationsService.notifySubscriptionCancelled(user.id);
+      } catch (notifErr: any) {
+        this.logger.warn(`Failed to dispatch cancellation notification: ${notifErr.message}`);
+      }
+    }
   }
 
   async deleteStudentApplication(refId: string): Promise<boolean> {
     const cleanId = (refId || '').trim().toLowerCase();
     const list = await this.getStudentApplications();
+    const target = list.find(
+      (item) =>
+        (item.referenceId || '').trim().toLowerCase() === cleanId ||
+        (item.id || '').trim().toLowerCase() === cleanId,
+    );
     const filtered = list.filter(
       (item) =>
         (item.referenceId || '').trim().toLowerCase() !== cleanId &&
@@ -380,7 +499,24 @@ export class SettingsService {
        SET value = EXCLUDED.value, "updatedAt" = now()`,
       [JSON.stringify(filtered)],
     );
+    if (target?.email) {
+      await this.revokeStudentSubscription(target.email);
+    }
     return true;
+  }
+
+  async getStudentApplicationStatus(identifier: string): Promise<StudentApplicationRecord | null> {
+    const clean = (identifier || '').trim().toLowerCase();
+    if (!clean) return null;
+    const list = await this.getStudentApplications();
+    return (
+      list.find(
+        (a) =>
+          a.referenceId?.trim().toLowerCase() === clean ||
+          a.id?.trim().toLowerCase() === clean ||
+          a.email?.trim().toLowerCase() === clean,
+      ) || null
+    );
   }
 
   // ─── Student Status Email Delivery (Using AKAM Brand Palette) ──────────────────────────
@@ -711,6 +847,93 @@ export class SettingsService {
 </html>`;
 
     return { subject, html };
+  }
+
+  private async sendEditorialNewApplicationAlert(
+    record: StudentApplicationRecord,
+  ): Promise<void> {
+    const frontendUrl =
+      this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3002';
+    const reviewUrl = `${frontendUrl}/editorial?tab=subscriptions&subTab=verifications&page=1`;
+    const editorialEmail =
+      this.configService.get<string>('SMTP_USER') || 'editorial@akamdigital.com';
+
+    const subject = `[New Student Pass Application] ${record.fullName} (${record.institution})`;
+    const html = `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; background: #040706; color: #F7FBF9; padding: 32px; border-radius: 20px; border: 1px solid #16382B;">
+        <div style="display: flex; align-items: center; margin-bottom: 24px;">
+          <span style="font-size: 20px; font-weight: 800; letter-spacing: 0.15em; color: #E4F953;">AKAM</span>
+          <span style="font-size: 11px; margin-left: 10px; padding: 3px 8px; border-radius: 6px; background: #16382B; color: #39D39E; font-weight: 700;">EDITORIAL DESK</span>
+        </div>
+        <h2 style="color: #ffffff; margin: 0 0 12px; font-size: 20px;">New Student Scholar Pass Application</h2>
+        <p style="color: #94A3B8; font-size: 14px; line-height: 1.6; margin-bottom: 20px;">
+          A student has submitted their credentials for a 100% Free Scholar Pass. Please review their submitted identity card.
+        </p>
+        <div style="background: #0A120E; border: 1px solid #16382B; border-radius: 12px; padding: 18px; margin-bottom: 24px; font-size: 13px;">
+          <div style="margin-bottom: 8px;"><strong style="color: #E4F953;">Applicant:</strong> <span style="color: #ffffff;">${record.fullName}</span></div>
+          <div style="margin-bottom: 8px;"><strong style="color: #E4F953;">Institution:</strong> <span style="color: #ffffff;">${record.institution}</span></div>
+          <div style="margin-bottom: 8px;"><strong style="color: #E4F953;">Course / Year:</strong> <span style="color: #ffffff;">${record.course}</span></div>
+          <div style="margin-bottom: 8px;"><strong style="color: #E4F953;">Student ID:</strong> <span style="color: #ffffff;">${record.studentIdNumber}</span></div>
+          <div style="margin-bottom: 8px;"><strong style="color: #E4F953;">Email:</strong> <span style="color: #ffffff;">${record.email}</span></div>
+          <div><strong style="color: #E4F953;">Reference ID:</strong> <span style="color: #ffffff;">${record.referenceId}</span></div>
+        </div>
+        <div style="text-align: center; margin-top: 24px;">
+          <a href="${reviewUrl}" style="display: inline-block; background: #0FA975; color: #ffffff; text-decoration: none; padding: 12px 28px; font-weight: 700; border-radius: 12px; font-size: 14px;">
+            Open Student Verifications Panel →
+          </a>
+        </div>
+      </div>
+    `;
+
+    const zeptoToken = this.configService.get<string>('ZEPTO_MAIL_TOKEN');
+    if (zeptoToken) {
+      const zeptoUrl =
+        this.configService.get<string>('ZEPTO_MAIL_URL') ||
+        'https://api.zeptomail.in/v1.1/email';
+      try {
+        await fetch(zeptoUrl, {
+          method: 'POST',
+          headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+            Authorization: zeptoToken,
+          },
+          body: JSON.stringify({
+            from: {
+              address:
+                this.configService.get<string>('ZEPTO_MAIL_FROM_EMAIL') ||
+                'no-reply@megamind.studio',
+              name: 'AKAM Scholar Portal',
+            },
+            to: [
+              {
+                email_address: {
+                  address: editorialEmail,
+                  name: 'AKAM Editorial Board',
+                },
+              },
+            ],
+            subject,
+            htmlbody: html,
+          }),
+        });
+        return;
+      } catch (err: any) {
+        this.logger.warn(`Could not send editorial alert via ZeptoMail: ${err.message}`);
+      }
+    }
+
+    try {
+      const transporter = this.getTransporter();
+      await transporter.sendMail({
+        from: this.configService.get<string>('SMTP_FROM') || `"AKAM Digital" <${this.configService.get('SMTP_USER')}>`,
+        to: editorialEmail,
+        subject,
+        html,
+      });
+    } catch (err: any) {
+      this.logger.warn(`Could not send editorial alert via SMTP: ${err.message}`);
+    }
   }
 }
 

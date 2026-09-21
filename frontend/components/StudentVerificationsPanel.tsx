@@ -131,6 +131,7 @@ export const StudentVerificationsPanel: React.FC<StudentVerificationsPanelProps>
   const showToast = (msg: string) => {
     if (onNotify) {
       onNotify(msg);
+      return;
     }
     setToastMessage(msg);
     setTimeout(() => {
@@ -212,6 +213,15 @@ export const StudentVerificationsPanel: React.FC<StudentVerificationsPanelProps>
   useEffect(() => {
     fetchApplications(1, true);
   }, [statusFilter, debouncedSearch, fetchApplications]);
+
+  // Refresh student verifications when subscriptions are granted or cancelled anywhere
+  useEffect(() => {
+    const onSyncRefresh = () => {
+      fetchApplications(1, true);
+    };
+    window.addEventListener("akam_subscription_refresh", onSyncRefresh);
+    return () => window.removeEventListener("akam_subscription_refresh", onSyncRefresh);
+  }, [fetchApplications]);
 
   // IntersectionObserver for Infinite Scroll
   useEffect(() => {
@@ -310,6 +320,7 @@ export const StudentVerificationsPanel: React.FC<StudentVerificationsPanelProps>
             }
           }
         }
+        window.dispatchEvent(new Event("akam_subscription_refresh"));
       } catch (e) {
         // ignore
       }
@@ -420,6 +431,9 @@ export const StudentVerificationsPanel: React.FC<StudentVerificationsPanelProps>
           reviewedBy: currentUserName,
         }),
       });
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("akam_subscription_refresh"));
+      }
     } catch (err) {
       console.warn("Could not sync manual grant to backend:", err);
     }

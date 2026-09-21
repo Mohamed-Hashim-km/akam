@@ -1,6 +1,7 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service.js';
 import { UploadsService } from '../uploads/uploads.service.js';
+import { SubscriptionService } from '../subscription/subscription.service.js';
 import { CreateEditionDto } from './dto/create-edition.dto.js';
 import { UpdateEditionDto } from './dto/update-edition.dto.js';
 import { randomUUID } from 'crypto';
@@ -10,28 +11,48 @@ export class EditionsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly uploadsService: UploadsService,
+    @Optional() private readonly subscriptionService?: SubscriptionService,
   ) {}
 
+  private async checkUserHasSubscription(userId?: string, userRole?: string): Promise<boolean> {
+    const roleUpper = (userRole || '').toUpperCase();
+    if (['ADMIN', 'EDITOR', 'EDITORIAL', 'CHIEF_EDITOR', 'STAFF_EDITOR'].includes(roleUpper)) {
+      return true;
+    }
+    if (!userId || !this.subscriptionService) {
+      return false;
+    }
+    try {
+      const sub = await this.subscriptionService.getByUserId(userId);
+      return Boolean(sub && sub.status === 'ACTIVE' && new Date(sub.endDate) > new Date());
+    } catch {
+      return false;
+    }
+  }
+
   /** Public: only published editions, ordered by sortOrder ASC, createdAt DESC */
-  async findAllPublished() {
+  async findAllPublished(userId?: string, userRole?: string) {
+    const hasAccess = await this.checkUserHasSubscription(userId, userRole);
     const sql = `
-      SELECT "id", "title", "pdfUrl", "coverImage", "isPublished", "sortOrder", "createdAt", "updatedAt"
+      SELECT "id", "title", ${hasAccess ? '"pdfUrl"' : 'NULL AS "pdfUrl"'}, "coverImage", "isPublished", "sortOrder", "createdAt", "updatedAt"
       FROM "edition"
       WHERE "isPublished" = true
       ORDER BY "sortOrder" ASC, "createdAt" DESC
     `;
-    return this.prisma.query<any>(sql);
+    const rows = await this.prisma.query<any>(sql);
+    return rows.map((r) => ({ ...r, hasAccess }));
   }
 
   /** Public paginated: published editions with page & limit */
-  async findAllPublishedPaginated(page = 1, limit = 3) {
+  async findAllPublishedPaginated(page = 1, limit = 3, userId?: string, userRole?: string) {
+    const hasAccess = await this.checkUserHasSubscription(userId, userRole);
     const offset = (page - 1) * limit;
     const countSql = `SELECT COUNT(*) FROM "edition" WHERE "isPublished" = true`;
     const countRes = await this.prisma.query<{ count: string }>(countSql);
     const total = parseInt(countRes[0]?.count || '0', 10);
 
     const dataSql = `
-      SELECT "id", "title", "pdfUrl", "coverImage", "isPublished", "sortOrder", "createdAt", "updatedAt"
+      SELECT "id", "title", ${hasAccess ? '"pdfUrl"' : 'NULL AS "pdfUrl"'}, "coverImage", "isPublished", "sortOrder", "createdAt", "updatedAt"
       FROM "edition"
       WHERE "isPublished" = true
       ORDER BY "sortOrder" ASC, "createdAt" DESC
@@ -42,7 +63,9 @@ export class EditionsService {
     const totalPages = Math.ceil(total / limit) || 1;
     const hasMore = page < totalPages;
 
-    return { data, meta: { total, page, limit, totalPages, hasMore } };
+    const mappedData = data.map((item: any) => ({ ...item, hasAccess }));
+
+    return { data: mappedData, meta: { total, page, limit, totalPages, hasMore, hasAccess } };
   }
 
   /** Editorial: all editions with pagination and search */
@@ -80,11 +103,20 @@ export class EditionsService {
     return { data, meta: { total, page, limit, totalPages } };
   }
 
-  async findOne(id: string) {
+  async findOne(id: string, userId?: string, userRole?: string, bypassAccess = false) {
     const sql = `SELECT * FROM "edition" WHERE "id" = $1 LIMIT 1`;
     const item = await this.prisma.queryOne<any>(sql, [id]);
     if (!item) throw new NotFoundException(`Edition with ID ${id} not found`);
-    return item;
+
+    if (bypassAccess) {
+      return item;
+    }
+
+    const hasAccess = await this.checkUserHasSubscription(userId, userRole);
+    if (!hasAccess) {
+      item.pdfUrl = null;
+    }
+    return { ...item, hasAccess };
   }
 
   async create(dto: CreateEditionDto) {
@@ -108,7 +140,7 @@ export class EditionsService {
   }
 
   async update(id: string, dto: UpdateEditionDto) {
-    const existing = await this.findOne(id);
+    const existing = await this.findOne(id, undefined, undefined, true);
     const title = dto.title ?? existing.title;
     const pdfUrl = dto.pdfUrl ?? existing.pdfUrl;
     const coverImage = dto.coverImage !== undefined ? dto.coverImage : existing.coverImage;
@@ -133,7 +165,7 @@ export class EditionsService {
   }
 
   async togglePublish(id: string) {
-    const existing = await this.findOne(id);
+    const existing = await this.findOne(id, undefined, undefined, true);
     const sql = `
       UPDATE "edition"
       SET "isPublished" = $2, "updatedAt" = NOW()
@@ -144,7 +176,7 @@ export class EditionsService {
   }
 
   async remove(id: string) {
-    const existing = await this.findOne(id);
+    const existing = await this.findOne(id, undefined, undefined, true);
     if (existing.pdfUrl) {
       this.uploadsService.deleteFileByUrl(existing.pdfUrl);
     }

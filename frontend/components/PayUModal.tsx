@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { API_BASE_URL, apiFetch } from "@/lib/config";
 import {
   X,
   CreditCard,
@@ -18,7 +19,7 @@ export interface PayUModalProps {
   isOpen: boolean;
   onClose: () => void;
   planName?: string;
-  billingCycle?: "monthly" | "annual";
+  billingCycle?: "monthly" | "annual" | "sixmonth";
   priceAmount?: number;
   onSuccess?: () => void;
 }
@@ -26,9 +27,9 @@ export interface PayUModalProps {
 export const PayUModal: React.FC<PayUModalProps> = ({
   isOpen,
   onClose,
-  planName = "Masika Pass",
-  billingCycle = "monthly",
-  priceAmount = 149,
+  planName = "Akam Digital Pass",
+  billingCycle = "sixmonth",
+  priceAmount = 399,
   onSuccess,
 }) => {
   const [paymentStep, setPaymentStep] = useState<"checkout" | "processing" | "success" | "error">("checkout");
@@ -48,21 +49,49 @@ export const PayUModal: React.FC<PayUModalProps> = ({
   const handleSimulatePayment = (successOutcome: boolean = true) => {
     setPaymentStep("processing");
 
-    setTimeout(() => {
+    setTimeout(async () => {
       if (successOutcome) {
         const generatedTxn = `TXN-PAYU-${Math.floor(1000000 + Math.random() * 9000000)}`;
         setTxnId(generatedTxn);
         if (typeof window !== "undefined") {
+          // Legacy localStorage keys (kept for compatibility)
           localStorage.setItem("akam_masika_pass", "true");
           localStorage.setItem("akam_pass_type", planName);
           localStorage.setItem("akam_pass_cycle", billingCycle);
           localStorage.setItem("akam_pass_txn", generatedTxn);
           localStorage.setItem("akam_pass_date", new Date().toISOString());
+
+          // Persist subscription in DB and update user object in localStorage
+          try {
+            const res = await apiFetch(`${API_BASE_URL}/subscription/activate`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ txnId: generatedTxn }),
+            });
+            if (res.ok) {
+              const data = await res.json();
+              const rawUser = localStorage.getItem("akam_user");
+              if (rawUser) {
+                const userObj = JSON.parse(rawUser);
+                localStorage.setItem(
+                  "akam_user",
+                  JSON.stringify({
+                    ...userObj,
+                    subscriptionStatus: "ACTIVE",
+                    subscriptionEndDate: data.endDate ?? null,
+                    isStudent: false,
+                  }),
+                );
+                // Notify all useSubscription hooks to refresh
+                window.dispatchEvent(new Event("akam_user_updated"));
+              }
+            }
+          } catch {
+            // Even if backend call fails, UI proceeds — next login will sync
+          }
         }
         setPaymentStep("success");
-        if (onSuccess) {
-          onSuccess();
-        }
+        if (onSuccess) onSuccess();
       } else {
         setPaymentStep("error");
       }
@@ -74,7 +103,7 @@ export const PayUModal: React.FC<PayUModalProps> = ({
     onClose();
   };
 
-  const formattedAmount = billingCycle === "monthly" ? priceAmount : priceAmount;
+  const formattedAmount = priceAmount;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-sm animate-in fade-in">

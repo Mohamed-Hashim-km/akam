@@ -4,19 +4,33 @@ import React, { useState, useEffect } from "react";
 import ReadingPlansSection from "@/components/ReadingPlansSection";
 import AboutDigitalEdition from "@/components/AboutDigitalEdition";
 import PayUModal from "@/components/PayUModal";
+import AuthModal from "@/components/AuthModal";
 import StudentVerificationModal, { StudentApplicationData } from "@/components/StudentVerificationModal";
 
 export default function PlansPage() {
-  const [billingCycle, setBillingCycle] = useState<"monthly" | "annual">("monthly");
   const [payUModalOpen, setPayUModalOpen] = useState(false);
   const [studentModalOpen, setStudentModalOpen] = useState(false);
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [user, setUser] = useState<any>(null);
 
   // User subscription states
   const [isPassActive, setIsPassActive] = useState(false);
-  const [studentStatus, setStudentStatus] = useState<"NONE" | "PENDING_APPROVAL" | "APPROVED">("NONE");
+  const [studentStatus, setStudentStatus] = useState<"NONE" | "PENDING_APPROVAL" | "APPROVED" | "REJECTED">("NONE");
 
-  useEffect(() => {
+  const loadUserState = () => {
     if (typeof window !== "undefined") {
+      const u = localStorage.getItem("akam_user");
+      const token = localStorage.getItem("akam_token");
+      if (u && token) {
+        try {
+          setUser(JSON.parse(u));
+        } catch {
+          setUser(null);
+        }
+      } else {
+        setUser(null);
+      }
+
       const activePass = localStorage.getItem("akam_masika_pass") === "true";
       setIsPassActive(activePass);
 
@@ -24,39 +38,62 @@ export default function PlansPage() {
       if (storedStudent) {
         try {
           const parsed = JSON.parse(storedStudent) as StudentApplicationData;
-          setStudentStatus(parsed.status === "APPROVED" ? "APPROVED" : "PENDING_APPROVAL");
+          setStudentStatus(parsed.status);
         } catch {
           // ignore corrupted data
         }
       }
     }
+  };
+
+  useEffect(() => {
+    loadUserState();
+    window.addEventListener("akam_user_updated", loadUserState);
+    return () => window.removeEventListener("akam_user_updated", loadUserState);
   }, []);
 
-  const handleStudentStatusChange = (newStatus: "PENDING_APPROVAL" | "APPROVED" | "NONE") => {
+  const handleStudentStatusChange = (newStatus: "PENDING_APPROVAL" | "APPROVED" | "REJECTED" | "NONE") => {
     setStudentStatus(newStatus);
   };
 
-  const masikaTotalAmount = billingCycle === "monthly" ? 149 : 1248;
+  const handleSubscribeRequest = () => {
+    if (!user) {
+      setAuthModalOpen(true);
+    } else {
+      setPayUModalOpen(true);
+    }
+  };
 
   return (
     <main className="min-h-screen bg-white font-poppins text-gray-900 pb-16">
-      {/* ── 3 Main Pricing Cards Grid with Student Pass & Masika Pass ─ */}
     
 
       {/* ── Features Comparison Table Section ────────────────────────── */}
       <ReadingPlansSection
-        onSubscribe={() => setPayUModalOpen(true)}
+        onSubscribe={handleSubscribeRequest}
         onStudentApply={() => setStudentModalOpen(true)}
+        isLoggedIn={Boolean(user)}
       />
 
       {/* ── PayU Checkout Modal ───────────────────────────────────────── */}
       <PayUModal
         isOpen={payUModalOpen}
         onClose={() => setPayUModalOpen(false)}
-        planName="Masika Pass"
-        billingCycle={billingCycle}
-        priceAmount={masikaTotalAmount}
+        planName="6-Month Akam Digital Pass"
+        billingCycle="sixmonth"
+        priceAmount={399}
         onSuccess={() => setIsPassActive(true)}
+      />
+
+      {/* ── Auth Modal (if user clicks subscribe while logged out) ───── */}
+      <AuthModal
+        isOpen={authModalOpen}
+        onClose={() => setAuthModalOpen(false)}
+        onSuccess={(loggedInUser) => {
+          setUser(loggedInUser);
+          setAuthModalOpen(false);
+          setPayUModalOpen(true);
+        }}
       />
 
       {/* ── Student ID Card Verification Modal ───────────────────────── */}

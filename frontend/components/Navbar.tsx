@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import { Search, X, Bell, User, Menu, ChevronRight, CheckCheck, LogOut, Loader2, BookOpen, ArrowRight, Flag, AlertTriangle, CheckCircle2, ShieldAlert } from "lucide-react";
+import { Search, X, Bell, User, Menu, ChevronRight, CheckCheck, LogOut, Loader2, BookOpen, ArrowRight, Flag, AlertTriangle, CheckCircle2, ShieldAlert, Sparkles, Ban } from "lucide-react";
 import Button from "./ui/Button";
 import AuthModal from "./AuthModal";
 import { API_BASE_URL, apiFetch } from "@/lib/config";
@@ -120,7 +120,10 @@ export const Navbar: React.FC<NavbarProps> = ({
             !parsed ||
             parsed.role !== freshUser.role ||
             parsed.name !== freshUser.name ||
-            parsed.avatarUrl !== freshUser.avatarUrl
+            parsed.avatarUrl !== freshUser.avatarUrl ||
+            parsed.subscriptionStatus !== freshUser.subscriptionStatus ||
+            parsed.isStudent !== freshUser.isStudent ||
+            parsed.subscriptionEndDate !== freshUser.subscriptionEndDate
           ) {
             localStorage.setItem("akam_user", JSON.stringify(freshUser));
             setUser(freshUser);
@@ -280,12 +283,36 @@ export const Navbar: React.FC<NavbarProps> = ({
     }
     setNotificationsOpen(false);
 
+    // If student verification application notification
+    if (
+      n.type === "STUDENT_APPLICATION_SUBMITTED" ||
+      n.message?.includes("Student Scholar Pass") ||
+      n.message?.includes("student verification")
+    ) {
+      if (user?.role === "EDITOR" || user?.role === "ADMIN") {
+        router.push("/editorial?tab=subscriptions&subTab=verifications&page=1");
+        return;
+      }
+    }
+
     // If report notification or editorial alert
     if (n.type === "CONTENT_REPORTED" || n.message?.includes("flagged for review") || n.message?.includes("reported")) {
       if (user?.role === "EDITOR" || user?.role === "ADMIN") {
         router.push("/editorial?tab=reports&page=1");
         return;
       }
+    }
+
+    // If subscription pass granted
+    if (n.type === "SUBSCRIPTION_GRANTED" || n.message?.includes("Digital Pass") || n.message?.includes("Scholar Pass")) {
+      router.push("/emagazine");
+      return;
+    }
+
+    // If subscription pass cancelled
+    if (n.type === "SUBSCRIPTION_CANCELLED") {
+      router.push("/plans");
+      return;
     }
 
     // If story submission notification
@@ -529,8 +556,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                             onClick={() => handleSelectSearchResult(story.slug || story.id)}
                             className="p-3 hover:bg-gray-50 flex items-center gap-3 transition-colors cursor-pointer group"
                           >
-                            <div className="relative w-10 h-1
-                            0 rounded-lg overflow-hidden bg-gray-100 shrink-0 border border-gray-200">
+                            <div className="relative w-10 h-10 rounded-lg overflow-hidden bg-gray-100 shrink-0 border border-gray-200">
                               <Image
                                 src={story.coverImageUrl || "/images/stories/ramachi.jpg"}
                                 alt={story.title}
@@ -895,6 +921,16 @@ export const Navbar: React.FC<NavbarProps> = ({
                           {isDismissedType && (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-gray-100 text-gray-700">
                               Reviewed
+                            </span>
+                          )}
+                          {n.type === "SUBSCRIPTION_GRANTED" && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800">
+                              <Sparkles className="w-2.5 h-2.5 text-purple-600" /> Digital Pass Active
+                            </span>
+                          )}
+                          {n.type === "SUBSCRIPTION_CANCELLED" && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800">
+                              <Ban className="w-2.5 h-2.5 text-rose-600" /> Pass Cancelled
                             </span>
                           )}
                           {n.createdAt && (

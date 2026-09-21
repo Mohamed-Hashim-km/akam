@@ -41,7 +41,38 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
       await client.query(`ALTER TYPE "NotificationType" ADD VALUE IF NOT EXISTS 'REPORT_RESOLVED';`);
       await client.query(`ALTER TYPE "NotificationType" ADD VALUE IF NOT EXISTS 'REPORT_DISMISSED';`);
       await client.query(`ALTER TYPE "NotificationType" ADD VALUE IF NOT EXISTS 'CONTENT_REMOVED';`);
+      await client.query(`ALTER TYPE "NotificationType" ADD VALUE IF NOT EXISTS 'STUDENT_APPLICATION_SUBMITTED';`);
       await client.query(`CREATE TABLE IF NOT EXISTS site_setting (key TEXT PRIMARY KEY, value JSONB, "updatedAt" TIMESTAMP DEFAULT now());`);
+      // Subscription table
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS subscription (
+          id          TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+          "userId"    TEXT NOT NULL UNIQUE REFERENCES "user"(id) ON DELETE CASCADE,
+          "planType"  TEXT NOT NULL DEFAULT 'SIX_MONTH',
+          status      TEXT NOT NULL DEFAULT 'ACTIVE',
+          "startDate" TIMESTAMP NOT NULL DEFAULT now(),
+          "endDate"   TIMESTAMP NOT NULL,
+          "isStudent" BOOLEAN NOT NULL DEFAULT false,
+          "txnId"     TEXT,
+          "createdAt" TIMESTAMP NOT NULL DEFAULT now(),
+          "updatedAt" TIMESTAMP NOT NULL DEFAULT now()
+        );
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_subscription_user ON subscription("userId");`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_subscription_status ON subscription(status);`);
+      // Story free-read tracking table (per logged-in user per story)
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS story_free_read (
+          id           TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+          "userId"     TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
+          "storyId"    TEXT NOT NULL,
+          "readSecs"   INTEGER NOT NULL DEFAULT 0,
+          "paywallHit" BOOLEAN NOT NULL DEFAULT false,
+          "updatedAt"  TIMESTAMP NOT NULL DEFAULT now(),
+          UNIQUE("userId", "storyId")
+        );
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_free_read_user_story ON story_free_read("userId", "storyId");`);
       client.release();
       this.logger.log('✅ Database connection established and schema verified');
     } catch (error) {
