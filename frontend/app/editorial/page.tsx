@@ -1088,7 +1088,6 @@ function EditorialDashboardContent() {
           setEmagazineMeta({ total: 0, page: 1, limit: 10, totalPages: 1 });
         }
         fetchEmagazineCounts();
-      }
       } else if (tab === "reports") {
         const rStatus = reportStatusFilter !== "ALL" ? `&status=${reportStatusFilter}` : "";
         const rType = reportTypeFilter !== "ALL" ? `&type=${reportTypeFilter}` : "";
