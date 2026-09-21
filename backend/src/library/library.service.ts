@@ -27,14 +27,45 @@ export class LibraryService {
   constructor(private prisma: PrismaService) {}
 
   async updateProgress(userId: string, targetStoryId: string, dto: UpdateProgressDto) {
-    const story = await this.prisma.queryOne<{ id: string }>(
-      `SELECT id FROM story WHERE id = $1 OR slug = $1 LIMIT 1`,
+    const story = await this.prisma.queryOne<{ id: string; authorId: string }>(
+      `SELECT id, "authorId" FROM story WHERE id = $1 OR slug = $1 LIMIT 1`,
       [targetStoryId],
     );
     if (!story) throw new NotFoundException('Story not found');
 
+    const userRow = await this.prisma.queryOne<{ role: string }>(
+      `SELECT role FROM "user" WHERE id = $1`,
+      [userId],
+    );
+    const roleUpper = (userRow?.role || '').toUpperCase();
+    const isStaff = ['ADMIN', 'EDITOR', 'EDITORIAL', 'CHIEF_EDITOR', 'STAFF_EDITOR'].includes(roleUpper);
+    const isAuthor = story.authorId === userId;
+
+    let isSubscribed = false;
+    try {
+      const subRow = await this.prisma.queryOne<{ active: boolean }>(
+        `SELECT (status = 'ACTIVE' AND "endDate" > now()) AS active
+         FROM subscription WHERE "userId" = $1`,
+        [userId],
+      );
+      isSubscribed = subRow?.active === true;
+    } catch {
+      // Ignore query error and treat as unsubscribed
+    }
+
+    const hasFullAccess = isAuthor || isStaff || isSubscribed;
     const storyId = story.id;
-    const isCompleted = dto.isCompleted ?? dto.progressPercent >= 90;
+    let finalProgress = Math.max(0, Math.min(100, dto.progressPercent || 0));
+    let isCompleted = false;
+
+    if (hasFullAccess) {
+      isCompleted = dto.isCompleted ?? finalProgress >= 90;
+    } else {
+      // Non-subscriber: Preview reading cannot be completed, cap at maximum 20%
+      finalProgress = Math.min(finalProgress, 20);
+      isCompleted = false;
+    }
+
     const scrollPos = dto.lastScrollPosition ?? 0;
 
     await this.prisma.execute(
@@ -42,11 +73,17 @@ export class LibraryService {
        VALUES (gen_random_uuid()::text, $1, $2, $3, $4, $5, now())
        ON CONFLICT ("userId", "storyId")
        DO UPDATE SET
-         "progressPercent" = EXCLUDED."progressPercent",
+         "progressPercent" = CASE 
+           WHEN $6 = true THEN EXCLUDED."progressPercent"
+           ELSE LEAST(EXCLUDED."progressPercent", 20)
+         END,
          "lastScrollPosition" = EXCLUDED."lastScrollPosition",
-         "isCompleted" = EXCLUDED."isCompleted" OR reading_progress."isCompleted",
+         "isCompleted" = CASE 
+           WHEN $6 = true THEN (EXCLUDED."isCompleted" OR reading_progress."isCompleted")
+           ELSE false
+         END,
          "lastReadAt" = now()`,
-      [userId, storyId, dto.progressPercent, scrollPos, isCompleted],
+      [userId, storyId, finalProgress, scrollPos, isCompleted, hasFullAccess],
     );
 
     return this.prisma.queryOne(

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -34,6 +34,10 @@ import type { Swiper as SwiperClass } from "swiper";
 import Button from "@/components/ui/Button";
 import AuthModal from "@/components/AuthModal";
 import { API_BASE_URL, apiFetch, formatAssetUrl } from "@/lib/config";
+import { useSubscription } from "@/lib/useSubscription";
+import dynamic from "next/dynamic";
+
+const FreemiumPaywall = dynamic(() => import("@/components/FreemiumPaywall"), { ssr: false });
 
 // Swiper CSS imports
 import "swiper/css";
@@ -57,6 +61,9 @@ interface StoryDetail {
   authorEmail?: string;
   authorAvatarUrl?: string | null;
   authorBio?: string | null;
+  hasFullAccess?: boolean;
+  totalLength?: number;
+  previewLength?: number;
 }
 
 interface CommentItem {
@@ -112,6 +119,9 @@ export default function WorkDetailPage() {
   const storyContentRef = useRef<HTMLDivElement | null>(null);
 
   // Load user data from localStorage
+  // ── Freemium / Subscription ─────────────────────────────────────────────
+  const { isSubscribed, refreshSubscription } = useSubscription();
+
   const loadUser = () => {
     const savedUser = localStorage.getItem("akam_user");
     if (savedUser) {
@@ -125,52 +135,63 @@ export default function WorkDetailPage() {
     }
   };
 
-  useEffect(() => {
-    loadUser();
-    window.addEventListener("akam_user_updated", loadUser);
-    return () => {
-      window.removeEventListener("akam_user_updated", loadUser);
-    };
-  }, []);
-
-  // Fetch story detail and related data
-  useEffect(() => {
+  const fetchStoryData = useCallback(async (showLoading = false) => {
     if (!id) return;
-
-    const fetchStoryData = async () => {
+    if (showLoading) {
       setLoading(true);
-      setError(null);
-      try {
-        const res = await apiFetch(`${API_BASE_URL}/stories/${id}`);
-        if (res.ok) {
-          const data: StoryDetail = await res.json();
-          setStory(data);
+    }
+    setError(null);
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/stories/${id}`);
+      if (res.ok) {
+        const data: StoryDetail = await res.json();
+        setStory(data);
 
-          // Fetch engagement status
-          fetchEngagement(data.id);
-          // Fetch comments
-          fetchComments(data.id);
+        // Fetch engagement status
+        fetchEngagement(data.id);
+        // Fetch comments
+        fetchComments(data.id);
 
-          // Fetch catalog for related stories
-          const catalogRes = await apiFetch(`${API_BASE_URL}/stories?status=APPROVED&limit=10`);
-          if (catalogRes.ok) {
-            const json = await catalogRes.json();
-            const items: StoryDetail[] = json.data || (Array.isArray(json) ? json : []);
-            setRelatedStories(items.filter((s) => s.id !== data.id));
-          }
-        } else {
-          setError("Work not found");
+        // Fetch catalog for related stories
+        const catalogRes = await apiFetch(`${API_BASE_URL}/stories?status=APPROVED&limit=10`);
+        if (catalogRes.ok) {
+          const json = await catalogRes.json();
+          const items: StoryDetail[] = json.data || (Array.isArray(json) ? json : []);
+          setRelatedStories(items.filter((s) => s.id !== data.id));
         }
-      } catch (err) {
-        console.error("Failed to load work details", err);
-        setError("Error loading work");
-      } finally {
-        setLoading(false);
+      } else {
+        setError("Work not found");
       }
-    };
-
-    fetchStoryData();
+    } catch (err) {
+      console.error("Failed to load work details", err);
+      setError("Error loading work");
+    } finally {
+      setLoading(false);
+    }
   }, [id]);
+
+  useEffect(() => {
+    fetchStoryData(true);
+  }, [fetchStoryData]);
+
+  // When subscription status turns active, reload story to fetch full body text silently
+  useEffect(() => {
+    if (isSubscribed && story && story.hasFullAccess === false) {
+      fetchStoryData(false);
+    }
+  }, [isSubscribed, story?.hasFullAccess, fetchStoryData]);
+
+  useEffect(() => {
+    const handleUserUpdated = () => {
+      loadUser();
+      fetchStoryData(false);
+    };
+    loadUser();
+    window.addEventListener("akam_user_updated", handleUserUpdated);
+    return () => {
+      window.removeEventListener("akam_user_updated", handleUserUpdated);
+    };
+  }, [fetchStoryData]);
 
   const fetchEngagement = async (storyId: string) => {
     try {
@@ -203,6 +224,17 @@ export default function WorkDetailPage() {
   useEffect(() => {
     if (!story) return;
 
+    const userRoleUpper = (user?.role || "").toUpperCase();
+    const isStaff = ["ADMIN", "EDITOR", "EDITORIAL", "CHIEF_EDITOR", "STAFF_EDITOR"].includes(userRoleUpper);
+    const isAuthor = Boolean(user && (user.id === story.authorId || user.email === story.authorEmail));
+    const canReadFull = isStaff || isAuthor || isSubscribed || story.hasFullAccess;
+
+    // Calculate maximum preview percentage allowed for this story
+    const previewRatio = story.totalLength && story.totalLength > 0
+      ? Math.min(0.20, Math.max(0.05, (story.content?.length || 0) / story.totalLength))
+      : 0.15;
+    const maxPreviewPercent = Math.round(previewRatio * 100);
+
     const handleScroll = () => {
       const currentScroll = window.scrollY;
       let percent = 0;
@@ -216,12 +248,23 @@ export default function WorkDetailPage() {
         // Calculate progress through the story content block only
         const scrolled = (currentScroll + windowHeight) - elementTop;
         if (elementHeight > 0) {
-          percent = Math.min(100, Math.max(0, Math.round((scrolled / elementHeight) * 100)));
+          const rawScrollRatio = Math.min(1, Math.max(0, scrolled / elementHeight));
+          if (canReadFull) {
+            percent = Math.min(100, Math.round(rawScrollRatio * 100));
+          } else {
+            // Scale progress proportionally to the preview length relative to full work
+            percent = Math.min(maxPreviewPercent, Math.round(rawScrollRatio * maxPreviewPercent));
+          }
         }
       } else {
         const totalHeight = document.documentElement.scrollHeight - window.innerHeight;
         if (totalHeight > 0) {
-          percent = Math.min(100, Math.max(0, Math.round((currentScroll / totalHeight) * 100)));
+          const rawRatio = Math.min(1, Math.max(0, currentScroll / totalHeight));
+          if (canReadFull) {
+            percent = Math.min(100, Math.round(rawRatio * 100));
+          } else {
+            percent = Math.min(maxPreviewPercent, Math.round(rawRatio * maxPreviewPercent));
+          }
         }
       }
 
@@ -229,7 +272,7 @@ export default function WorkDetailPage() {
 
       // Debounce API update if user is logged in
       const isLoggedIn = user || (typeof window !== "undefined" && localStorage.getItem("akam_user"));
-      if (isLoggedIn && percent > 5) {
+      if (isLoggedIn && percent > 2) {
         if (progressTimerRef.current) clearTimeout(progressTimerRef.current);
         progressTimerRef.current = setTimeout(async () => {
           try {
@@ -239,7 +282,7 @@ export default function WorkDetailPage() {
               body: JSON.stringify({
                 progressPercent: percent,
                 lastScrollPosition: Math.round(currentScroll),
-                isCompleted: percent >= 90,
+                isCompleted: canReadFull ? percent >= 90 : false,
               }),
             });
           } catch (e) {
@@ -254,7 +297,7 @@ export default function WorkDetailPage() {
       window.removeEventListener("scroll", handleScroll);
       if (progressTimerRef.current) clearTimeout(progressTimerRef.current);
     };
-  }, [story, user]);
+  }, [story, user, isSubscribed]);
 
   // Handlers for engagement actions
   const handleLikeToggle = async () => {
@@ -708,8 +751,38 @@ export default function WorkDetailPage() {
           ) : null}
 
           {/* Narrative Body Text */}
-          <div ref={storyContentRef} className="max-w-3xl lg:max-w-4xl mx-auto">
-            {renderStoryBody(story.content)}
+          <div ref={storyContentRef} className="max-w-3xl lg:max-w-4xl mx-auto relative">
+            {/* For non-subscribers: show preview only with paywall anchored directly below */}
+            {(() => {
+              const userRoleUpper = (user?.role || "").toUpperCase();
+              const isStaff = ["ADMIN", "EDITOR", "EDITORIAL", "CHIEF_EDITOR", "STAFF_EDITOR"].includes(userRoleUpper);
+              const isAuthor = Boolean(user && (user.id === story.authorId || user.email === story.authorEmail));
+              const canReadFull = isStaff || isAuthor || isSubscribed || story.hasFullAccess;
+
+              if (!canReadFull) {
+                return (
+                  <div className="relative">
+                    {/* Render preview of story content with fade bottom */}
+                    <div className="relative overflow-hidden" style={{ maxHeight: "420px" }}>
+                      {renderStoryBody(story.content)}
+                      {/* Gradient fade to white at the bottom */}
+                      <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-[#F9FAFB] to-transparent pointer-events-none" />
+                    </div>
+                    {/* FreemiumPaywall anchored directly below preview */}
+                    <FreemiumPaywall
+                      visible={true}
+                      isLoggedIn={!!user}
+                      onSubscribed={async () => {
+                        await refreshSubscription();
+                        await fetchStoryData(false);
+                      }}
+                    />
+                  </div>
+                );
+              }
+
+              return renderStoryBody(story.content);
+            })()}
           </div>
 
           {/* Social Engagement Floating Pill Bar */}

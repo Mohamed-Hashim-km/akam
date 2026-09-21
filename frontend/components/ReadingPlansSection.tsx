@@ -1,9 +1,8 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Check, ArrowRight, Sparkles, ShieldCheck } from "lucide-react";
 import Button from "./ui/Button";
-import { AboutDigitalEdition } from "./AboutDigitalEdition";
 
 interface BubblePoint {
   id: number;
@@ -305,6 +304,7 @@ export interface ReadingPlansSectionProps {
   ctaHeadline?: string;
   onSubscribe?: () => void;
   onStudentApply?: () => void;
+  isLoggedIn?: boolean;
   className?: string;
 }
 
@@ -345,9 +345,26 @@ export const ReadingPlansSection: React.FC<ReadingPlansSectionProps> = ({
   ctaHeadline = "Ready To Read Beyond The Ordinary?",
   onSubscribe,
   onStudentApply,
+  isLoggedIn: propIsLoggedIn,
   className = "",
 }) => {
   const [categories] = useState<FeatureCategory[]>(defaultCategories);
+  const [localIsLoggedIn, setLocalIsLoggedIn] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const checkAuth = () => {
+        const u = localStorage.getItem("akam_user");
+        const token = localStorage.getItem("akam_token");
+        setLocalIsLoggedIn(Boolean(u && token));
+      };
+      checkAuth();
+      window.addEventListener("akam_user_updated", checkAuth);
+      return () => window.removeEventListener("akam_user_updated", checkAuth);
+    }
+  }, []);
+
+  const loggedIn = propIsLoggedIn !== undefined ? propIsLoggedIn : localIsLoggedIn;
 
   const handleSubscribeClick = () => {
     if (onSubscribe) {
@@ -414,10 +431,10 @@ export const ReadingPlansSection: React.FC<ReadingPlansSectionProps> = ({
               </div>
               <div className="col-span-3 text-center">
                 <span className="block text-[10px] sm:text-xs font-bold text-[#22B573] uppercase tracking-normal sm:tracking-wider mb-0.5 sm:mb-1 leading-tight">
-                  Masika Pass
+                  6-Month Pass
                 </span>
                 <div className="text-xs sm:text-base font-semibold text-dark-bg">
-                  ₹149 <span className="block sm:inline text-[9px] sm:text-xs text-gray-400 font-normal">/ month</span>
+                  ₹399 <span className="block sm:inline text-[9px] sm:text-xs text-gray-400 font-normal">/ 6 months (~₹66/mo)</span>
                 </div>
               </div>
             </div>
@@ -495,7 +512,7 @@ export const ReadingPlansSection: React.FC<ReadingPlansSectionProps> = ({
               iconPosition="right"
               className="w-full sm:w-auto group px-7 py-3 text-sm font-medium shadow-xs cursor-pointer"
             >
-              Subscribe to Masika Pass
+              {loggedIn ? "Subscribe — ₹399 / 6 Months" : "Sign in to Subscribe"}
             </Button>
 
             {onStudentApply && (

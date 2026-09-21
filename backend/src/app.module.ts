@@ -23,6 +23,7 @@ import { BooksModule } from './books/books.module.js';
 import { MediaModule } from './media/media.module.js';
 import { EditionsModule } from './editions/editions.module.js';
 import { ReviewsModule } from './reviews/reviews.module.js';
+import { SubscriptionModule } from './subscription/subscription.module.js';
 
 @Module({
   imports: [
@@ -51,6 +52,7 @@ import { ReviewsModule } from './reviews/reviews.module.js';
     MediaModule,
     EditionsModule,
     ReviewsModule,
+    SubscriptionModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -68,7 +68,11 @@ export class UsersService {
     };
   }
 
-  async findById(id: string): Promise<UserRow> {
+  async findById(id: string): Promise<UserRow & {
+    subscriptionStatus: 'ACTIVE' | 'EXPIRED' | null;
+    subscriptionEndDate: string | null;
+    isStudent: boolean;
+  }> {
     const user = await this.prisma.queryOne<UserRow>(
       `SELECT id, email, name, 
               COALESCE(NULLIF(phone, ''), '+91 98470 12345') AS phone, 
@@ -78,7 +82,57 @@ export class UsersService {
       [id],
     );
     if (!user) throw new NotFoundException('User not found');
-    return user;
+
+    let sub = await this.prisma.queryOne<{
+      status: string;
+      endDate: Date;
+      isStudent: boolean;
+    }>(
+      `SELECT status, "endDate", "isStudent" FROM subscription WHERE "userId" = $1`,
+      [id],
+    );
+
+    // Auto-activate only if no subscription record exists and user has an approved student application
+    if (!sub && user.email) {
+      const applicationsRow = await this.prisma.queryOne<{ value: any }>(
+        `SELECT value FROM site_setting WHERE key = 'student_applications' LIMIT 1`,
+      );
+      if (applicationsRow?.value && Array.isArray(applicationsRow.value)) {
+        const hasApproved = applicationsRow.value.some(
+          (app: any) =>
+            app.status === 'APPROVED' &&
+            app.email &&
+            app.email.trim().toLowerCase() === user.email.trim().toLowerCase(),
+        );
+        if (hasApproved) {
+          sub = await this.prisma.queryOne<{
+            status: string;
+            endDate: Date;
+            isStudent: boolean;
+          }>(
+            `INSERT INTO subscription (id, "userId", "planType", status, "startDate", "endDate", "isStudent", "createdAt", "updatedAt")
+             VALUES (gen_random_uuid()::text, $1, 'SIX_MONTH', 'ACTIVE', now(), now() + interval '6 months', true, now(), now())
+             ON CONFLICT ("userId") DO UPDATE
+               SET status      = 'ACTIVE',
+                   "startDate" = now(),
+                   "endDate"   = now() + interval '6 months',
+                   "isStudent" = true,
+                   "updatedAt" = now()
+             RETURNING status, "endDate", "isStudent"`,
+            [id],
+          );
+        }
+      }
+    }
+
+    const subIsActive = sub && sub.status === 'ACTIVE' && new Date(sub.endDate) > new Date();
+
+    return {
+      ...user,
+      subscriptionStatus: subIsActive ? 'ACTIVE' : (sub ? 'EXPIRED' : null),
+      subscriptionEndDate: sub ? new Date(sub.endDate).toISOString() : null,
+      isStudent: sub?.isStudent ?? false,
+    };
   }
 
   async findFeaturedAuthors(pageVal?: number, limitVal?: number) {

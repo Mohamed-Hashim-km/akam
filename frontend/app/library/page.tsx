@@ -505,32 +505,28 @@ export default function LibraryPage() {
                           </div>
                         )}
 
-                        {/* Badges: Type & Category */}
+                        {/* Badges: Category */}
                         <div className="absolute top-2.5 left-2.5 z-10 flex items-center gap-1.5 flex-wrap">
-                          {isPainting ? (
+                          {/* Video & Painting type labels commented out
+                          {isPainting && (
                             <span className="bg-purple-700 text-white font-bold text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-lg flex items-center gap-1 shadow-xs">
                               <Palette className="w-2.5 h-2.5" />
                               Painting
                             </span>
-                          ) : isVideo ? (
+                          )}
+                          {isVideo && (
                             <span className="bg-rose-600 text-white font-bold text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-lg flex items-center gap-1 shadow-xs">
                               <Video className="w-2.5 h-2.5" />
                               Video
                             </span>
-                          ) : (
-                            <span className="bg-[#E4F953] text-[#040706] font-bold text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-lg flex items-center gap-1">
-                              <BookOpen className="w-2.5 h-2.5" />
-                              {(item.category || "Story").toUpperCase()}
-                            </span>
                           )}
+                          */}
 
-                          {(isPainting || isVideo) &&
-                            item.category &&
-                            item.category.toLowerCase() !== "art" && (
-                              <span className="bg-black/70 backdrop-blur-xs text-white font-medium text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-lg">
-                                {item.category}
-                              </span>
-                            )}
+                          {/* Category badge shows for all cards */}
+                          <span className="bg-[#E4F953] text-[#040706] font-bold text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-lg flex items-center gap-1 shadow-xs">
+                            <BookOpen className="w-2.5 h-2.5" />
+                            {(item.category || "Story").toUpperCase()}
+                          </span>
                         </div>
 
                         {/* Remove Bookmark Action */}

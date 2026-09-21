@@ -263,9 +263,62 @@ export class AuthService {
       throw new BadRequestException('Failed to create or find user');
     }
 
+    // Fetch subscription status to include in login response
+    let sub = await this.prisma.queryOne<{
+      status: string;
+      endDate: Date;
+      isStudent: boolean;
+    }>(
+      `SELECT status, "endDate", "isStudent" FROM subscription WHERE "userId" = $1`,
+      [user.id],
+    );
+
+    // Auto-activate only if no subscription record exists and user has an approved student application
+    if (!sub && user.email) {
+      const applicationsRow = await this.prisma.queryOne<{ value: any }>(
+        `SELECT value FROM site_setting WHERE key = 'student_applications' LIMIT 1`,
+      );
+      if (applicationsRow?.value && Array.isArray(applicationsRow.value)) {
+        const hasApproved = applicationsRow.value.some(
+          (app: any) =>
+            app.status === 'APPROVED' &&
+            app.email &&
+            app.email.trim().toLowerCase() === user.email.trim().toLowerCase(),
+        );
+        if (hasApproved) {
+          sub = await this.prisma.queryOne<{
+            status: string;
+            endDate: Date;
+            isStudent: boolean;
+          }>(
+            `INSERT INTO subscription (id, "userId", "planType", status, "startDate", "endDate", "isStudent", "createdAt", "updatedAt")
+             VALUES (gen_random_uuid()::text, $1, 'SIX_MONTH', 'ACTIVE', now(), now() + interval '6 months', true, now(), now())
+             ON CONFLICT ("userId") DO UPDATE
+               SET status      = 'ACTIVE',
+                   "startDate" = now(),
+                   "endDate"   = now() + interval '6 months',
+                   "isStudent" = true,
+                   "updatedAt" = now()
+             RETURNING status, "endDate", "isStudent"`,
+            [user.id],
+          );
+        }
+      }
+    }
+
+    const subIsActive = sub && sub.status === 'ACTIVE' && new Date(sub.endDate) > new Date();
+
     const payload = { sub: user.id, email: user.email, role: user.role };
     const token = this.jwtService.sign(payload);
 
-    return { token, user };
+    return {
+      token,
+      user: {
+        ...user,
+        subscriptionStatus: subIsActive ? 'ACTIVE' : (sub ? 'EXPIRED' : null),
+        subscriptionEndDate: sub ? new Date(sub.endDate).toISOString() : null,
+        isStudent: sub?.isStudent ?? false,
+      },
+    };
   }
 }

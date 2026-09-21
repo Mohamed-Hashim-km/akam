@@ -10,20 +10,26 @@ import {
 } from "lucide-react";
 import Button from "./ui/Button";
 
+import { useRouter } from "next/navigation";
+
 export interface AboutDigitalEditionProps {
   title?: string;
   description?: string;
   showExploreButton?: boolean;
+  onSubscribe?: () => void;
+  onStudentApply?: () => void;
+  isLoggedIn?: boolean;
 }
 
 export const AboutDigitalEdition: React.FC<AboutDigitalEditionProps> = ({
   title = "About The Digital Edition",
   description = "Akam E-Magazine's digital edition brings the richness of contemporary Malayalam literature directly to your screens. Designed for optimal readability across desktop, tablet, and mobile devices, each monthly issue delivers an interactive, high-resolution reading experience complete with printable PDF archives, original cover artwork, and curated literary audio features.",
   showExploreButton = true,
+  onSubscribe,
+  onStudentApply,
+  isLoggedIn,
 }) => {
-  const [billingCycle, setBillingCycle] = useState<"monthly" | "annual">("monthly");
-
-  const masikaPrice = billingCycle === "monthly" ? "₹149" : "₹104";
+  const router = useRouter();
 
 
   const keyFeatures = [
@@ -49,14 +55,13 @@ export const AboutDigitalEdition: React.FC<AboutDigitalEditionProps> = ({
 
   const studentFeatures = [
     "Complete access to monthly Masika digital magazine",
-    "Downloadable PDFs & research archives",
+
     "Verified student scholarship pass (100% Free)",
   ];
 
   const premiumFeatures = [
     "Full access to monthly Masika digital magazine",
     "Read exclusive subscriber-only stories & deep dives",
-    "Offline reading / PDF download access",
   ];
 
   return (
@@ -73,7 +78,7 @@ export const AboutDigitalEdition: React.FC<AboutDigitalEditionProps> = ({
             {description}
           </p>
 
-          <div className="pt-2">
+          {/* <div className="pt-2">
             <h3 className="text-lg sm:text-xl font-bold text-gray-950 tracking-tight mb-4">
               Key Features
             </h3>
@@ -89,43 +94,22 @@ export const AboutDigitalEdition: React.FC<AboutDigitalEditionProps> = ({
                 </li>
               ))}
             </ul>
-          </div>
+          </div> */}
         </div>
 
         {/* Right Side: Pricing / Plan Selection Container */}
         <div className="lg:col-span-8 xl:col-span-8 w-full">
           <div className="bg-white border border-gray-100 rounded-3xl p-5 sm:p-7 lg:p-8 shadow-xs relative">
             
-            {/* Billing Toggle Switch */}
-            <div className="flex justify-center mb-8">
-              <div className="bg-gray-50 border border-gray-100 p-1.5 rounded-full inline-flex items-center gap-1">
-                <button
-                  onClick={() => setBillingCycle("monthly")}
-                  className={`px-5 py-2 rounded-full text-xs font-semibold transition-all cursor-pointer ${
-                    billingCycle === "monthly"
-                      ? "bg-black text-white shadow-xs"
-                      : "text-gray-500 hover:text-gray-900"
-                  }`}
-                >
-                  Monthly Billing
-                </button>
-                <button
-                  onClick={() => setBillingCycle("annual")}
-                  className={`px-5 py-2 rounded-full text-xs font-semibold transition-all cursor-pointer ${
-                    billingCycle === "annual"
-                      ? "bg-black text-white shadow-xs"
-                      : "text-gray-500 hover:text-gray-900"
-                  }`}
-                >
-                  Annual Billing{" "}
-                  <span className="text-[#22B573] font-bold ml-1">
-                    (Save 30%)
-                  </span>
-                </button>
+            {/* Top Pass Guarantee Banner */}
+            <div className="flex justify-center mb-6">
+              <div className="bg-gray-50 border border-gray-200/90 px-4 py-1.5 rounded-full inline-flex items-center gap-2 text-xs font-semibold text-gray-700">
+                <span className="w-2 h-2 rounded-full bg-[#22B573] animate-pulse" />
+                <span>Akam Digital Pass — 6 Months Unlimited Reading for ₹399</span>
               </div>
             </div>
 
-            {/* 3 Pricing Cards Grid: Free, Student Pass, Masika Pass */}
+            {/* 3 Pricing Cards Grid: Free, Student Pass, 6-Month Digital Pass */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 lg:gap-5 items-stretch">
               
               {/* CARD 1: READER MEMBER (FREE) */}
@@ -150,18 +134,22 @@ export const AboutDigitalEdition: React.FC<AboutDigitalEditionProps> = ({
                   </p>
                 </div>
 
-                <div className="mt-6 border-t border-gray-100 pt-5">
-                  <span className="text-[11px] font-bold text-gray-900 uppercase tracking-wider block mb-2.5">
-                    Includes
-                  </span>
-                  <ul className="space-y-2">
-                    {freeFeatures.map((item, idx) => (
-                      <li key={idx} className="flex items-start text-xs text-gray-600 leading-snug">
-                        <Check className="w-3.5 h-3.5 text-[#22B573] stroke-[3] mr-2 shrink-0 mt-0.5" />
-                        <span>{item}</span>
-                      </li>
-                    ))}
-                  </ul>
+                <div>
+                  <div className="mt-5 border-t border-gray-100 pt-4">
+                    <span className="text-[11px] font-bold text-gray-900 uppercase tracking-wider block mb-2">
+                      Includes
+                    </span>
+                    <ul className="space-y-2">
+                      {freeFeatures.map((item, idx) => (
+                        <li key={idx} className="flex items-start text-xs text-gray-600 leading-snug">
+                          <Check className="w-3.5 h-3.5 text-[#22B573] stroke-[3] mr-2 shrink-0 mt-0.5" />
+                          <span>{item}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                 
                 </div>
               </div>
 
@@ -188,36 +176,40 @@ export const AboutDigitalEdition: React.FC<AboutDigitalEditionProps> = ({
                   </div>
 
                   <p className="text-xs text-gray-600 font-normal leading-relaxed">
-                    Sponsored reading grant for enrolled students with verified student ID card.
+                    Sponsored 6-month reading grant for enrolled college & university students.
                   </p>
                 </div>
 
-                <div className="mt-6 border-t border-emerald-100 pt-5">
-                  <span className="text-[11px] font-bold text-gray-900 uppercase tracking-wider block mb-2.5">
-                    Includes (Free Access)
-                  </span>
-                  <ul className="space-y-2">
-                    {studentFeatures.map((item, idx) => (
-                      <li key={idx} className="flex items-start text-xs text-gray-700 leading-snug">
-                        <Check className="w-3.5 h-3.5 text-[#0FA975] stroke-[3] mr-2 shrink-0 mt-0.5" />
-                        <span>{item}</span>
-                      </li>
-                    ))}
-                  </ul>
+                <div>
+                  <div className="mt-5 border-t border-emerald-100 pt-4">
+                    <span className="text-[11px] font-bold text-gray-900 uppercase tracking-wider block mb-2">
+                      Includes (Free Access)
+                    </span>
+                    <ul className="space-y-2">
+                      {studentFeatures.map((item, idx) => (
+                        <li key={idx} className="flex items-start text-xs text-gray-700 leading-snug">
+                          <Check className="w-3.5 h-3.5 text-[#0FA975] stroke-[3] mr-2 shrink-0 mt-0.5" />
+                          <span>{item}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+               
                 </div>
               </div>
 
-              {/* CARD 3: MASIKA PASS */}
+              {/* CARD 3: 6-MONTH DIGITAL PASS */}
               <div className="bg-[#22B573] rounded-2xl p-5 sm:p-6 flex flex-col justify-between text-white shadow-md hover:bg-[#1fa769] transition-all relative">
                 {/* Highlight Ribbon */}
                 <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 bg-gray-950 text-white text-[9px] font-bold px-3 py-0.5 rounded-full flex items-center gap-1 shadow-xs uppercase tracking-wider whitespace-nowrap">
-                  <Sparkles className="w-3 h-3 text-emerald-400" /> Most Popular
+                  <Sparkles className="w-3 h-3 text-emerald-400" /> Best Value
                 </div>
 
                 <div>
                   <div className="flex items-center justify-between mt-0.5">
                     <span className="text-[11px] font-bold text-white/90 tracking-wider uppercase">
-                      Masika Pass
+                      Digital Pass
                     </span>
                     <span className="bg-white/20 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
                       All-Access
@@ -226,9 +218,9 @@ export const AboutDigitalEdition: React.FC<AboutDigitalEditionProps> = ({
 
                   <div className="mt-3 mb-1.5 flex items-baseline">
                     <span className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-                      {masikaPrice}
+                      ₹399
                     </span>
-                    <span className="text-xs text-white/80 font-medium ml-1">/ month</span>
+                    <span className="text-xs text-white/80 font-medium ml-1.5">/ 6 months (~₹66/mo)</span>
                   </div>
 
                   <p className="text-xs text-white/95 font-normal leading-relaxed">
@@ -236,18 +228,21 @@ export const AboutDigitalEdition: React.FC<AboutDigitalEditionProps> = ({
                   </p>
                 </div>
 
-                <div className="mt-6 border-t border-white/20 pt-5">
-                  <span className="text-[11px] font-bold text-white uppercase tracking-wider block mb-2.5">
-                    Includes
-                  </span>
-                  <ul className="space-y-2">
-                    {premiumFeatures.map((item, idx) => (
-                      <li key={idx} className="flex items-start text-xs text-white leading-snug">
-                        <Check className="w-3.5 h-3.5 text-white stroke-[3] mr-2 shrink-0 mt-0.5" />
-                        <span>{item}</span>
-                      </li>
-                    ))}
-                  </ul>
+                <div>
+                  <div className="mt-5 border-t border-white/20 pt-4">
+                    <span className="text-[11px] font-bold text-white uppercase tracking-wider block mb-2">
+                      Includes
+                    </span>
+                    <ul className="space-y-2">
+                      {premiumFeatures.map((item, idx) => (
+                        <li key={idx} className="flex items-start text-xs text-white leading-snug">
+                          <Check className="w-3.5 h-3.5 text-white stroke-[3] mr-2 shrink-0 mt-0.5" />
+                          <span>{item}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
                 </div>
               </div>
 

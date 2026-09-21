@@ -7,6 +7,7 @@ import {
   GraduationCap,
   Clock,
   CheckCircle2,
+  XCircle,
   FileText,
   AlertCircle,
   Loader2,
@@ -18,7 +19,7 @@ import {
   RefreshCw,
   Sparkles,
 } from "lucide-react";
-import { API_BASE_URL } from "@/lib/config";
+import { API_BASE_URL, apiFetch } from "@/lib/config";
 
 export interface StudentApplicationData {
   fullName: string;
@@ -31,12 +32,15 @@ export interface StudentApplicationData {
   referenceId: string;
   submittedAt: string;
   status: "PENDING_APPROVAL" | "APPROVED" | "REJECTED";
+  reviewedAt?: string;
+  reviewedBy?: string;
+  reviewNotes?: string;
 }
 
 export interface StudentVerificationModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onStatusChange?: (status: "PENDING_APPROVAL" | "APPROVED" | "NONE") => void;
+  onStatusChange?: (status: "PENDING_APPROVAL" | "APPROVED" | "REJECTED" | "NONE") => void;
 }
 
 export const StudentVerificationModal: React.FC<StudentVerificationModalProps> = ({
@@ -71,6 +75,9 @@ export const StudentVerificationModal: React.FC<StudentVerificationModalProps> =
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
 
+  // Flag when user explicitly clicks "Re-apply with Updated Student ID"
+  const [isReapplying, setIsReapplying] = useState(false);
+
   useEffect(() => {
     return () => {
       if (mediaStreamRef.current) {
@@ -80,23 +87,112 @@ export const StudentVerificationModal: React.FC<StudentVerificationModalProps> =
     };
   }, []);
 
-  // Load existing application from localStorage on mount/open
+  // Load existing application from localStorage and sync live status with backend
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const stored = localStorage.getItem("akam_student_application");
-      if (stored) {
-        try {
-          const parsed = JSON.parse(stored) as StudentApplicationData;
-          setExistingApplication(parsed);
-          if (onStatusChange) {
-            onStatusChange(parsed.status === "APPROVED" ? "APPROVED" : "PENDING_APPROVAL");
-          }
-        } catch {
-          // ignore corrupted data
+    if (!isOpen || typeof window === "undefined") {
+      setIsReapplying(false);
+      return;
+    }
+
+    if (isReapplying) return;
+
+    let userEmail: string | null = null;
+    try {
+      const userStr = localStorage.getItem("akam_user");
+      if (userStr) {
+        const u = JSON.parse(userStr);
+        if (u?.email) userEmail = u.email;
+      }
+    } catch {
+      // ignore
+    }
+
+    let currentApp: StudentApplicationData | null = null;
+    const stored = localStorage.getItem("akam_student_application");
+    if (stored) {
+      try {
+        currentApp = JSON.parse(stored) as StudentApplicationData;
+        setExistingApplication(currentApp);
+        if (onStatusChange) {
+          onStatusChange(currentApp.status);
         }
+      } catch {
+        // ignore
       }
     }
-  }, [isOpen, onStatusChange]);
+
+    const identifier = currentApp?.referenceId || currentApp?.email || userEmail;
+    if (identifier) {
+      apiFetch(`${API_BASE_URL}/student-verifications/status/${encodeURIComponent(identifier)}`)
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (isReapplying) return;
+          if (data && data.status && data.status !== "NONE") {
+            const synced: StudentApplicationData = {
+              ...(currentApp || {}),
+              ...data,
+              status: data.status,
+              referenceId: data.referenceId || data.id,
+              fullName: data.fullName || currentApp?.fullName || "",
+              institution: data.institution || currentApp?.institution || "",
+              studentIdNumber: data.studentIdNumber || currentApp?.studentIdNumber || "",
+              course: data.course || currentApp?.course || "",
+              email: data.email || currentApp?.email || "",
+              idCardUrl: data.idCardUrl || currentApp?.idCardUrl || "",
+              idCardName: data.idCardName || currentApp?.idCardName || "student_id.jpg",
+              submittedAt: data.submittedAt || currentApp?.submittedAt || new Date().toISOString(),
+              reviewNotes: data.reviewNotes || currentApp?.reviewNotes,
+              reviewedAt: data.reviewedAt || currentApp?.reviewedAt,
+              reviewedBy: data.reviewedBy || currentApp?.reviewedBy,
+            };
+            setExistingApplication(synced);
+            localStorage.setItem("akam_student_application", JSON.stringify(synced));
+            if (data.status === "APPROVED") {
+              localStorage.setItem("akam_masika_pass", "true");
+              localStorage.setItem("akam_pass_type", "Student Special Pass (100% Free)");
+            } else if (data.status === "REJECTED") {
+              localStorage.removeItem("akam_masika_pass");
+              localStorage.removeItem("akam_pass_type");
+            }
+            if (onStatusChange) {
+              onStatusChange(data.status);
+            }
+          } else if (data && data.status === "NONE") {
+            // Application was cleared or deleted from the editorial backend
+            setExistingApplication(null);
+            localStorage.removeItem("akam_student_application");
+            if (localStorage.getItem("akam_pass_type")?.includes("Student")) {
+              localStorage.removeItem("akam_masika_pass");
+              localStorage.removeItem("akam_pass_type");
+            }
+            if (onStatusChange) {
+              onStatusChange("NONE");
+            }
+          }
+        })
+        .catch(() => {});
+    }
+  }, [isOpen]);
+
+  const handleStartReapply = () => {
+    setIsReapplying(true);
+    if (existingApplication) {
+      if (existingApplication.fullName) setFullName(existingApplication.fullName);
+      if (existingApplication.institution) setInstitution(existingApplication.institution);
+      if (existingApplication.studentIdNumber && existingApplication.studentIdNumber !== "EDITORIAL_GRANT" && existingApplication.studentIdNumber !== "EDITORIAL_PASS") {
+        setStudentIdNumber(existingApplication.studentIdNumber);
+      }
+      if (existingApplication.course && existingApplication.course !== "Academic Scholar") {
+        setCourse(existingApplication.course);
+      }
+      if (existingApplication.email) setEmail(existingApplication.email);
+    }
+    setIdCardFile(null);
+    setIdCardPreview("");
+    setIdCardName("");
+    setErrorMessage("");
+    setExistingApplication(null);
+  };
 
   if (!isOpen) return null;
 
@@ -259,19 +355,25 @@ export const StudentVerificationModal: React.FC<StudentVerificationModalProps> =
 
     // Sync to backend database
     try {
-      await fetch(`${API_BASE_URL}/student-verifications`, {
+      const res = await apiFetch(`${API_BASE_URL}/student-verifications`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(applicationRecord),
       });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        console.warn("Backend student verification sync status:", res.status, errJson);
+      }
     } catch (apiErr) {
       console.warn("Could not sync student application to backend, stored locally:", apiErr);
     }
 
     if (typeof window !== "undefined") {
       localStorage.setItem("akam_student_application", JSON.stringify(applicationRecord));
+      window.dispatchEvent(new Event("akam_subscription_refresh"));
     }
 
+    setIsReapplying(false);
     setExistingApplication(applicationRecord);
     setIsSubmitting(false);
 
@@ -427,9 +529,26 @@ export const StudentVerificationModal: React.FC<StudentVerificationModalProps> =
                 <span className="text-sm sm:text-base font-bold text-white tracking-wide">
                   Student Pass Application
                 </span>
-                <span className="bg-emerald-400/20 text-emerald-300 text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-400/40">
-                  100% FREE
-                </span>
+                {existingApplication?.status === "REJECTED" ? (
+                  <span className="bg-rose-500/25 text-rose-200 text-[10px] font-bold px-2.5 py-0.5 rounded-full border border-rose-400/50 flex items-center gap-1">
+                    <XCircle className="w-3 h-3 text-rose-300" />
+                    REVOKED / REJECTED
+                  </span>
+                ) : existingApplication?.status === "APPROVED" ? (
+                  <span className="bg-emerald-400/25 text-emerald-300 text-[10px] font-bold px-2.5 py-0.5 rounded-full border border-emerald-400/40 flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3 text-emerald-300" />
+                    ACTIVE SCHOLAR
+                  </span>
+                ) : existingApplication?.status === "PENDING_APPROVAL" ? (
+                  <span className="bg-amber-400/25 text-amber-300 text-[10px] font-bold px-2.5 py-0.5 rounded-full border border-amber-400/40 flex items-center gap-1">
+                    <Clock className="w-3 h-3 text-amber-300" />
+                    UNDER REVIEW
+                  </span>
+                ) : (
+                  <span className="bg-emerald-400/20 text-emerald-300 text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-400/40">
+                    100% FREE
+                  </span>
+                )}
               </div>
               <p className="text-[11px] text-gray-200">Akam Editorial Board Scholar Access Initiative</p>
             </div>
@@ -446,7 +565,7 @@ export const StudentVerificationModal: React.FC<StudentVerificationModalProps> =
         {/* Modal Body */}
         <div className="p-5 sm:p-6 overflow-y-auto space-y-5">
           {/* ── CASE 1: APPLICATION ALREADY SUBMITTED ── */}
-          {existingApplication ? (
+          {existingApplication && !isReapplying ? (
             <div className="space-y-5">
               {existingApplication.status === "PENDING_APPROVAL" ? (
                 <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 sm:p-5 text-amber-950 flex flex-col sm:flex-row items-start gap-3.5">
@@ -487,6 +606,48 @@ export const StudentVerificationModal: React.FC<StudentVerificationModalProps> =
                       The Editorial Board has verified your student credentials. You now have complimentary all-access to
                       every monthly Masika edition and archive downloads.
                     </p>
+                  </div>
+                </div>
+              ) : existingApplication.status === "REJECTED" ? (
+                <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 sm:p-5 text-rose-950 flex flex-col sm:flex-row items-start gap-3.5 shadow-2xs">
+                  <div className="w-10 h-10 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+                    <XCircle className="w-6 h-6 stroke-[2.5]" />
+                  </div>
+                  <div className="space-y-1.5 flex-1">
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-sm sm:text-base font-bold text-rose-950">
+                        Application Revoked / Rejected
+                      </h4>
+                      <span className="bg-rose-200/80 text-rose-800 text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase">
+                        Revoked
+                      </span>
+                    </div>
+                    <p className="text-xs text-rose-900 leading-relaxed">
+                      {existingApplication.reviewNotes ||
+                        "Your student scholar pass was reviewed and could not be approved or was cancelled by the Editorial Board."}
+                    </p>
+                    {existingApplication.reviewedAt && (
+                      <p className="text-[11px] text-rose-700 font-medium">
+                        Reviewed on {new Date(existingApplication.reviewedAt).toLocaleDateString()}
+                        {existingApplication.reviewedBy ? ` by ${existingApplication.reviewedBy}` : ""}
+                      </p>
+                    )}
+                    <div className="pt-2 flex flex-wrap items-center gap-2.5">
+                      <button
+                        type="button"
+                        onClick={handleStartReapply}
+                        className="px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-semibold transition cursor-pointer shadow-2xs flex items-center gap-1.5 active:scale-95"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        Re-apply with Updated Student ID
+                      </button>
+                      <a
+                        href="mailto:editorial@akamdigital.com"
+                        className="px-3.5 py-2 bg-white hover:bg-rose-50 border border-rose-300 text-rose-800 rounded-xl text-xs font-semibold transition cursor-pointer"
+                      >
+                        Contact Editorial Desk
+                      </a>
+                    </div>
                   </div>
                 </div>
               ) : null}
@@ -535,17 +696,48 @@ export const StudentVerificationModal: React.FC<StudentVerificationModalProps> =
           ) : (
             /* ── CASE 2: NEW APPLICATION FORM ── */
             <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Editorial Notice Banner */}
-              <div className="bg-emerald-50/80 border border-emerald-200/80 rounded-2xl p-4 text-emerald-950 flex items-start gap-3">
-                <ShieldCheck className="w-5 h-5 text-[#0FA975] shrink-0 mt-0.5" />
-                <div className="text-xs leading-relaxed">
-                  <strong className="font-semibold text-emerald-900 block mb-0.5">
-                    Editorial Team Verification Required
-                  </strong>
-                  To support bona fide students of literature, humanities, and schools, Akam offers a 100% free digital
-                  subscription. Please upload your student ID card for our editorial board’s verification.
+              {isReapplying ? (
+                <div className="bg-amber-50 border border-amber-200/90 rounded-2xl p-4 text-amber-950 flex items-start justify-between gap-3 shadow-2xs">
+                  <div className="flex items-start gap-2.5">
+                    <RefreshCw className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                    <div>
+                      <strong className="font-bold text-xs text-amber-950 block">
+                        Re-applying with Updated Student ID
+                      </strong>
+                      <p className="text-[11px] text-amber-800 leading-relaxed mt-0.5">
+                        Please review your details and upload a valid, clear student ID card. Your new submission will be sent to the editorial desk for approval.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsReapplying(false);
+                      const stored = localStorage.getItem("akam_student_application");
+                      if (stored) {
+                        try {
+                          setExistingApplication(JSON.parse(stored));
+                        } catch {}
+                      }
+                    }}
+                    className="text-xs font-semibold text-amber-800 hover:text-amber-950 underline shrink-0 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
                 </div>
-              </div>
+              ) : (
+                /* Editorial Notice Banner */
+                <div className="bg-emerald-50/80 border border-emerald-200/80 rounded-2xl p-4 text-emerald-950 flex items-start gap-3">
+                  <ShieldCheck className="w-5 h-5 text-[#0FA975] shrink-0 mt-0.5" />
+                  <div className="text-xs leading-relaxed">
+                    <strong className="font-semibold text-emerald-900 block mb-0.5">
+                      Editorial Team Verification Required
+                    </strong>
+                    To support bona fide students of literature, humanities, and schools, Akam offers a 100% free digital
+                    subscription. Please upload your student ID card for our editorial board’s verification.
+                  </div>
+                </div>
+              )}
 
               {errorMessage && (
                 <div className="bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl p-3 flex items-center gap-2">

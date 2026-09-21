@@ -67,11 +67,12 @@ import {
   Star,
   GraduationCap,
   Play,
+  CreditCard,
 } from "lucide-react";
 import Button from "@/components/ui/Button";
 import AuthModal from "@/components/AuthModal";
 import { API_BASE_URL, apiFetch, formatAssetUrl } from "@/lib/config";
-import StudentVerificationsPanel from "@/components/StudentVerificationsPanel";
+import SubscriptionManagementPanel from "@/components/SubscriptionManagementPanel";
 import { getYouTubeThumbnail } from "@/lib/youtube";
 
 interface PendingStory {
@@ -153,6 +154,7 @@ function formatDateTime(dateStr?: string | null) {
 type TabType =
   | "queue"
   | "student-verifications"
+  | "subscriptions"
   | "emagazine"
   | "reports"
   | "inquiries"
@@ -267,6 +269,10 @@ function EditorialDashboardContent() {
     }
 
     let currentTab = tabFromUrl;
+    if (currentTab === "student-verifications") {
+      router.replace(`/editorial?tab=subscriptions&subTab=verifications${pageFromUrlStr ? `&page=${pageFromUrlStr}` : ""}`);
+      return;
+    }
     if (!currentTab && typeof window !== "undefined") {
       const savedTab = sessionStorage.getItem("akam_editorial_active_tab") as TabType;
       if (savedTab) currentTab = savedTab;
@@ -2637,8 +2643,14 @@ function EditorialDashboardContent() {
     }
   };
 
-  const renderStoryContent = (contentStr: string) => {
-   
+  const renderStoryContent = (contentStr?: string | null) => {
+    if (!contentStr || typeof contentStr !== "string" || !contentStr.trim()) {
+      return (
+        <div className="py-8 text-center text-gray-400 text-sm italic">
+          No written story text available for this submission.
+        </div>
+      );
+    }
 
     // ── Markdown-to-HTML inline converter (same logic as submit page) ──────
     const mdToHtml = (md: string): string => {
@@ -2872,13 +2884,13 @@ function EditorialDashboardContent() {
             </button>
 
             <button
-              onClick={() => handleTabChange("student-verifications")}
+              onClick={() => handleTabChange("subscriptions")}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
-                activeTab === "student-verifications" ? "bg-[#040706] text-white shadow-xs" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                activeTab === "subscriptions" ? "bg-[#040706] text-white shadow-xs" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
               }`}
             >
-              <GraduationCap className="w-4 h-4 text-emerald-400 shrink-0" />
-              <span>Student Verifications</span>
+              <CreditCard className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>Subscriptions & Passes</span>
             </button>
 
             <button
@@ -3083,6 +3095,7 @@ function EditorialDashboardContent() {
               <h1 className="text-2xl sm:text-3xl font-bold text-gray-950 tracking-tight">
                 {activeTab === "queue" && "Pending Review Queue"}
                 {activeTab === "student-verifications" && "Student Scholarship Pass Approvals"}
+                {activeTab === "subscriptions" && "Subscription & Pass Management"}
                 {activeTab === "emagazine" && "E-Magazine Collection"}
                 {activeTab === "reports" && "Reported Content Moderation"}
                 {activeTab === "catalog" && "Published Content Catalog"}
@@ -3115,6 +3128,7 @@ function EditorialDashboardContent() {
             <p className="text-xs sm:text-sm text-gray-500 font-medium leading-relaxed max-w-3xl">
               {activeTab === "queue" && "Review pending author submissions and approve or reject content."}
               {activeTab === "student-verifications" && "Review uploaded student ID cards, verify credentials, and approve 100% free digital passes for students."}
+              {activeTab === "subscriptions" && "Monitor active digital subscribers, student scholarship passes, revenue metrics, and grant or revoke access."}
               {activeTab === "emagazine" && "Curated submissions for AKAM E-Magazine editions. Filter between Magazine Pending and Magazine Published, with automatic author email notifications upon publication."}
               {activeTab === "reports" && "Investigate reader flag reports submitted against published content and comments."}
               {activeTab === "catalog" && "Browse all active works (articles, paintings, videos) currently published on AKAM Digital."}
@@ -4675,11 +4689,15 @@ function EditorialDashboardContent() {
                                 ? "bg-emerald-100 text-emerald-700"
                                 : item.type === "STORY_APPROVED_EMAGAZINE"
                                   ? "bg-purple-100 text-purple-700"
-                                  : "bg-rose-100 text-rose-700"
+                                  : item.type === "STUDENT_APPLICATION_SUBMITTED" || item.message?.includes("Student Scholar Pass")
+                                    ? "bg-emerald-100 text-emerald-800"
+                                    : "bg-rose-100 text-rose-700"
                           }`}
                         >
                           {item.type === "STORY_APPROVED_EMAGAZINE" ? (
                             <BookOpen className="w-4 h-4" />
+                          ) : item.type === "STUDENT_APPLICATION_SUBMITTED" || item.message?.includes("Student Scholar Pass") ? (
+                            <GraduationCap className="w-4 h-4 text-emerald-700" />
                           ) : (
                             <Bell className="w-4 h-4" />
                           )}
@@ -4687,6 +4705,15 @@ function EditorialDashboardContent() {
                         <div>
                           <p className="text-xs font-bold text-gray-900">{item.message}</p>
                           <p className="text-[11px] text-gray-400 mt-1">{new Date(item.createdAt).toLocaleString()}</p>
+                          {(item.type === "STUDENT_APPLICATION_SUBMITTED" || item.message?.includes("Student Scholar Pass")) && (
+                            <Link
+                              href="/editorial?tab=subscriptions&subTab=verifications&page=1"
+                              onClick={() => handleTabChange("subscriptions")}
+                              className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 hover:text-emerald-900 mt-1.5 hover:underline"
+                            >
+                              Review Student Pass →
+                            </Link>
+                          )}
                         </div>
                       </div>
                       {!item.read && (
@@ -6262,9 +6289,9 @@ function EditorialDashboardContent() {
             </div>
           )}
 
-          {/* Student Verifications Management Tab Panel */}
-          {activeTab === "student-verifications" && (
-            <StudentVerificationsPanel
+          {/* Subscriptions & Pass Management Tab Panel (includes Subscribers + Student Verifications sub-tabs) */}
+          {(activeTab === "subscriptions" || (activeTab as string) === "student-verifications") && (
+            <SubscriptionManagementPanel
               currentUserEmail={user?.email || "editorial@akamdigital.com"}
               currentUserName={user?.name || "Akam Editorial Board"}
               onNotify={(msg) => {

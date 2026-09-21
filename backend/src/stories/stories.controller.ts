@@ -18,6 +18,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiConsumes, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { memoryStorage } from 'multer';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
+import { OptionalJwtAuthGuard } from '../auth/guards/optional-jwt-auth.guard.js';
 import { RolesGuard } from '../auth/guards/roles.guard.js';
 import { Roles } from '../auth/decorators/roles.decorator.js';
 import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
@@ -83,9 +84,10 @@ export class StoriesController {
   }
 
   @Get(':id')
+  @UseGuards(OptionalJwtAuthGuard)
   @ApiOperation({ summary: 'Get a single story by id or slug' })
-  async findOne(@Param('id') id: string) {
-    return this.storiesService.findOne(id);
+  async findOne(@Param('id') id: string, @CurrentUser() user?: AuthUser) {
+    return this.storiesService.findOne(id, user?.id, user?.role);
   }
 
   // ─── Author endpoints (require JWT) ──────────────────────────────────────

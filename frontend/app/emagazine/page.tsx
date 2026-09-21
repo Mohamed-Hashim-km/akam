@@ -1,48 +1,63 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import dynamic from "next/dynamic";
 import MasikaHero from "@/components/MasikaHero";
 import FeaturedArtist from "@/components/FeaturedArtist";
 import PreviousEditions, { EditionItem } from "@/components/PreviousEditions";
 import AboutDigitalEdition from "@/components/AboutDigitalEdition";
-import ReadingPlansSection from "@/components/ReadingPlansSection";
-import { API_BASE_URL, formatAssetUrl } from "@/lib/config";
+import SubscriptionGateModal from "@/components/SubscriptionGateModal";
+import { API_BASE_URL, apiFetch, formatAssetUrl } from "@/lib/config";
+import { useSubscription } from "@/lib/useSubscription";
 
 const EditionFlipbook = dynamic(() => import("@/components/EditionFlipbook"), { ssr: false });
 
 export default function MasikaPage() {
   const [latestEdition, setLatestEdition] = useState<EditionItem | null>(null);
   const [flipbookOpen, setFlipbookOpen] = useState(false);
+  const [gateOpen, setGateOpen] = useState(false);
 
-  useEffect(() => {
-    let isMounted = true;
-    const fetchLatest = async () => {
-      try {
-        const res = await fetch(`${API_BASE_URL}/editions?page=1&limit=1`);
-        if (!res.ok) return;
-        const json = await res.json();
-        if (isMounted && json?.data?.[0]) {
-          setLatestEdition(json.data[0]);
-        }
-      } catch (err) {
-        console.error("[MasikaPage] Failed to fetch latest edition:", err);
+  const { isSubscribed, refreshSubscription } = useSubscription();
+
+  const fetchLatest = useCallback(async () => {
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/editions?page=1&limit=1`);
+      if (!res.ok) return null;
+      const json = await res.json();
+      if (json?.data?.[0]) {
+        setLatestEdition(json.data[0]);
+        return json.data[0] as EditionItem;
       }
-    };
-    fetchLatest();
-    return () => {
-      isMounted = false;
-    };
+    } catch (err) {
+      console.error("[MasikaPage] Failed to fetch latest edition:", err);
+    }
+    return null;
   }, []);
 
+  useEffect(() => {
+    fetchLatest();
+  }, [fetchLatest]);
+
+  // When user becomes subscribed or logs in, reload the edition to obtain real pdfUrl
+  useEffect(() => {
+    if (isSubscribed) {
+      fetchLatest();
+    }
+  }, [isSubscribed, fetchLatest]);
+
   const handleReadLatest = () => {
-    if (latestEdition) {
+    if (!isSubscribed || !latestEdition?.pdfUrl) {
+      setGateOpen(true);
+      return;
+    }
+    setFlipbookOpen(true);
+  };
+
+  const handleSubscribed = async () => {
+    await refreshSubscription();
+    const updated = await fetchLatest();
+    if (updated?.pdfUrl) {
       setFlipbookOpen(true);
-    } else {
-      const el = document.getElementById("latest-edition");
-      if (el) {
-        el.scrollIntoView({ behavior: "smooth" });
-      }
     }
   };
 
@@ -54,18 +69,26 @@ export default function MasikaPage() {
         latestEditionTitle={latestEdition?.title}
         imageSrc={latestEdition?.coverImage ? formatAssetUrl(latestEdition.coverImage) : undefined}
       />
-   <PreviousEditions />
+
+      {/* Previous Editions — passes isSubscribed so cards can show lock icons */}
+      <PreviousEditions isSubscribed={isSubscribed} />
+
       {/* Featured Artist Section */}
       <FeaturedArtist />
-
-      {/* Previous Editions Section */}
-   
 
       {/* About Digital Edition & Pricing Section */}
       <AboutDigitalEdition />
 
-      {/* Latest Edition Flipbook Modal */}
-      {flipbookOpen && latestEdition && (
+      {/* Subscription Gate Modal (non-subscribers) */}
+      <SubscriptionGateModal
+        isOpen={gateOpen}
+        onClose={() => setGateOpen(false)}
+        onSubscribed={handleSubscribed}
+        context="emagazine"
+      />
+
+      {/* Latest Edition Flipbook Modal (subscribers only) */}
+      {flipbookOpen && latestEdition && latestEdition.pdfUrl && (
         <EditionFlipbook
           pdfUrl={latestEdition.pdfUrl}
           title={latestEdition.title}
