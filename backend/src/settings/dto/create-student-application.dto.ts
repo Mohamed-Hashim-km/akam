@@ -51,4 +51,76 @@ export class CreateStudentApplicationDto {
   @IsOptional()
   @IsString()
   status?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  id?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  reviewNotes?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  reviewedBy?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  reviewedAt?: string;
+}
+
+export class GrantStudentPassDto {
+  @ApiProperty()
+  @IsNotEmpty()
+  @IsString()
+  fullName: string;
+
+  @ApiProperty()
+  @IsNotEmpty()
+  @IsString()
+  institution: string;
+
+  @ApiProperty()
+  @IsNotEmpty()
+  @IsString()
+  studentIdNumber: string;
+
+  @ApiProperty()
+  @IsNotEmpty()
+  @IsString()
+  course: string;
+
+  @ApiProperty()
+  @IsNotEmpty()
+  @IsString()
+  email: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  reviewNotes?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  reviewedBy?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  idCardUrl?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  idCardName?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  referenceId?: string;
 }

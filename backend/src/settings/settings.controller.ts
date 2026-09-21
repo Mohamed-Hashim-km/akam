@@ -18,7 +18,7 @@ import { RolesGuard } from '../auth/guards/roles.guard.js';
 import { Roles } from '../auth/decorators/roles.decorator.js';
 import { SettingsService } from './settings.service.js';
 import { UpdateEditorsNoteDto } from './dto/update-editors-note.dto.js';
-import { CreateStudentApplicationDto } from './dto/create-student-application.dto.js';
+import { CreateStudentApplicationDto, GrantStudentPassDto } from './dto/create-student-application.dto.js';
 import { UpdateStudentStatusDto } from './dto/update-student-status.dto.js';
 
 @ApiTags('Settings')
@@ -76,6 +76,15 @@ export class SettingsController {
       status,
       search,
     });
+  }
+
+  @Post('editorial/student-verifications/grant')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Directly grant an approved student scholar pass (Editorial)' })
+  async grantStudentPassDirectly(
+    @Body() dto: GrantStudentPassDto,
+  ) {
+    return this.settingsService.grantStudentPassDirectly(dto, dto.reviewedBy);
   }
 
   @Patch('editorial/student-verifications/:id/status')
