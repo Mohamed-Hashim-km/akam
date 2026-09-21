@@ -51,7 +51,7 @@ export const EventsHero: React.FC<EventsHeroProps> = ({
           {headline}
         </h1>
 
-        <p className="text-sm sm:text-base text-[#686868] font-normal leading-relaxed text-center max-w-[80%] mx-auto font-poppins">
+        <p className="text-sm sm:text-base text-[#686868] font-normal leading-relaxed text-center md:max-w-[80%] mx-auto font-poppins">
           {subheadline}
         </p>
       </div>
