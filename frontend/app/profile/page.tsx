@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { User, Edit2, Upload, BookOpen, Clock, FileCheck, Shield, ChevronRight, LogOut, Send, FileText, CheckCircle2, Filter, Trash2, X, Eye } from "lucide-react";
+import { User, Edit2, Upload, BookOpen, Clock, FileCheck, Shield, ChevronRight, LogOut, Send, FileText, CheckCircle2, Filter, Trash2, X, Eye, XCircle, Palette, Video, Play } from "lucide-react";
 import Button from "@/components/ui/Button";
 import { API_BASE_URL, apiFetch, formatAssetUrl } from "@/lib/config";
 
@@ -27,7 +27,9 @@ interface AuthorStory {
   coverImageUrl: string | null;
   mediaUrl?: string | null;
   submissionType?: string | null;
-  status: "DRAFT" | "PENDING" | "APPROVED" | "REJECTED" | "APPROVED_EMAGAZINE";
+  authorName?: string | null;
+  authorEmail?: string | null;
+  status: "DRAFT" | "PENDING" | "APPROVED" | "REJECTED" | "APPROVED_EMAGAZINE" | "PUBLISHED_EMAGAZINE";
   createdAt: string;
   updatedAt: string;
 }
@@ -53,37 +55,149 @@ export default function ProfilePage() {
 
   const openPreview = async (story: AuthorStory) => {
     setPreviewStory(story);
-    if (!story.content) {
-      setPreviewLoading(true);
-      try {
-        const res = await apiFetch(`${API_BASE_URL}/stories/${story.slug || story.id}`);
-        if (res.ok) {
-          const data = await res.json();
-          setPreviewStory((prev) => prev ? { ...prev, ...data } : data);
-        }
-      } catch (e) {
-        console.error("Failed to fetch story preview", e);
-      } finally {
-        setPreviewLoading(false);
+    setPreviewLoading(true);
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/stories/${story.slug || story.id}`);
+      if (res.ok) {
+        const data = await res.json();
+        setPreviewStory((prev) => (prev ? { ...prev, ...data } : data));
       }
+    } catch (e) {
+      console.error("Failed to fetch story preview", e);
+    } finally {
+      setPreviewLoading(false);
     }
   };
 
   const closePreview = () => setPreviewStory(null);
 
+  const getAddSubmissionVideoEmbed = (url: string) => {
+    const ytMatch = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
+    if (ytMatch) return { type: "youtube" as const, id: ytMatch[1] };
+    const vimeoMatch = url.match(/vimeo\.com\/(?:video\/)?(\d+)/);
+    if (vimeoMatch) return { type: "vimeo" as const, id: vimeoMatch[1] };
+    return null;
+  };
+
+  const renderStoryContent = (contentStr: string) => {
+    const mdToHtml = (md: string): string => {
+      let h = md;
+      h = h.replace(/&nbsp;/gi, " ");
+      h = h.replace(/!\[(.*?)\]\((.*?)\)/g, (_m, alt, src) => {
+        return `<img src="${formatAssetUrl(src)}" alt="${alt}" class="my-6 w-full max-w-3xl mx-auto max-h-[500px] object-cover rounded-2xl shadow-xs" />`;
+      });
+      h = h.replace(/^###\s+(.*)$/gm, '<h3 class="text-xl font-bold my-4 text-gray-900">$1</h3>');
+      h = h.replace(/^##\s+(.*)$/gm, '<h2 class="text-2xl font-bold my-5 text-gray-950">$1</h2>');
+      h = h.replace(/\*\*(.*?)\*\*/g, "<b>$1</b>");
+      h = h.replace(/__(.*?)__/g, "<b>$1</b>");
+      h = h.replace(/\*(.*?)\*/g, "<i>$1</i>");
+      h = h.replace(
+        /^>\s+(.*)$/gm,
+        '<blockquote class="border-l-4 border-emerald-500 pl-4 py-2 italic my-4 text-gray-800 bg-gray-50/70 rounded-r-xl">$1</blockquote>',
+      );
+      h = h.replace(
+        /\[(.*?)\]\((.*?)\)/g,
+        '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-emerald-700 underline font-medium hover:text-emerald-900">$1</a>',
+      );
+      h = h.replace(/^[\*\-]\s+(.*)$/gm, '<li class="ml-5 list-disc mb-1 text-gray-900">$1</li>');
+      h = h.replace(/^(\d+)\.\s+(.*)$/gm, '<li class="ml-5 list-decimal mb-1 text-gray-900">$2</li>');
+      return h;
+    };
+
+    const withHtmlImgs = contentStr.replace(/!\[(.*?)\]\((.*?)\)/g, (_m, alt, src) => `<img src="${formatAssetUrl(src)}" alt="${alt}" />`);
+    const imgRegex = /<img\s+[^>]*src=["']([^"']+)["'][^>]*>/gi;
+    const parts: Array<{ type: "text"; value: string } | { type: "image"; src: string; alt: string }> = [];
+    let lastIndex = 0;
+    let match;
+
+    while ((match = imgRegex.exec(withHtmlImgs)) !== null) {
+      if (match.index > lastIndex) {
+        const chunk = withHtmlImgs.substring(lastIndex, match.index);
+        if (chunk.trim()) parts.push({ type: "text", value: chunk });
+      }
+      const src = match[1];
+      if (src) parts.push({ type: "image", src: formatAssetUrl(src), alt: "Story Inline Image" });
+      lastIndex = imgRegex.lastIndex;
+    }
+    if (lastIndex < withHtmlImgs.length) {
+      const chunk = withHtmlImgs.substring(lastIndex);
+      if (chunk.trim()) parts.push({ type: "text", value: chunk });
+    }
+    if (parts.length === 0) parts.push({ type: "text", value: contentStr });
+
+    return (
+      <div className="space-y-0">
+        {parts.map((part, idx) => {
+          if (part.type === "image") {
+            return (
+              <div key={idx} className="my-8 flex justify-center">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={formatAssetUrl(part.src)}
+                  alt={part.alt}
+                  className="w-full max-w-3xl h-auto max-h-[520px] object-cover rounded-2xl shadow-xs border border-gray-100"
+                  onError={(e) => {
+                    (e.currentTarget as HTMLElement).style.display = "none";
+                  }}
+                />
+              </div>
+            );
+          }
+
+          const rawText = part.value.replace(/\r\n/g, "\n");
+          const lines = rawText.split("\n");
+          const blocks: React.ReactNode[] = [];
+          let paraLines: string[] = [];
+
+          const flushPara = (key: string) => {
+            if (paraLines.length > 0) {
+              const combined = paraLines.join("<br />");
+              if (combined.trim()) {
+                blocks.push(
+                  <div
+                    key={key}
+                    className="text-[#1A1A1A] text-base sm:text-lg leading-[1.9] mb-6 font-normal [&_b]:font-bold [&_i]:italic [&_a]:text-emerald-700 [&_a]:underline [&_h2]:text-2xl [&_h2]:font-bold [&_h2]:my-4 [&_h3]:text-xl [&_h3]:font-bold [&_h3]:my-3 [&_blockquote]:border-l-4 [&_blockquote]:border-emerald-500 [&_blockquote]:pl-4 [&_blockquote]:italic [&_blockquote]:my-3 [&_li]:ml-5 [&_li]:list-disc"
+                    dangerouslySetInnerHTML={{ __html: mdToHtml(combined) }}
+                  />,
+                );
+              }
+              paraLines = [];
+            }
+          };
+
+          lines.forEach((line, li) => {
+            if (line.trim() === "") {
+              if (paraLines.length > 0) {
+                flushPara(`${idx}-p-${li}`);
+              } else {
+                blocks.push(<div key={`${idx}-gap-${li}`} className="mb-10 select-none" aria-hidden="true" />);
+              }
+            } else {
+              paraLines.push(line);
+            }
+          });
+          flushPara(`${idx}-p-end`);
+
+          return <div key={idx}>{blocks}</div>;
+        })}
+      </div>
+    );
+  };
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         setStoryToDelete(null);
+        setPreviewStory(null);
       }
     };
-    if (storyToDelete) {
+    if (storyToDelete || previewStory) {
       window.addEventListener("keydown", handleKeyDown);
     }
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [storyToDelete]);
+  }, [storyToDelete, previewStory]);
 
   const fetchData = async () => {
     const savedUser = typeof window !== "undefined" ? localStorage.getItem("akam_user") : null;
@@ -220,12 +334,14 @@ export default function ProfilePage() {
 
   const filteredStories = statusFilter === "ALL"
     ? stories
+    : statusFilter === "APPROVED_EMAGAZINE"
+    ? stories.filter((s) => s.status === "APPROVED_EMAGAZINE" || s.status === "PUBLISHED_EMAGAZINE")
     : stories.filter((s) => s.status === statusFilter);
 
   const draftCount = stories.filter((s) => s.status === "DRAFT").length;
   const pendingCount = stories.filter((s) => s.status === "PENDING").length;
   const approvedCount = stories.filter((s) => s.status === "APPROVED").length;
-  const emagazineCount = stories.filter((s) => s.status === "APPROVED_EMAGAZINE").length;
+  const emagazineCount = stories.filter((s) => s.status === "APPROVED_EMAGAZINE" || s.status === "PUBLISHED_EMAGAZINE").length;
 
   if (loading) {
     return (
@@ -496,6 +612,8 @@ export default function ProfilePage() {
                         className={`font-bold text-[10px] uppercase tracking-wider px-3 py-1 rounded-xl shrink-0 ${
                           story.status === "APPROVED"
                             ? "bg-emerald-100 text-emerald-800"
+                            : story.status === "PUBLISHED_EMAGAZINE"
+                            ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
                             : story.status === "APPROVED_EMAGAZINE"
                             ? "bg-purple-100 text-purple-800 border border-purple-200"
                             : story.status === "PENDING"
@@ -505,9 +623,32 @@ export default function ProfilePage() {
                             : "bg-gray-200 text-gray-800"
                         }`}
                       >
-                        {story.status === "APPROVED_EMAGAZINE" ? "E-Magazine" : story.status}
+                        {story.status === "PUBLISHED_EMAGAZINE"
+                          ? "E-Magazine (Published)"
+                          : story.status === "APPROVED_EMAGAZINE"
+                          ? "E-Magazine (Pending)"
+                          : story.status}
                       </span>
                     </div>
+
+                    {story.status === "PUBLISHED_EMAGAZINE" && (
+                      <div className="pt-3 border-t border-gray-100 flex items-center justify-between gap-2 flex-wrap text-xs">
+                        <span className="text-emerald-700 font-medium flex items-center gap-1.5">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                          <span>Published in official AKAM E-Magazine edition</span>
+                        </span>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          icon={<Eye className="w-3 h-3" />}
+                          iconPosition="left"
+                          className="text-xs px-3 py-1.5 cursor-pointer border border-emerald-200 text-emerald-800 hover:bg-emerald-50 shadow-xs"
+                          onClick={() => openPreview(story)}
+                        >
+                          Preview
+                        </Button>
+                      </div>
+                    )}
 
                     {story.status === "APPROVED_EMAGAZINE" && (
                       <div className="pt-3 border-t border-gray-100 flex items-center justify-between gap-2 flex-wrap text-xs">
@@ -661,68 +802,202 @@ export default function ProfilePage() {
           </div>
         </div>
       )}
-      {/* ── E-Magazine Preview Modal ─────────────────────────────────────── */}
+      {/* ── E-Magazine / Story Preview Modal (Matches Editorial Reader Modal) ───────────────────────── */}
       {previewStory && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 font-poppins"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs animate-in fade-in font-poppins"
           onClick={closePreview}
         >
           <div
-            className="relative bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto border border-gray-100"
+            className="relative w-full max-w-4xl max-h-[90vh] bg-white rounded-[32px] p-6 sm:p-8 overflow-y-auto shadow-2xl flex flex-col font-poppins"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Close Button */}
-            <button
-              onClick={closePreview}
-              className="absolute top-4 right-4 z-10 w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-600 hover:text-black transition-colors cursor-pointer"
-            >
-              <X className="w-4 h-4" />
-            </button>
+            {/* Header */}
+            <div className="flex items-start justify-between pb-4 border-b border-gray-100 mb-6 gap-4 shrink-0">
+              <div>
+                <div className="flex items-center gap-2 flex-wrap mb-2">
+                  <span className="bg-[#E4F953] text-[#040706] font-bold text-[10px] uppercase tracking-wider px-3 py-1 rounded-xl shadow-xs">
+                    {previewStory.status === "PUBLISHED_EMAGAZINE"
+                      ? "PUBLISHED IN E-MAGAZINE"
+                      : previewStory.status === "APPROVED_EMAGAZINE"
+                      ? "E-MAGAZINE (PENDING)"
+                      : previewStory.status === "APPROVED"
+                      ? "PUBLISHED STORY"
+                      : previewStory.status === "DRAFT"
+                      ? "DRAFT PREVIEW"
+                      : "SUBMISSION PREVIEW"}
+                  </span>
+                  {previewStory.submissionType === "PAINTING" && (
+                    <span className="bg-purple-700 text-white font-bold text-[10px] uppercase tracking-wider px-2.5 py-1 rounded-xl shadow-xs flex items-center gap-1">
+                      <Palette className="w-3 h-3" /> Painting
+                    </span>
+                  )}
+                  {previewStory.submissionType === "VIDEO" && (
+                    <span className="bg-rose-600 text-white font-bold text-[10px] uppercase tracking-wider px-2.5 py-1 rounded-xl shadow-xs flex items-center gap-1">
+                      <Video className="w-3 h-3" /> Video
+                    </span>
+                  )}
+                  {previewStory.category && (
+                    <span className="bg-black text-white font-bold text-[10px] uppercase tracking-wider px-2.5 py-1 rounded-xl shadow-xs">
+                      Category: {previewStory.category}
+                    </span>
+                  )}
+                </div>
+                <h2 className="text-2xl sm:text-3xl font-bold text-gray-950 leading-tight">
+                  {previewStory.title}
+                </h2>
+                {previewStory.description && (
+                  <div className="mt-3.5 rounded-2xl text-xs sm:text-sm text-gray-700 leading-relaxed">
+                    <p className="whitespace-pre-wrap">{previewStory.description}</p>
+                  </div>
+                )}
+                <p className="text-xs text-gray-500 mt-1">
+                  By {previewStory.authorName || profile.name || profile.email}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closePreview}
+                className="p-2 text-gray-400 hover:text-gray-700 rounded-full hover:bg-gray-100 cursor-pointer shrink-0"
+              >
+                <XCircle className="w-6 h-6" />
+              </button>
+            </div>
 
-            {/* Cover Image */}
-            {previewStory.coverImageUrl && (
-              <div className="w-full h-52 rounded-t-3xl overflow-hidden bg-gray-100">
+            {/* Video Player Embed if VIDEO submission */}
+            {previewStory.submissionType === "VIDEO" && (
+              <div className="w-full max-w-3xl mx-auto mb-8 shrink-0 rounded-[24px] overflow-hidden shadow-md aspect-video bg-black relative flex items-center justify-center">
+                {(() => {
+                  const embed = previewStory.mediaUrl ? getAddSubmissionVideoEmbed(previewStory.mediaUrl) : null;
+                  if (embed?.type === "youtube") {
+                    return (
+                      <iframe
+                        src={`https://www.youtube-nocookie.com/embed/${embed.id}`}
+                        title="Video Preview"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen
+                        className="w-full h-full border-0"
+                      />
+                    );
+                  } else if (embed?.type === "vimeo") {
+                    return (
+                      <iframe
+                        src={`https://player.vimeo.com/video/${embed.id}`}
+                        title="Video Preview"
+                        allow="autoplay; fullscreen; picture-in-picture"
+                        allowFullScreen
+                        className="w-full h-full border-0"
+                      />
+                    );
+                  } else if (previewStory.coverImageUrl) {
+                    return (
+                      <div className="relative w-full h-full">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={formatAssetUrl(previewStory.coverImageUrl)}
+                          alt={previewStory.title}
+                          className="w-full h-full object-cover"
+                        />
+                        {previewStory.mediaUrl && (
+                          <a
+                            href={previewStory.mediaUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="absolute inset-0 flex items-center justify-center bg-black/40 hover:bg-black/50 transition-colors group cursor-pointer z-10"
+                          >
+                            <div className="w-14 h-14 rounded-full bg-white/90 text-gray-900 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
+                              <Play className="w-6 h-6 fill-current ml-1 text-black" />
+                            </div>
+                          </a>
+                        )}
+                      </div>
+                    );
+                  }
+                  return (
+                    <div className="w-full h-full flex items-center justify-center text-white text-xs p-6">
+                      {previewStory.mediaUrl ? (
+                        <a
+                          href={previewStory.mediaUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="underline font-semibold hover:text-[#E4F953]"
+                        >
+                          Open Video Link in New Tab
+                        </a>
+                      ) : (
+                        <span className="text-gray-400">No video source provided</span>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+
+            {/* Painting Artwork Display */}
+            {previewStory.submissionType === "PAINTING" && (previewStory.mediaUrl || previewStory.coverImageUrl) && (
+              <div className="relative w-full max-w-3xl mx-auto mb-8 shrink-0 rounded-[24px] overflow-hidden bg-[#0A0D0C] border border-gray-200/80 shadow-sm flex items-center justify-center p-3 sm:p-4 group">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={formatAssetUrl(previewStory.mediaUrl || previewStory.coverImageUrl || "")}
+                  alt={previewStory.title || "Painting Artwork"}
+                  className="w-full max-h-[550px] object-contain rounded-xl block"
+                />
+                <div className="absolute bottom-3 right-3 z-10 bg-black/80 backdrop-blur-md text-white text-[11px] font-semibold px-3 py-1 rounded-xl flex items-center gap-1.5 shadow-xs pointer-events-none">
+                  <Palette className="w-3.5 h-3.5 text-purple-300" />
+                  <span>Original Artwork</span>
+                </div>
+              </div>
+            )}
+
+            {/* Article / Story Cover Image (Card style matching LatestStories) */}
+            {previewStory.submissionType !== "VIDEO" && previewStory.submissionType !== "PAINTING" && (previewStory.coverImageUrl || previewStory.mediaUrl) && (
+              <div className="relative w-64 sm:w-72 md:w-80 aspect-square mx-auto mb-8 shrink-0 rounded-[22px] overflow-hidden bg-gray-100 border border-gray-200/80 shadow-md">
                 <Image
-                  src={formatAssetUrl(previewStory.coverImageUrl)}
-                  alt={previewStory.title}
-                  width={800}
-                  height={208}
-                  className="w-full h-full object-cover"
+                  src={formatAssetUrl(previewStory.coverImageUrl || previewStory.mediaUrl || "")}
+                  alt={previewStory.title || "Cover Preview"}
+                  fill
+                  priority
                   unoptimized
+                  className="object-cover object-center"
                 />
               </div>
             )}
 
-            <div className="p-6 sm:p-8">
-              {/* Badge */}
-              <span className="inline-block bg-[#E4F953] text-[#040706] font-bold text-[10px] uppercase tracking-wider px-3 py-1 rounded-xl mb-3">
-                {previewStory.category || "E-Magazine"}
-              </span>
-
-              {/* Title */}
-              <h2 className="text-2xl sm:text-3xl font-bold text-gray-950 leading-tight mb-3">
-                {previewStory.title}
-              </h2>
-
-              {/* Description */}
-              {previewStory.description && (
-                <p className="text-sm text-gray-500 leading-relaxed mb-5 border-b border-gray-100 pb-5">
-                  {previewStory.description}
-                </p>
-              )}
-
-              {/* Content / Loading */}
+            {/* Content Parser */}
+            <div className="mb-6 flex-1">
               {previewLoading ? (
                 <div className="flex items-center justify-center py-12 gap-3 text-gray-400">
                   <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-400" />
-                  <span className="text-sm font-medium">Loading preview…</span>
+                  <span className="text-sm font-medium">Loading content...</span>
                 </div>
               ) : previewStory.content ? (
-                <div className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
-                  {previewStory.content}
-                </div>
+                renderStoryContent(previewStory.content)
               ) : (
-                <p className="text-sm text-gray-400 italic text-center py-8">No content available for preview.</p>
+                <p className="text-sm text-gray-400 italic text-center py-6">No content available for preview.</p>
+              )}
+            </div>
+
+            {/* Bottom Actions Row */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-5 border-t border-gray-100 mt-auto shrink-0">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={closePreview}
+                className="justify-center border border-gray-300 text-gray-700 hover:bg-gray-100 cursor-pointer shrink-0"
+              >
+                Close Preview
+              </Button>
+
+              {previewStory.status === "APPROVED" && (
+                <Link href={`/works/${previewStory.slug || previewStory.id}`}>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    className="justify-center bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer shrink-0 whitespace-nowrap"
+                  >
+                    View on Works
+                  </Button>
+                </Link>
               )}
             </div>
           </div>

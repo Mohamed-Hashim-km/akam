@@ -33,8 +33,10 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
       await client.query(`ALTER TYPE "EventType" ADD VALUE IF NOT EXISTS 'EXHIBITION';`);
       await client.query(`ALTER TYPE "EventType" ADD VALUE IF NOT EXISTS 'FILM_SCREENING';`);
       await client.query(`ALTER TYPE "StoryStatus" ADD VALUE IF NOT EXISTS 'APPROVED_EMAGAZINE';`);
+      await client.query(`ALTER TYPE "StoryStatus" ADD VALUE IF NOT EXISTS 'PUBLISHED_EMAGAZINE';`);
       await client.query(`ALTER TYPE "StoryStatus" ADD VALUE IF NOT EXISTS 'UNPUBLISHED';`);
       await client.query(`ALTER TYPE "NotificationType" ADD VALUE IF NOT EXISTS 'STORY_APPROVED_EMAGAZINE';`);
+      await client.query(`ALTER TYPE "NotificationType" ADD VALUE IF NOT EXISTS 'STORY_PUBLISHED_EMAGAZINE';`);
       await client.query(`ALTER TYPE "NotificationType" ADD VALUE IF NOT EXISTS 'CONTENT_REPORTED';`);
       await client.query(`ALTER TYPE "NotificationType" ADD VALUE IF NOT EXISTS 'REPORT_RESOLVED';`);
       await client.query(`ALTER TYPE "NotificationType" ADD VALUE IF NOT EXISTS 'REPORT_DISMISSED';`);

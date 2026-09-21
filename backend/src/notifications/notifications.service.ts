@@ -6,6 +6,7 @@ export type NotificationType =
   | 'STORY_APPROVED'
   | 'STORY_REJECTED'
   | 'STORY_APPROVED_EMAGAZINE'
+  | 'STORY_PUBLISHED_EMAGAZINE'
   | 'CONTENT_REPORTED'
   | 'REPORT_RESOLVED'
   | 'REPORT_DISMISSED'
@@ -163,6 +164,15 @@ export class NotificationsService {
       authorId,
       'STORY_APPROVED_EMAGAZINE',
       `Congratulations! Your submission "${storyTitle}" has been approved for the AKAM E-Magazine edition.`,
+      storyId,
+    );
+  }
+
+  async notifyAuthorOfEmagazinePublished(authorId: string, storyTitle: string, storyId: string): Promise<void> {
+    await this.createNotification(
+      authorId,
+      'STORY_PUBLISHED_EMAGAZINE',
+      `Congratulations! Your submission "${storyTitle}" has been officially published in the AKAM E-Magazine edition!`,
       storyId,
     );
   }

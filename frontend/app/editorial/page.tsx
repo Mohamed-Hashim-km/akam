@@ -84,7 +84,7 @@ interface PendingStory {
   coverImageUrl: string | null;
   submissionType?: "STORY" | "PAINTING" | "VIDEO";
   mediaUrl?: string | null;
-  status: "PENDING" | "APPROVED" | "REJECTED" | "DRAFT" | "APPROVED_EMAGAZINE" | "UNPUBLISHED";
+  status: "PENDING" | "APPROVED" | "REJECTED" | "DRAFT" | "APPROVED_EMAGAZINE" | "PUBLISHED_EMAGAZINE" | "UNPUBLISHED";
   isFeatured?: boolean;
   createdAt: string;
   updatedAt: string;
@@ -258,6 +258,13 @@ function EditorialDashboardContent() {
   useEffect(() => {
     const tabFromUrl = searchParams.get("tab") as TabType;
     const pageFromUrlStr = searchParams.get("page");
+    const subTabFromUrl = searchParams.get("subTab");
+
+    if (subTabFromUrl === "published") {
+      setEmagazineSubTab("PUBLISHED");
+    } else if (subTabFromUrl === "pending") {
+      setEmagazineSubTab("PENDING");
+    }
 
     let currentTab = tabFromUrl;
     if (!currentTab && typeof window !== "undefined") {
@@ -310,7 +317,8 @@ function EditorialDashboardContent() {
       sessionStorage.setItem(`akam_editorial_page_${activeTab}`, String(newPage));
     }
     mainRef.current?.scrollTo({ top: 0, behavior: "smooth" });
-    router.push(`/editorial?tab=${activeTab}&page=${newPage}`);
+    const subTabQuery = activeTab === "emagazine" ? `&subTab=${emagazineSubTab.toLowerCase()}` : "";
+    router.push(`/editorial?tab=${activeTab}${subTabQuery}&page=${newPage}`);
   };
 
   // Auth & RBAC State
@@ -324,6 +332,24 @@ function EditorialDashboardContent() {
 
   const [emagazineStories, setEmagazineStories] = useState<PendingStory[]>([]);
   const [emagazineMeta, setEmagazineMeta] = useState({ total: 0, page: 1, limit: 10, totalPages: 1 });
+  const [emagazinePendingCount, setEmagazinePendingCount] = useState<number>(0);
+  const [emagazinePublishedCount, setEmagazinePublishedCount] = useState<number>(0);
+  const [emagazineSubTab, setEmagazineSubTab] = useState<"PENDING" | "PUBLISHED">(() => {
+    if (typeof window !== "undefined") {
+      const p = new URLSearchParams(window.location.search).get("subTab");
+      if (p === "published") return "PUBLISHED";
+    }
+    return "PENDING";
+  });
+
+  const handleEmagazineSubTabChange = (newSubTab: "PENDING" | "PUBLISHED") => {
+    setEmagazineSubTab(newSubTab);
+    setEmagazineStories([]);
+    setCurrentPage(1);
+    setSearchQuery("");
+    router.push(`/editorial?tab=emagazine&subTab=${newSubTab.toLowerCase()}&page=1`, { scroll: false });
+    fetchDashboardData("emagazine", 1, "", newSubTab);
+  };
 
   const [allStories, setAllStories] = useState<PendingStory[]>([]);
   const [catalogMeta, setCatalogMeta] = useState({ total: 0, page: 1, limit: 10, totalPages: 1 });
@@ -945,7 +971,6 @@ function EditorialDashboardContent() {
   const [savingSettings, setSavingSettings] = useState(false);
   const [loading, setLoading] = useState(true);
   const [selectedStory, setSelectedStory] = useState<PendingStory | null>(null);
-  const [emPreviewStory, setEmPreviewStory] = useState<PendingStory | null>(null);
   const [rejectingStory, setRejectingStory] = useState<PendingStory | null>(null);
   const [rejectionNote, setRejectionNote] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
@@ -1002,7 +1027,31 @@ function EditorialDashboardContent() {
     }
   };
 
-  const fetchDashboardData = async (tab: TabType = activeTab, page: number = currentPage, query: string = searchQuery) => {
+  const fetchEmagazineCounts = async () => {
+    try {
+      const [pendingRes, publishedRes] = await Promise.all([
+        apiFetch(`${API_BASE_URL}/stories?status=APPROVED_EMAGAZINE&limit=1`),
+        apiFetch(`${API_BASE_URL}/stories?status=PUBLISHED_EMAGAZINE&limit=1`),
+      ]);
+      if (pendingRes.ok) {
+        const pJson = await pendingRes.json();
+        setEmagazinePendingCount(pJson?.meta?.total ?? 0);
+      }
+      if (publishedRes.ok) {
+        const pubJson = await publishedRes.json();
+        setEmagazinePublishedCount(pubJson?.meta?.total ?? 0);
+      }
+    } catch (e) {
+      console.error("Error fetching emagazine counts", e);
+    }
+  };
+
+  const fetchDashboardData = async (
+    tab: TabType = activeTab,
+    page: number = currentPage,
+    query: string = searchQuery,
+    emSubTab: "PENDING" | "PUBLISHED" = emagazineSubTab,
+  ) => {
     setLoading(true);
     try {
       if (tab === "queue") {
@@ -1018,17 +1067,28 @@ function EditorialDashboardContent() {
           }
         }
       } else if (tab === "emagazine") {
+        const emStatus = emSubTab === "PUBLISHED" ? "PUBLISHED_EMAGAZINE" : "APPROVED_EMAGAZINE";
         const emSearch = query ? `&search=${encodeURIComponent(query)}` : "";
-        const emRes = await apiFetch(`${API_BASE_URL}/stories?status=APPROVED_EMAGAZINE&page=${page}&limit=10${emSearch}`);
+        const emRes = await apiFetch(`${API_BASE_URL}/stories?status=${emStatus}&page=${page}&limit=10${emSearch}`);
         if (emRes.ok) {
           const json = await emRes.json();
           if (json.data) {
             setEmagazineStories(json.data);
             setEmagazineMeta(json.meta);
+            if (emSubTab === "PUBLISHED") {
+              setEmagazinePublishedCount(json.meta?.total ?? 0);
+            } else {
+              setEmagazinePendingCount(json.meta?.total ?? 0);
+            }
           } else {
             setEmagazineStories(Array.isArray(json) ? json : []);
           }
+        } else {
+          setEmagazineStories([]);
+          setEmagazineMeta({ total: 0, page: 1, limit: 10, totalPages: 1 });
         }
+        fetchEmagazineCounts();
+      }
       } else if (tab === "reports") {
         const rStatus = reportStatusFilter !== "ALL" ? `&status=${reportStatusFilter}` : "";
         const rType = reportTypeFilter !== "ALL" ? `&type=${reportTypeFilter}` : "";
@@ -2053,15 +2113,15 @@ function EditorialDashboardContent() {
 
   useEffect(() => {
     if (user && ["EDITOR", "ADMIN"].includes(user.role)) {
-      fetchDashboardData(activeTab, currentPage, searchQuery);
+      fetchDashboardData(activeTab, currentPage, searchQuery, emagazineSubTab);
     }
-  }, [activeTab, currentPage, reportStatusFilter, reportTypeFilter, inquiryStatusFilter, eventFilterType]);
+  }, [activeTab, currentPage, reportStatusFilter, reportTypeFilter, inquiryStatusFilter, eventFilterType, emagazineSubTab]);
 
   // Server-side debounced search handler
   useEffect(() => {
     const timer = setTimeout(() => {
       if (user && ["EDITOR", "ADMIN"].includes(user.role)) {
-        fetchDashboardData(activeTab, 1, searchQuery);
+        fetchDashboardData(activeTab, 1, searchQuery, emagazineSubTab);
       }
     }, 350);
     return () => clearTimeout(timer);
@@ -2069,7 +2129,7 @@ function EditorialDashboardContent() {
 
   const handleReview = async (
     storyId: string,
-    decision: "APPROVED" | "REJECTED" | "APPROVED_EMAGAZINE" | "PENDING",
+    decision: "APPROVED" | "REJECTED" | "APPROVED_EMAGAZINE" | "PUBLISHED_EMAGAZINE" | "PENDING",
     note?: string
   ) => {
     setActionLoading(true);
@@ -2084,10 +2144,12 @@ function EditorialDashboardContent() {
 
       if (res.ok) {
         if (decision === "APPROVED") {
-          setFeedbackMessage("Submission approved and published to public catalog!");
+          setFeedbackMessage("Submission approved and published to public works catalog! Confirmation email sent to author.");
           fetch("/api/revalidate?path=/").catch(() => {});
+        } else if (decision === "PUBLISHED_EMAGAZINE") {
+          setFeedbackMessage("Submission officially published to AKAM E-Magazine! Notification email sent to author.");
         } else if (decision === "APPROVED_EMAGAZINE") {
-          setFeedbackMessage("Submission approved for E-Magazine! Stored in the E-Magazine collection.");
+          setFeedbackMessage("Submission moved to E-Magazine Pending Queue.");
         } else if (decision === "PENDING") {
           setFeedbackMessage("Story moved back to Pending Review Queue.");
         } else {
@@ -2096,7 +2158,7 @@ function EditorialDashboardContent() {
         setSelectedStory(null);
         setRejectingStory(null);
         setRejectionNote("");
-        fetchDashboardData(activeTab, currentPage, searchQuery);
+        fetchDashboardData(activeTab, currentPage, searchQuery, emagazineSubTab);
       } else {
         const errData = await res.json();
         alert(errData.message || "Failed to review submission");
@@ -3047,7 +3109,7 @@ function EditorialDashboardContent() {
             <p className="text-xs sm:text-sm text-gray-500 font-medium leading-relaxed max-w-3xl">
               {activeTab === "queue" && "Review pending author submissions and approve or reject content."}
               {activeTab === "student-verifications" && "Review uploaded student ID cards, verify credentials, and approve 100% free digital passes for students."}
-              {activeTab === "emagazine" && "Curated submissions approved exclusively for AKAM E-Magazine editions. These works are stored for the periodical and not published in the public web catalog."}
+              {activeTab === "emagazine" && "Curated submissions for AKAM E-Magazine editions. Filter between Magazine Pending and Magazine Published, with automatic author email notifications upon publication."}
               {activeTab === "reports" && "Investigate reader flag reports submitted against published content and comments."}
               {activeTab === "catalog" && "Browse all active works (articles, paintings, videos) currently published on AKAM Digital."}
               {activeTab === "authors" && "Manage all registered platform users, writers, and role permissions."}
@@ -3189,12 +3251,49 @@ function EditorialDashboardContent() {
           {/* TAB: E-MAGAZINE COLLECTION */}
           {activeTab === "emagazine" && (
             <div className="space-y-6 font-poppins">
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-white p-5 rounded-[24px] border border-gray-200/80 shadow-xs">
+              {/* Category Pills & Search */}
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-white p-4 sm:p-5 rounded-[24px] border border-gray-200/80 shadow-xs">
+                {/* Two Categories: Magazine Pending & Magazine Published */}
+                <div className="flex items-center gap-1.5 p-1 bg-gray-100 rounded-2xl w-full sm:w-auto">
+                  <button
+                    type="button"
+                    onClick={() => handleEmagazineSubTabChange("PENDING")}
+                    className={`flex-1 sm:flex-initial px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex items-center justify-center gap-1.5 ${
+                      emagazineSubTab === "PENDING"
+                        ? "bg-white text-gray-950 shadow-xs"
+                        : "text-gray-500 hover:text-gray-900"
+                    }`}
+                  >
+                    <Clock className="w-3.5 h-3.5 text-purple-600" />
+                    <span>Magazine Pending</span>
+                    <span className="ml-1 bg-purple-100 text-purple-700 text-[10px] px-2 py-0.5 rounded-full font-extrabold">
+                      {emagazinePendingCount}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleEmagazineSubTabChange("PUBLISHED")}
+                    className={`flex-1 sm:flex-initial px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex items-center justify-center gap-1.5 ${
+                      emagazineSubTab === "PUBLISHED"
+                        ? "bg-white text-gray-950 shadow-xs"
+                        : "text-gray-500 hover:text-gray-900"
+                    }`}
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Magazine Published</span>
+                    <span className="ml-1 bg-emerald-100 text-emerald-700 text-[10px] px-2 py-0.5 rounded-full font-extrabold">
+                      {emagazinePublishedCount}
+                    </span>
+                  </button>
+                </div>
+
+                {/* Server-Side Search */}
                 <div className="relative max-w-md w-full">
                   <Search className="absolute left-3.5 top-3 w-4 h-4 text-gray-400" />
                   <input
                     type="text"
-                    placeholder="Search E-Magazine collection by title, category or author..."
+                    placeholder={`Search ${emagazineSubTab === "PENDING" ? "pending" : "published"} e-magazine works...`}
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-2xl text-xs font-medium outline-none focus:border-black shadow-xs"
@@ -3219,12 +3318,18 @@ function EditorialDashboardContent() {
                 <div className="text-center py-20 bg-white rounded-[28px] border border-gray-200 p-8 shadow-xs">
                   <BookOpen className="w-12 h-12 mx-auto text-purple-500 mb-3" />
                   <h3 className="text-xl font-bold text-gray-900 mb-1">
-                    {searchQuery ? "No Matching E-Magazine Submissions" : "E-Magazine Collection Empty"}
-                  </h3>
-                  <p className="text-sm text-gray-500">
                     {searchQuery
-                      ? `No stored e-magazine works matched "${searchQuery}". Try adjusting your search term.`
-                      : "Submissions approved for the AKAM E-Magazine from the Pending Review Queue will appear here."}
+                      ? `No Matching ${emagazineSubTab === "PENDING" ? "Pending" : "Published"} Works`
+                      : emagazineSubTab === "PENDING"
+                      ? "No Pending E-Magazine Submissions"
+                      : "No Published E-Magazine Submissions"}
+                  </h3>
+                  <p className="text-sm text-gray-500 max-w-md mx-auto">
+                    {searchQuery
+                      ? `No ${emagazineSubTab.toLowerCase()} e-magazine works matched "${searchQuery}". Try adjusting your search term.`
+                      : emagazineSubTab === "PENDING"
+                      ? "Submissions approved for the AKAM E-Magazine from the review queue will appear here waiting for publication."
+                      : "Works published in the AKAM E-Magazine edition will appear here."}
                   </p>
                 </div>
               ) : (
@@ -3252,8 +3357,16 @@ function EditorialDashboardContent() {
                             </div>
                           )}
                           <div className="absolute top-2.5 left-2.5 z-10 flex gap-1.5 flex-wrap">
-                            <span className="bg-[#E4F953] text-[#040706] font-bold text-[9px] uppercase tracking-wider px-2.5 py-1 rounded-xl shadow-xs">
-                              E-MAGAZINE
+                            <span
+                              className={`font-bold text-[9px] uppercase tracking-wider px-2.5 py-1 rounded-xl shadow-xs ${
+                                story.status === "PUBLISHED_EMAGAZINE"
+                                  ? "bg-emerald-600 text-white"
+                                  : "bg-[#E4F953] text-[#040706]"
+                              }`}
+                            >
+                              {story.status === "PUBLISHED_EMAGAZINE"
+                                ? "PUBLISHED IN MAGAZINE"
+                                : "MAGAZINE PENDING"}
                             </span>
                             {story.category && (
                               <span className="bg-black/80 backdrop-blur-xs text-white font-bold text-[9px] uppercase tracking-wider px-2.5 py-1 rounded-xl shadow-xs">
@@ -3278,31 +3391,54 @@ function EditorialDashboardContent() {
                           <div className="pt-3.5 border-t border-gray-100 flex items-center gap-1.5 flex-wrap">
                             <button
                               type="button"
-                              onClick={() => setEmPreviewStory(story)}
+                              onClick={() => setSelectedStory(story)}
                               className="flex-1 inline-flex items-center justify-center gap-1 py-2 px-2 bg-white hover:bg-gray-100 border border-gray-300 text-gray-900 text-xs font-semibold rounded-xl transition-all cursor-pointer shadow-2xs active:scale-95"
                               title="Preview story"
                             >
                               <Eye className="w-3.5 h-3.5 text-gray-600 shrink-0" />
                               <span>View</span>
                             </button>
-                            <button
-                              type="button"
-                              onClick={() => handleReview(story.id, "PENDING")}
-                              className="flex-1 inline-flex items-center justify-center gap-1 py-2 px-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold rounded-xl transition-all cursor-pointer shadow-2xs active:scale-95"
-                              title="Return to Pending Queue"
-                            >
-                              <Undo className="w-3.5 h-3.5 text-purple-200 shrink-0" />
-                              <span className="truncate">Return</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleReview(story.id, "APPROVED")}
-                              className="flex-1 inline-flex items-center justify-center gap-1 py-2 px-2 bg-gray-950 hover:bg-black text-white text-xs font-semibold rounded-xl transition-all cursor-pointer shadow-2xs active:scale-95"
-                              title="Approve & Publish to Public Web Catalog"
-                            >
-                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                              <span className="truncate">Publish</span>
-                            </button>
+
+                            {story.status === "PUBLISHED_EMAGAZINE" ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (confirm(`Move "${story.title}" back to Magazine Pending?`)) {
+                                    handleReview(story.id, "APPROVED_EMAGAZINE");
+                                  }
+                                }}
+                                className="flex-1 inline-flex items-center justify-center gap-1 py-2 px-2 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-700 text-xs font-semibold rounded-xl transition-all cursor-pointer shadow-2xs active:scale-95"
+                                title="Move back to Magazine Pending"
+                              >
+                                <Undo className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                                <span className="truncate">Unpublish</span>
+                              </button>
+                            ) : (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => handleReview(story.id, "PENDING")}
+                                  className="flex-1 inline-flex items-center justify-center gap-1 py-2 px-2 bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-700 text-xs font-semibold rounded-xl transition-all cursor-pointer shadow-2xs active:scale-95"
+                                  title="Return to Review Queue"
+                                >
+                                  <Undo className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                                  <span className="truncate">Return</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (confirm(`Publish "${story.title}" to the official AKAM E-Magazine edition? An email notification will be sent to the author.`)) {
+                                      handleReview(story.id, "PUBLISHED_EMAGAZINE");
+                                    }
+                                  }}
+                                  className="flex-1 inline-flex items-center justify-center gap-1 py-2 px-2 bg-[#E4F953] hover:bg-[#d5ea44] text-[#040706] text-xs font-bold rounded-xl transition-all cursor-pointer shadow-2xs active:scale-95"
+                                  title="Publish to official E-Magazine edition (sends email to author)"
+                                >
+                                  <BookOpen className="w-3.5 h-3.5 text-[#040706] shrink-0" />
+                                  <span className="truncate">Publish</span>
+                                </button>
+                              </>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -6134,113 +6270,6 @@ function EditorialDashboardContent() {
         </div>
       </main>
 
-      {/* E-Magazine Preview Modal (profile-style) */}
-      {emPreviewStory && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 backdrop-blur-sm p-4 font-poppins animate-in fade-in"
-          onClick={() => setEmPreviewStory(null)}
-        >
-          <div
-            className="relative bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto border border-gray-100"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Close */}
-            <button
-              onClick={() => setEmPreviewStory(null)}
-              className="absolute top-4 right-4 z-10 w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-600 hover:text-black transition-colors cursor-pointer"
-            >
-              <XCircle className="w-4 h-4" />
-            </button>
-
-            {/* Cover Image */}
-            {emPreviewStory.coverImageUrl && (
-              <div className="w-full h-52 rounded-t-3xl overflow-hidden bg-gray-100">
-                <Image
-                  src={formatAssetUrl(emPreviewStory.coverImageUrl)}
-                  alt={emPreviewStory.title}
-                  width={800}
-                  height={208}
-                  className="w-full h-full object-cover"
-                  unoptimized
-                />
-              </div>
-            )}
-
-            <div className="p-6 sm:p-8">
-              {/* Badges */}
-              <div className="flex items-center gap-2 flex-wrap mb-3">
-                <span className="bg-[#E4F953] text-[#040706] font-bold text-[9px] uppercase tracking-wider px-3 py-1 rounded-xl shadow-xs">
-                  E-MAGAZINE SUBMISSION
-                </span>
-                {emPreviewStory.category && (
-                  <span className="bg-black text-white font-bold text-[9px] uppercase tracking-wider px-2.5 py-1 rounded-xl">
-                    {emPreviewStory.category}
-                  </span>
-                )}
-              </div>
-
-              {/* Title */}
-              <h2 className="text-2xl sm:text-3xl font-bold text-gray-950 leading-tight mb-1">
-                {emPreviewStory.title}
-              </h2>
-              <p className="text-xs text-gray-400 mb-4">By {emPreviewStory.authorName || emPreviewStory.authorEmail}</p>
-
-              {/* Description */}
-              {emPreviewStory.description && (
-                <p className="text-sm text-gray-500 leading-relaxed mb-5 border-b border-gray-100 pb-5">
-                  {emPreviewStory.description}
-                </p>
-              )}
-
-              {/* Content */}
-              {emPreviewStory.content ? (
-                <div className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap mb-6">
-                  {renderStoryContent(emPreviewStory.content)}
-                </div>
-              ) : (
-                <p className="text-sm text-gray-400 italic text-center py-6 mb-6">No content available.</p>
-              )}
-
-              {/* Action Buttons */}
-              <div className="flex flex-wrap items-center justify-end gap-2.5 pt-5 border-t border-gray-100">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    const sId = emPreviewStory.id;
-                    if (confirm("Return this story to the Pending Review Queue?")) {
-                      setEmPreviewStory(null);
-                      handleReview(sId, "PENDING");
-                    }
-                  }}
-                  disabled={actionLoading}
-                  className="justify-center text-gray-700 border-gray-300 hover:bg-gray-100 font-semibold cursor-pointer shrink-0 whitespace-nowrap"
-                >
-                  Return to Queue
-                </Button>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  icon={<Globe className="w-4 h-4 text-emerald-200" />}
-                  iconPosition="left"
-                  onClick={() => {
-                    const sId = emPreviewStory.id;
-                    if (confirm("Publish this story to the live public works catalog?")) {
-                      setEmPreviewStory(null);
-                      handleReview(sId, "APPROVED");
-                    }
-                  }}
-                  disabled={actionLoading}
-                  className="justify-center bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer shrink-0 whitespace-nowrap"
-                >
-                  Publish to Works
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Reader Modal */}
       {selectedStory && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs animate-in fade-in">
@@ -6250,8 +6279,10 @@ function EditorialDashboardContent() {
               <div>
                 <div className="flex items-center gap-2 flex-wrap mb-2">
                   <span className="bg-[#E4F953] text-[#040706] font-bold text-[10px] uppercase tracking-wider px-3 py-1 rounded-xl shadow-xs">
-                    {selectedStory.status === "APPROVED_EMAGAZINE"
-                      ? "E-MAGAZINE SUBMISSION"
+                    {selectedStory.status === "PUBLISHED_EMAGAZINE"
+                      ? "PUBLISHED IN E-MAGAZINE"
+                      : selectedStory.status === "APPROVED_EMAGAZINE"
+                      ? "E-MAGAZINE (PENDING)"
                       : selectedStory.status === "APPROVED"
                       ? "PUBLISHED STORY"
                       : "REVIEWING SUBMISSION"}
@@ -6449,6 +6480,7 @@ function EditorialDashboardContent() {
                       onClick={() => {
                         const sId = selectedStory.id;
                         if (confirm("Return this story to the Pending Review Queue?")) {
+                          setSelectedStory(null);
                           handleReview(sId, "PENDING");
                         }
                       }}
@@ -6460,20 +6492,41 @@ function EditorialDashboardContent() {
                     <Button
                       variant="primary"
                       size="sm"
-                      icon={<Globe className="w-4 h-4 text-emerald-200" />}
+                      icon={<BookOpen className="w-4 h-4 text-[#040706]" />}
                       iconPosition="left"
                       onClick={() => {
                         const sId = selectedStory.id;
-                        if (confirm("Publish this story to the live public web catalog?")) {
-                          handleReview(sId, "APPROVED");
+                        if (confirm("Publish this submission to the official AKAM E-Magazine edition? An email notification will be sent to the author.")) {
+                          setSelectedStory(null);
+                          handleReview(sId, "PUBLISHED_EMAGAZINE");
                         }
                       }}
                       disabled={actionLoading}
-                      className="justify-center bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer shrink-0 whitespace-nowrap"
+                      className="justify-center bg-[#E4F953] hover:bg-[#d5ea44] text-[#040706] font-bold cursor-pointer shrink-0 whitespace-nowrap shadow-xs"
                     >
-                      Publish to Web
+                      Publish to Magazine
                     </Button>
                   </>
+                )}
+
+                {selectedStory.status === "PUBLISHED_EMAGAZINE" && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    icon={<Undo className="w-4 h-4 text-gray-500" />}
+                    iconPosition="left"
+                    onClick={() => {
+                      const sId = selectedStory.id;
+                      if (confirm("Move this submission back to Magazine Pending?")) {
+                        setSelectedStory(null);
+                        handleReview(sId, "APPROVED_EMAGAZINE");
+                      }
+                    }}
+                    disabled={actionLoading}
+                    className="justify-center text-amber-700 border-amber-300 hover:bg-amber-50 font-semibold cursor-pointer shrink-0 whitespace-nowrap"
+                  >
+                    Unpublish from Magazine
+                  </Button>
                 )}
 
                 {selectedStory.status === "APPROVED" && (
