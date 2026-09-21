@@ -608,9 +608,16 @@ export default function WorkDetailPage() {
               </span>
             </div>
 
-            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-gray-950 tracking-tight text-balance leading-[1.2] mb-6">
+            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-gray-950 tracking-tight text-balance leading-[1.2] mb-4">
               {story.title}
             </h1>
+
+            {/* Description / Subtitle */}
+            {story.description && (
+              <p className="text-base sm:text-lg text-gray-500 font-normal leading-relaxed max-w-2xl mx-auto mb-6">
+                {story.description}
+              </p>
+            )}
 
             {/* Author Byline & Metadata Card */}
             <div className="flex items-center justify-center gap-3 pt-2">

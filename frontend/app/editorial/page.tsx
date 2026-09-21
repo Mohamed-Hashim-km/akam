@@ -7466,7 +7466,7 @@ function EditorialDashboardContent() {
                   className="w-4 h-4 rounded text-black focus:ring-black cursor-pointer"
                 />
                 <label htmlFor="book-publish-checkbox" className="text-xs font-bold text-gray-900 cursor-pointer">
-                  Publish Immediately on Homepage Showcase
+                 Homepage Showcase
                 </label>
               </div>
 

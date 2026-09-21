@@ -244,10 +244,10 @@ export const PastEventArchive: React.FC<PastEventArchiveProps> = ({
                 {/* Card Content */}
                 <div className="p-5 flex flex-col justify-between grow">
                   <div>
-                    <h3 className="text-base sm:text-lg font-bold text-gray-900 leading-snug line-clamp-1 mb-2 font-poppins group-hover:text-sky-600 transition-colors">
+                    <h3 className="text-base sm:text-lg font-bold text-gray-900 leading-snug mb-2 font-poppins group-hover:text-sky-600 transition-colors">
                       {item.title}
                     </h3>
-                    <p className="text-xs sm:text-sm text-gray-500 font-normal leading-relaxed line-clamp-2 font-poppins mb-3">
+                    <p className="text-xs sm:text-sm text-gray-500 font-normal leading-relaxed font-poppins mb-3">
                       {item.description}
                     </p>
                   </div>
@@ -255,7 +255,7 @@ export const PastEventArchive: React.FC<PastEventArchiveProps> = ({
                     {item.location && (
                       <div className="flex items-center gap-1.5 text-xs text-gray-500 font-medium min-w-0">
                         <MapPin className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                        <span className="truncate">{item.location}</span>
+                        <span className="break-words">{item.location}</span>
                       </div>
                     )}
                   </div>

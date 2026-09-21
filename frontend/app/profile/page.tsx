@@ -21,7 +21,12 @@ interface AuthorStory {
   id: string;
   title: string;
   slug: string;
+  description?: string | null;
+  content?: string | null;
+  category?: string | null;
   coverImageUrl: string | null;
+  mediaUrl?: string | null;
+  submissionType?: string | null;
   status: "DRAFT" | "PENDING" | "APPROVED" | "REJECTED" | "APPROVED_EMAGAZINE";
   createdAt: string;
   updatedAt: string;
@@ -41,6 +46,30 @@ export default function ProfilePage() {
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [storyToDelete, setStoryToDelete] = useState<AuthorStory | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  // E-Magazine Preview Modal
+  const [previewStory, setPreviewStory] = useState<AuthorStory | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+
+  const openPreview = async (story: AuthorStory) => {
+    setPreviewStory(story);
+    if (!story.content) {
+      setPreviewLoading(true);
+      try {
+        const res = await apiFetch(`${API_BASE_URL}/stories/${story.slug || story.id}`);
+        if (res.ok) {
+          const data = await res.json();
+          setPreviewStory((prev) => prev ? { ...prev, ...data } : data);
+        }
+      } catch (e) {
+        console.error("Failed to fetch story preview", e);
+      } finally {
+        setPreviewLoading(false);
+      }
+    }
+  };
+
+  const closePreview = () => setPreviewStory(null);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -486,19 +515,39 @@ export default function ProfilePage() {
                           <BookOpen className="w-3.5 h-3.5 text-gray-500 shrink-0" />
                           <span>Approved for AKAM E-Magazine edition (stored for periodical)</span>
                         </span>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          icon={<Eye className="w-3 h-3" />}
+                          iconPosition="left"
+                          className="text-xs px-3 py-1.5 cursor-pointer border border-gray-300 shadow-xs"
+                          onClick={() => openPreview(story)}
+                        >
+                          Preview
+                        </Button>
+                      </div>
+                    )}
+
+                    {story.status === "APPROVED" && (
+                      <div className="pt-3 border-t border-gray-100 flex items-center justify-between gap-2 flex-wrap text-xs">
+                        <span className="text-emerald-600 font-medium flex items-center gap-1.5">
+                          <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                          <span>Published & live on works catalog</span>
+                        </span>
                         <Link href={`/works/${story.slug || story.id}`}>
                           <Button
                             variant="secondary"
                             size="sm"
                             icon={<Eye className="w-3 h-3" />}
                             iconPosition="left"
-                            className="text-xs px-3 py-1.5 cursor-pointer border border-gray-300 shadow-xs"
+                            className="text-xs px-3 py-1.5 cursor-pointer border border-emerald-200 text-emerald-700 hover:bg-emerald-50 shadow-xs"
                           >
-                            Preview
+                            View on Works
                           </Button>
                         </Link>
                       </div>
                     )}
+
 
                     {/* Draft Actions Bar */}
                     {(story.status === "DRAFT" || story.status === "REJECTED") && (
@@ -608,6 +657,73 @@ export default function ProfilePage() {
                 <Trash2 className="w-3.5 h-3.5" />
                 <span>{deletingId === storyToDelete.id ? "Deleting..." : "Delete Draft"}</span>
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ── E-Magazine Preview Modal ─────────────────────────────────────── */}
+      {previewStory && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 font-poppins"
+          onClick={closePreview}
+        >
+          <div
+            className="relative bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto border border-gray-100"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Close Button */}
+            <button
+              onClick={closePreview}
+              className="absolute top-4 right-4 z-10 w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-600 hover:text-black transition-colors cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            {/* Cover Image */}
+            {previewStory.coverImageUrl && (
+              <div className="w-full h-52 rounded-t-3xl overflow-hidden bg-gray-100">
+                <Image
+                  src={formatAssetUrl(previewStory.coverImageUrl)}
+                  alt={previewStory.title}
+                  width={800}
+                  height={208}
+                  className="w-full h-full object-cover"
+                  unoptimized
+                />
+              </div>
+            )}
+
+            <div className="p-6 sm:p-8">
+              {/* Badge */}
+              <span className="inline-block bg-[#E4F953] text-[#040706] font-bold text-[10px] uppercase tracking-wider px-3 py-1 rounded-xl mb-3">
+                {previewStory.category || "E-Magazine"}
+              </span>
+
+              {/* Title */}
+              <h2 className="text-2xl sm:text-3xl font-bold text-gray-950 leading-tight mb-3">
+                {previewStory.title}
+              </h2>
+
+              {/* Description */}
+              {previewStory.description && (
+                <p className="text-sm text-gray-500 leading-relaxed mb-5 border-b border-gray-100 pb-5">
+                  {previewStory.description}
+                </p>
+              )}
+
+              {/* Content / Loading */}
+              {previewLoading ? (
+                <div className="flex items-center justify-center py-12 gap-3 text-gray-400">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-400" />
+                  <span className="text-sm font-medium">Loading preview…</span>
+                </div>
+              ) : previewStory.content ? (
+                <div className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
+                  {previewStory.content}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-400 italic text-center py-8">No content available for preview.</p>
+              )}
             </div>
           </div>
         </div>

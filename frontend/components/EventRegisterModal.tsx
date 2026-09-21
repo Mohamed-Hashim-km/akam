@@ -11,6 +11,7 @@ interface EventRegisterModalProps {
   event: {
     id: string;
     title: string;
+    description?: string;
     location: string;
     time?: string;
     day?: string;
@@ -99,9 +100,9 @@ export default function EventRegisterModal({
             <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0">
               <MapPin className="w-3.5 h-3.5" />
             </div>
-            <div className="truncate">
+            <div className="min-w-0">
               <span className="text-[10px] text-gray-400 uppercase tracking-wider block font-bold">Location</span>
-              <span className="font-semibold text-gray-900 truncate block">{event.location}</span>
+              <span className="font-semibold text-gray-900 break-words block">{event.location}</span>
             </div>
           </div>
 
@@ -120,6 +121,14 @@ export default function EventRegisterModal({
             </div>
           )}
         </div>
+
+        {/* Event Description */}
+        {event.description && (
+          <div className="bg-sky-50/70 border border-sky-100 rounded-2xl px-4 py-3.5 mb-5">
+            <span className="text-[10px] font-bold text-sky-500 uppercase tracking-wider block mb-1">About this event</span>
+            <p className="text-xs text-gray-700 leading-relaxed font-poppins">{event.description}</p>
+          </div>
+        )}
 
         {/* Success Banner */}
         {successMsg ? (
