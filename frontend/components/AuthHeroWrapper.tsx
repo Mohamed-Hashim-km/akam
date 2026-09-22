@@ -10,12 +10,7 @@ interface AuthHeroWrapperProps {
 }
 
 export default function AuthHeroWrapper({ initialIsLoggedIn = false }: AuthHeroWrapperProps) {
-  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
-    if (typeof window !== "undefined") {
-      return !!localStorage.getItem("akam_user");
-    }
-    return initialIsLoggedIn;
-  });
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(initialIsLoggedIn);
 
   useEffect(() => {
     const updateAuthState = () => {
@@ -26,6 +21,8 @@ export default function AuthHeroWrapper({ initialIsLoggedIn = false }: AuthHeroW
         document.cookie = "akam_logged_in=true; path=/; max-age=604800; SameSite=Lax";
       } else {
         document.cookie = "akam_logged_in=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; max-age=0";
+        const el = document.getElementById("akam-auth-hero-container");
+        if (el) el.style.display = "";
       }
     };
 
@@ -47,6 +44,8 @@ export default function AuthHeroWrapper({ initialIsLoggedIn = false }: AuthHeroW
           document.cookie = "akam_logged_in=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; max-age=0";
           localStorage.removeItem("akam_user");
           localStorage.removeItem("akam_token");
+          const el = document.getElementById("akam-auth-hero-container");
+          if (el) el.style.display = "";
         }
       } catch (e) {
         // Keep current state if offline
@@ -65,10 +64,22 @@ export default function AuthHeroWrapper({ initialIsLoggedIn = false }: AuthHeroW
   if (isLoggedIn) return null;
 
   return (
-    <>
+    <div id="akam-auth-hero-container" suppressHydrationWarning>
+      <script
+        dangerouslySetInnerHTML={{
+          __html: `
+            try {
+              if (localStorage.getItem("akam_user") || document.cookie.indexOf("akam_logged_in=true") !== -1) {
+                var el = document.getElementById("akam-auth-hero-container");
+                if (el) el.style.display = "none";
+              }
+            } catch (e) {}
+          `,
+        }}
+      />
       <HeroSection />
       <AboutAkam />
-    </>
+    </div>
   );
 }
 
