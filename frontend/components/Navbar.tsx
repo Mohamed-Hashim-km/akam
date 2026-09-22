@@ -142,6 +142,9 @@ export const Navbar: React.FC<NavbarProps> = ({
     if (savedUser) {
       try {
         setUser(JSON.parse(savedUser));
+        if (typeof document !== "undefined" && !document.cookie.includes("akam_logged_in=true")) {
+          document.cookie = "akam_logged_in=true; path=/; max-age=604800; SameSite=Lax";
+        }
       } catch (e) {
         console.error(e);
       }

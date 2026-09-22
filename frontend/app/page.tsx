@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import AuthHeroWrapper from "@/components/AuthHeroWrapper";
 import LatestStories from "@/components/LatestStories";
 import EditorsNote from "@/components/EditorsNote";
@@ -9,8 +10,7 @@ import UpcomingBookReleases from "@/components/UpcomingBookReleases";
 import ReaderReviews from "@/components/ReaderReviews";
 import { API_BASE_URL } from "@/lib/config";
 
-// ISR: revalidate every 60 seconds via fetch-level tags
-export const revalidate = 60;
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Akam Digital — Storytelling, Literature & Cultural Platform",
@@ -172,12 +172,14 @@ async function getHomePageData() {
 }
 
 export default async function Home() {
+  const cookieStore = await cookies();
+  const isLoggedInCookie = cookieStore.get("akam_logged_in")?.value === "true";
   const { stories, categories, events, books, videos, reviews, editorsNote } = await getHomePageData();
 
   return (
     <main className="min-h-screen flex flex-col font-poppins">
       {/* Main Hero & About Akam Section - Only shown for unauthenticated / guest users */}
-      <AuthHeroWrapper />
+      <AuthHeroWrapper initialIsLoggedIn={isLoggedInCookie} />
 
       {/* Latest Stories Section */}
       <LatestStories stories={stories} />
