@@ -582,7 +582,9 @@ function EditorialDashboardContent() {
   const [registrationsList, setRegistrationsList] = useState<any[]>([]);
   const [loadingRegistrations, setLoadingRegistrations] = useState(false);
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
-  const [eventFormType, setEventFormType] = useState<"READING_SESSION" | "DISCUSSION" | "WORKSHOP" | "EXHIBITION" | "FILM_SCREENING" | "PAST_ARCHIVE">("READING_SESSION");
+  const [eventFormType, setEventFormType] = useState<"READING_SESSION" | "DISCUSSION" | "WORKSHOP" | "EXHIBITION" | "FILM_SCREENING" | "OTHER" | "PAST_ARCHIVE">("READING_SESSION");
+  const [eventStartDate, setEventStartDate] = useState("");
+  const [eventEndDate, setEventEndDate] = useState("");
   const [eventFormTitle, setEventFormTitle] = useState("");
   const [eventFormDesc, setEventFormDesc] = useState("");
   const [eventFormLoc, setEventFormLoc] = useState("");
@@ -1376,10 +1378,60 @@ function EditorialDashboardContent() {
     }
   };
 
+  const computeEventDateStrings = (startDateStr: string, endDateStr: string) => {
+    if (!startDateStr) {
+      setEventFormDay("");
+      setEventFormMonthYear("");
+      return;
+    }
+    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const [sy, sm, sd] = startDateStr.split("-").map(Number);
+    const startObj = new Date(sy, sm - 1, sd);
+    if (isNaN(startObj.getTime())) return;
+
+    const sDay = String(startObj.getDate()).padStart(2, "0");
+    const sMonth = monthNames[startObj.getMonth()];
+    const sYear = startObj.getFullYear();
+
+    if (!endDateStr || endDateStr === startDateStr) {
+      setEventFormDay(sDay);
+      setEventFormMonthYear(`${sMonth} ${sYear}`);
+      return;
+    }
+
+    const [ey, em, ed] = endDateStr.split("-").map(Number);
+    const endObj = new Date(ey, em - 1, ed);
+    if (isNaN(endObj.getTime()) || endObj < startObj) {
+      setEventFormDay(sDay);
+      setEventFormMonthYear(`${sMonth} ${sYear}`);
+      return;
+    }
+
+    const eDay = String(endObj.getDate()).padStart(2, "0");
+    const eMonth = monthNames[endObj.getMonth()];
+    const eYear = endObj.getFullYear();
+
+    if (sm === em && sy === ey) {
+      setEventFormDay(`${sDay} – ${eDay}`);
+      setEventFormMonthYear(`${sMonth} ${sYear}`);
+    } else if (sy === ey) {
+      setEventFormDay(`${sDay} ${sMonth} – ${eDay} ${eMonth}`);
+      setEventFormMonthYear(`${sYear}`);
+    } else {
+      setEventFormDay(`${sDay} ${sMonth} ${sYear} – ${eDay} ${eMonth} ${eYear}`);
+      setEventFormMonthYear("");
+    }
+  };
+
   // Event Handlers
   const handleSaveEvent = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!eventFormTitle.trim() || !eventFormDesc.trim()) return;
+
+    if (!eventStartDate && !eventFormDay.trim()) {
+      alert("Start Date is required for the event.");
+      return;
+    }
 
     if (eventFormType === "PAST_ARCHIVE") {
       if (pastArchiveMediaType === "VIDEO") {
@@ -1400,6 +1452,46 @@ function EditorialDashboardContent() {
 
     setSubmittingEvent(true);
     try {
+      let finalDay = eventFormDay.trim();
+      let finalMonthYear = eventFormMonthYear.trim();
+
+      if (eventStartDate) {
+        const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        const [sy, sm, sd] = eventStartDate.split("-").map(Number);
+        const startObj = new Date(sy, sm - 1, sd);
+        if (!isNaN(startObj.getTime())) {
+          const sDay = String(startObj.getDate()).padStart(2, "0");
+          const sMonth = monthNames[startObj.getMonth()];
+          const sYear = startObj.getFullYear();
+
+          if (!eventEndDate || eventEndDate === eventStartDate) {
+            finalDay = sDay;
+            finalMonthYear = `${sMonth} ${sYear}`;
+          } else {
+            const [ey, em, ed] = eventEndDate.split("-").map(Number);
+            const endObj = new Date(ey, em - 1, ed);
+            if (!isNaN(endObj.getTime()) && endObj >= startObj) {
+              const eDay = String(endObj.getDate()).padStart(2, "0");
+              const eMonth = monthNames[endObj.getMonth()];
+              const eYear = endObj.getFullYear();
+              if (sm === em && sy === ey) {
+                finalDay = `${sDay} – ${eDay}`;
+                finalMonthYear = `${sMonth} ${sYear}`;
+              } else if (sy === ey) {
+                finalDay = `${sDay} ${sMonth} – ${eDay} ${eMonth}`;
+                finalMonthYear = `${sYear}`;
+              } else {
+                finalDay = `${sDay} ${sMonth} ${sYear} – ${eDay} ${eMonth} ${eYear}`;
+                finalMonthYear = "";
+              }
+            } else {
+              finalDay = sDay;
+              finalMonthYear = `${sMonth} ${sYear}`;
+            }
+          }
+        }
+      }
+
       const isPastArchiveVideo = eventFormType === "PAST_ARCHIVE" && pastArchiveMediaType === "VIDEO";
       const imagesList = eventFormType === "PAST_ARCHIVE"
         ? (isPastArchiveVideo ? [] : (eventFormImages.length > 0 ? eventFormImages : (eventFormImage.trim() ? [eventFormImage.trim()] : [])))
@@ -1410,8 +1502,9 @@ function EditorialDashboardContent() {
         description: eventFormDesc.trim(),
         location: eventFormLoc.trim(),
         time: eventFormTime.trim() || undefined,
-        day: eventFormDay.trim() || undefined,
-        monthYear: eventFormMonthYear.trim() || undefined,
+        day: finalDay || undefined,
+        monthYear: finalMonthYear || undefined,
+        eventDate: eventStartDate ? new Date(eventStartDate).toISOString() : undefined,
         imageSrc: isPastArchiveVideo
           ? (eventFormImage.trim() || undefined)
           : (eventFormImage.trim() || imagesList[0] || undefined),
@@ -1651,6 +1744,8 @@ function EditorialDashboardContent() {
     setEventFormTime("");
     setEventFormDay("");
     setEventFormMonthYear("");
+    setEventStartDate("");
+    setEventEndDate("");
     setEventFormImage("");
     setEventFormImages([]);
     setEventFormRegisterHref("");
@@ -5056,7 +5151,7 @@ function EditorialDashboardContent() {
                   }}
                   className="text-xs font-semibold cursor-pointer shadow-xs whitespace-nowrap px-4 py-2.5"
                 >
-                  Add Event / Workshop
+                  Add Event
                 </Button>
               </div>
 
@@ -5069,6 +5164,7 @@ function EditorialDashboardContent() {
                   { id: "WORKSHOP", label: "Workshops" },
                   { id: "EXHIBITION", label: "Exhibitions" },
                   { id: "FILM_SCREENING", label: "Film Screenings" },
+                  { id: "OTHER", label: "Other Events" },
                   { id: "PAST_ARCHIVE", label: "Past Archives" },
                 ].map((f) => (
                   <button
@@ -5096,7 +5192,7 @@ function EditorialDashboardContent() {
                   <p className="text-xs text-gray-500 mt-1 max-w-sm mx-auto">
                     {searchQuery
                       ? `No events matched your search query "${searchQuery}". Try a different keyword or clear the search.`
-                      : `No events currently in this category. Click "Add Event / Workshop" to create one.`}
+                      : `No events currently in this category. Click "Add Event" to create one.`}
                   </p>
                   {searchQuery && (
                     <button
@@ -5165,6 +5261,24 @@ function EditorialDashboardContent() {
                                 setEventFormTime(ev.time || "");
                                 setEventFormDay(ev.day || "");
                                 setEventFormMonthYear(ev.monthYear || "");
+                                let sDate = "";
+                                let eDate = "";
+                                if (ev.eventDate) {
+                                  const d = new Date(ev.eventDate);
+                                  if (!isNaN(d.getTime())) {
+                                    sDate = d.toISOString().split("T")[0];
+                                  }
+                                }
+                                if (sDate && ev.day && (ev.day.includes("-") || ev.day.includes("–"))) {
+                                  const parts = ev.day.split(/[-–]/).map((p: string) => p.trim());
+                                  if (parts.length === 2 && !isNaN(Number(parts[1]))) {
+                                    const endDayNum = Number(parts[1]);
+                                    const [sy, sm] = sDate.split("-");
+                                    eDate = `${sy}-${sm}-${String(endDayNum).padStart(2, "0")}`;
+                                  }
+                                }
+                                setEventStartDate(sDate);
+                                setEventEndDate(eDate);
                                 setEventFormImage(ev.imageSrc || "");
                                 setEventFormImages(Array.isArray(ev.images) && ev.images.length > 0 ? ev.images : (ev.imageSrc ? [ev.imageSrc] : []));
                                 setEventFormRegisterHref(ev.registerHref || "");
@@ -6770,7 +6884,7 @@ function EditorialDashboardContent() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs animate-in fade-in font-poppins">
           <div className="relative w-full max-w-lg bg-white rounded-[28px] p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-gray-100 mb-4">
-              <h3 className="text-xl font-bold text-gray-950">{editingEventId ? "Edit Event / Workshop" : "Add Event / Workshop"}</h3>
+              <h3 className="text-xl font-bold text-gray-950">{editingEventId ? "Edit Event" : "Add Event"}</h3>
               <button
                 onClick={() => {
                   setShowAddEventModal(false);
@@ -6795,6 +6909,7 @@ function EditorialDashboardContent() {
                     { id: "WORKSHOP", label: "Workshop" },
                     { id: "EXHIBITION", label: "Exhibition" },
                     { id: "FILM_SCREENING", label: "Film Screening" },
+                    { id: "OTHER", label: "Other Event" },
                     { id: "PAST_ARCHIVE", label: "Past Archive" },
                   ].map((t) => (
                     <button
@@ -6858,51 +6973,55 @@ function EditorialDashboardContent() {
                 />
               </div>
 
-              {/* Single Selectable Date & Time Input Box */}
-              <div>
-                <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider">
-                  Event Date & Time <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="datetime-local"
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    if (!val) return;
-                    const [datePart, timePart] = val.split("T");
-                    if (datePart) {
-                      const [y, m, d] = datePart.split("-");
-                      const dateObj = new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
-                      if (!isNaN(dateObj.getTime())) {
-                        const dayStr = String(dateObj.getDate()).padStart(2, "0");
-                        const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-                        const monthYearStr = `${monthNames[dateObj.getMonth()]} ${dateObj.getFullYear()}`;
-                        setEventFormDay(dayStr);
-                        setEventFormMonthYear(monthYearStr);
-                      }
-                    }
-                    if (timePart) {
-                      const [h, min] = timePart.split(":");
-                      let hour = parseInt(h, 10);
-                      const ampm = hour >= 12 ? "PM" : "AM";
-                      hour = hour % 12 || 12;
-                      const formattedHour = String(hour).padStart(2, "0");
-                      setEventFormTime(`${formattedHour}:${min} ${ampm}`);
-                    }
-                  }}
-                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-900 outline-none focus:border-black shadow-xs cursor-pointer"
-                />
-
-                {/* Selected Schedule Display Pill */}
-                {(eventFormDay || eventFormMonthYear || eventFormTime) && (
-                  <div className="mt-2 text-xs text-gray-700 font-medium bg-gray-100/80 px-3.5 py-2 rounded-xl flex items-center gap-2 border border-gray-200/60">
-                    <span className="font-bold text-gray-900">Selected Schedule:</span>
-                    <span>
-                      {eventFormDay ? `${eventFormDay} ` : ""}
-                      {eventFormMonthYear ? `${eventFormMonthYear}` : ""}
-                      {eventFormTime ? ` @ ${eventFormTime}` : ""}
-                    </span>
+              {/* Event Dates & Time */}
+              <div className="space-y-3 bg-gray-50/80 p-3.5 rounded-2xl border border-gray-200/80">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider">
+                      Start Date <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={eventStartDate}
+                      onChange={(e) => {
+                        const sVal = e.target.value;
+                        setEventStartDate(sVal);
+                        computeEventDateStrings(sVal, eventEndDate);
+                      }}
+                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-900 outline-none focus:border-black shadow-xs cursor-pointer"
+                    />
                   </div>
-                )}
+                  <div>
+                    <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider">
+                      End Date <span className="text-gray-400 font-normal lowercase tracking-normal">(optional for multi-day)</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={eventEndDate}
+                      min={eventStartDate || undefined}
+                      onChange={(e) => {
+                        const eVal = e.target.value;
+                        setEventEndDate(eVal);
+                        computeEventDateStrings(eventStartDate, eVal);
+                      }}
+                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-900 outline-none focus:border-black shadow-xs cursor-pointer"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider">
+                    Time / Timing <span className="text-gray-400 font-normal lowercase tracking-normal">(optional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={eventFormTime}
+                    onChange={(e) => setEventFormTime(e.target.value)}
+                    placeholder="e.g. 04:00 PM or 10:00 AM – 05:00 PM daily"
+                    className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-medium text-gray-900 outline-none focus:border-black shadow-xs"
+                  />
+                </div>
               </div>
 
               {/* Cover & Gallery Images / Video Option */}

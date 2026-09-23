@@ -95,27 +95,43 @@ export default function EventRegisterModal({
         </div>
 
         {/* Event Meta Brief */}
-        <div className="bg-gray-50/80 rounded-2xl p-4 mb-6 border border-gray-200/70 text-xs text-gray-700 grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0">
-              <MapPin className="w-3.5 h-3.5" />
+        <div className="bg-gray-50/80 rounded-2xl p-4 mb-6 border border-gray-200/70 text-xs text-gray-700 grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+          {/* Location */}
+          <div className="flex items-start gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0 mt-0.5">
+              <MapPin className="w-4 h-4" />
             </div>
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <span className="text-[10px] text-gray-400 uppercase tracking-wider block font-bold">Location</span>
-              <span className="font-semibold text-gray-900 break-words block">{event.location}</span>
+              <span className="font-semibold text-gray-900 break-words block text-xs leading-snug">{event.location}</span>
             </div>
           </div>
 
-          {(event.day || event.time) && (
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-sky-100 text-sky-800 flex items-center justify-center shrink-0">
-                {event.time ? <Clock className="w-3.5 h-3.5" /> : <Calendar className="w-3.5 h-3.5" />}
+          {/* Date */}
+          {(event.day || event.monthYear) && (
+            <div className="flex items-start gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-indigo-100 text-indigo-800 flex items-center justify-center shrink-0 mt-0.5">
+                <Calendar className="w-4 h-4" />
               </div>
-              <div className="truncate">
-                <span className="text-[10px] text-gray-400 uppercase tracking-wider block font-bold">Schedule</span>
-                <span className="font-semibold text-gray-900 truncate block">
-                  {event.day && event.monthYear ? `${event.day} ${event.monthYear}` : ""}
-                  {event.time ? (event.day ? ` @ ${event.time}` : event.time) : ""}
+              <div className="min-w-0 flex-1">
+                <span className="text-[10px] text-gray-400 uppercase tracking-wider block font-bold">Date</span>
+                <span className="font-semibold text-gray-900 break-words block text-xs leading-snug">
+                  {event.day ? `${event.day} ` : ""}{event.monthYear || ""}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Time (Dedicated Block) */}
+          {event.time && (
+            <div className="flex items-start gap-2.5 sm:col-span-2 pt-2.5 border-t border-gray-200/60">
+              <div className="w-8 h-8 rounded-xl bg-sky-100 text-sky-800 flex items-center justify-center shrink-0 mt-0.5">
+                <Clock className="w-4 h-4" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <span className="text-[10px] text-sky-600 uppercase tracking-wider block font-bold">Time</span>
+                <span className="font-bold text-gray-950 break-words block text-xs sm:text-sm leading-snug">
+                  {event.time}
                 </span>
               </div>
             </div>

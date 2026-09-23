@@ -247,10 +247,10 @@ export class SettingsService {
   async submitStudentApplication(dto: {
     fullName: string;
     institution: string;
-    studentIdNumber: string;
-    course: string;
+    studentIdNumber?: string;
+    course?: string;
     email: string;
-    idCardUrl: string;
+    idCardUrl?: string;
     idCardName?: string;
     referenceId?: string;
   }): Promise<StudentApplicationRecord> {
@@ -264,11 +264,11 @@ export class SettingsService {
       referenceId: refId,
       fullName: dto.fullName,
       institution: dto.institution,
-      studentIdNumber: dto.studentIdNumber,
-      course: dto.course,
+      studentIdNumber: dto.studentIdNumber || 'STUDENT_PASS',
+      course: dto.course || 'Student Pass',
       email: dto.email,
-      idCardUrl: dto.idCardUrl,
-      idCardName: dto.idCardName || 'Student_ID.jpg',
+      idCardUrl: dto.idCardUrl || '',
+      idCardName: dto.idCardName || '',
       submittedAt: new Date().toISOString(),
       status: 'PENDING_APPROVAL',
     };
@@ -335,8 +335,8 @@ export class SettingsService {
       referenceId: refId,
       fullName: dto.fullName.trim(),
       institution: dto.institution.trim(),
-      studentIdNumber: dto.studentIdNumber.trim(),
-      course: dto.course.trim(),
+      studentIdNumber: dto.studentIdNumber?.trim() || 'STUDENT_PASS',
+      course: dto.course?.trim() || 'Student Pass',
       email: dto.email.trim(),
       idCardUrl: dto.idCardUrl || '/images/home/aboutDigital.png',
       idCardName: dto.idCardName || 'Direct_Editorial_Grant.png',
