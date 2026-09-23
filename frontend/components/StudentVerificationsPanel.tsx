@@ -27,9 +27,11 @@ import {
   Loader2,
   UploadCloud,
   Image as ImageIcon,
+  CreditCard,
+  Camera,
 } from "lucide-react";
 import Button from "@/components/ui/Button";
-import { API_BASE_URL, apiFetch } from "@/lib/config";
+import { API_BASE_URL, apiFetch, formatAssetUrl } from "@/lib/config";
 import { useRouter, useSearchParams } from "next/navigation";
 
 export interface StudentApplication {
@@ -37,10 +39,10 @@ export interface StudentApplication {
   referenceId: string;
   fullName: string;
   institution: string;
-  studentIdNumber: string;
-  course: string;
+  studentIdNumber?: string;
+  course?: string;
   email: string;
-  idCardUrl: string;
+  idCardUrl?: string;
   idCardName?: string;
   submittedAt: string;
   status: "PENDING_APPROVAL" | "APPROVED" | "REJECTED";
@@ -126,14 +128,14 @@ export const StudentVerificationsPanel: React.FC<StudentVerificationsPanelProps>
   const [showManualModal, setShowManualModal] = useState(false);
   const [manualName, setManualName] = useState("");
   const [manualCollege, setManualCollege] = useState("");
-  const [manualRoll, setManualRoll] = useState("");
-  const [manualCourse, setManualCourse] = useState("");
   const [manualEmail, setManualEmail] = useState("");
   const [manualIdCardFile, setManualIdCardFile] = useState<File | null>(null);
   const [manualIdCardPreview, setManualIdCardPreview] = useState<string>("");
   const [manualIdCardName, setManualIdCardName] = useState<string>("");
+  const [manualIsDragOver, setManualIsDragOver] = useState(false);
   const [manualSubmitting, setManualSubmitting] = useState(false);
   const manualFileInputRef = useRef<HTMLInputElement | null>(null);
+  const manualCameraInputRef = useRef<HTMLInputElement | null>(null);
 
   const handleManualFileChange = (file: File) => {
     if (!file) return;
@@ -149,6 +151,14 @@ export const StudentVerificationsPanel: React.FC<StudentVerificationsPanelProps>
       setManualIdCardPreview(e.target?.result as string);
     };
     reader.readAsDataURL(file);
+  };
+
+  const handleManualDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setManualIsDragOver(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      handleManualFileChange(e.dataTransfer.files[0]);
+    }
   };
 
   const showToast = (msg: string) => {
@@ -412,8 +422,8 @@ export const StudentVerificationsPanel: React.FC<StudentVerificationsPanelProps>
     }
 
     setManualSubmitting(true);
-    let finalIdCardUrl = manualIdCardPreview || "/images/home/aboutDigital.png";
-    let finalIdCardName = manualIdCardName || "Direct_Editorial_Grant.png";
+    let finalIdCardUrl = manualIdCardPreview || "";
+    let finalIdCardName = manualIdCardName || "";
 
     if (manualIdCardFile) {
       try {
@@ -427,10 +437,8 @@ export const StudentVerificationsPanel: React.FC<StudentVerificationsPanelProps>
 
         if (uploadRes.ok) {
           const json = await uploadRes.json();
-          if (json?.url) {
-            finalIdCardUrl = json.url.startsWith("http")
-              ? json.url
-              : `${API_BASE_URL.replace(/\/api$/, "")}${json.url.startsWith("/") ? "" : "/"}${json.url}`;
+          if (json?.url || json?.path) {
+            finalIdCardUrl = json.url || json.path;
           }
         }
       } catch (err) {
@@ -444,8 +452,8 @@ export const StudentVerificationsPanel: React.FC<StudentVerificationsPanelProps>
       referenceId: refId,
       fullName: manualName.trim(),
       institution: manualCollege.trim(),
-      studentIdNumber: manualRoll.trim() || "MANUAL-VERIFIED",
-      course: manualCourse.trim() || "Degree Student",
+      studentIdNumber: "STUDENT_PASS",
+      course: "Student Pass",
       email: manualEmail.trim(),
       idCardUrl: finalIdCardUrl,
       idCardName: finalIdCardName,
@@ -508,8 +516,6 @@ export const StudentVerificationsPanel: React.FC<StudentVerificationsPanelProps>
 
     setManualName("");
     setManualCollege("");
-    setManualRoll("");
-    setManualCourse("");
     setManualEmail("");
     setManualIdCardFile(null);
     setManualIdCardPreview("");
@@ -789,25 +795,44 @@ export const StudentVerificationsPanel: React.FC<StudentVerificationsPanelProps>
                 }`}
               >
                 {/* Student Info & Details */}
-                <div className="flex items-start gap-4 flex-1 min-w-0">
+                <div className="flex items-start gap-4 sm:gap-5 flex-1 min-w-0">
                   {/* ID Card Thumbnail */}
                   <div
                     onClick={() => {
-                      setImageRotation(0);
-                      setSelectedAppForPreview(app);
+                      if (app.idCardUrl) {
+                        setImageRotation(0);
+                        setSelectedAppForPreview(app);
+                      }
                     }}
-                    className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-2xl overflow-hidden bg-gray-100 border border-gray-200/80 shrink-0 cursor-pointer group/thumb shadow-2xs"
-                    title="Click to zoom & inspect ID card"
+                    className={`relative w-28 h-20 sm:w-32 sm:h-22 rounded-2xl overflow-hidden bg-slate-100 border border-gray-200/90 shrink-0 transition-all flex items-center justify-center ${
+                      app.idCardUrl
+                        ? "cursor-pointer group/thumb hover:border-[#040706] hover:shadow-md"
+                        : "cursor-default"
+                    }`}
+                    title={app.idCardUrl ? "Click to inspect Student ID Card" : "No ID Card uploaded"}
                   >
-                    <img
-                      src={app.idCardUrl}
-                      alt={app.fullName}
-                      className="w-full h-full object-cover group-hover/thumb:scale-105 transition-transform duration-300"
-                    />
-                    <div className="absolute inset-0 bg-black/60 backdrop-blur-2xs opacity-0 group-hover/thumb:opacity-100 transition-opacity flex flex-col items-center justify-center text-white text-[10px] font-bold gap-1">
-                      <Eye className="w-4 h-4" />
-                      <span>Inspect</span>
-                    </div>
+                    {app.idCardUrl ? (
+                      <>
+                        <img
+                          src={formatAssetUrl(app.idCardUrl)}
+                          alt={app.fullName}
+                          className="w-full h-full object-cover group-hover/thumb:scale-105 transition-transform duration-300"
+                        />
+                        <div className="absolute top-1.5 left-1.5 bg-black/60 backdrop-blur-xs text-white text-[9px] font-semibold px-2 py-0.5 rounded-md flex items-center gap-1">
+                          <CreditCard className="w-2.5 h-2.5 text-[#E4F953]" />
+                          <span>ID Card</span>
+                        </div>
+                        <div className="absolute inset-0 bg-black/60 backdrop-blur-2xs opacity-0 group-hover/thumb:opacity-100 transition-opacity flex flex-col items-center justify-center text-white text-[10px] font-bold gap-1">
+                          <Eye className="w-4 h-4 text-[#E4F953]" />
+                          <span>Inspect</span>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center p-2 text-center text-gray-400">
+                        <CreditCard className="w-5 h-5 mb-1 text-gray-300" />
+                        <span className="text-[9px] font-medium text-gray-400">No ID Card</span>
+                      </div>
+                    )}
                   </div>
 
                   {/* Text Details */}
@@ -847,25 +872,16 @@ export const StudentVerificationsPanel: React.FC<StudentVerificationsPanelProps>
                       <span className="truncate">{app.institution}</span>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500 pt-0.5">
-                      <span>
-                        <strong className="font-medium text-gray-700">Course:</strong> {app.course}
-                      </span>
-                      <span>
-                        <strong className="font-medium text-gray-700">Roll/Reg:</strong>{" "}
-                        <span className="font-mono text-gray-900 font-bold">{app.studentIdNumber}</span>
-                      </span>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-gray-400 pt-0.5">
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-gray-500 pt-0.5">
                       <a
                         href={`mailto:${app.email}`}
-                        className="text-gray-600 hover:text-emerald-800 flex items-center gap-1 hover:underline font-medium"
+                        className="text-gray-700 hover:text-emerald-800 flex items-center gap-1.5 hover:underline font-medium"
                       >
-                        <Mail className="w-3 h-3 text-gray-400" />
+                        <Mail className="w-3.5 h-3.5 text-gray-400" />
                         <span>{app.email}</span>
                       </a>
-                      <span>
+                      <span className="text-gray-300">•</span>
+                      <span className="text-gray-400">
                         Submitted: {new Date(app.submittedAt).toLocaleDateString()} at{" "}
                         {new Date(app.submittedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                       </span>
@@ -889,15 +905,22 @@ export const StudentVerificationsPanel: React.FC<StudentVerificationsPanelProps>
                     {/* Inspect ID button */}
                     <button
                       type="button"
+                      disabled={!app.idCardUrl}
                       onClick={() => {
-                        setImageRotation(0);
-                        setSelectedAppForPreview(app);
+                        if (app.idCardUrl) {
+                          setImageRotation(0);
+                          setSelectedAppForPreview(app);
+                        }
                       }}
-                      className="inline-flex items-center justify-center gap-1.5 py-2 px-3 bg-white hover:bg-gray-100 border border-gray-300 text-gray-900 text-xs font-semibold rounded-xl transition-all cursor-pointer shadow-2xs active:scale-95"
-                      title="View student ID card"
+                      className={`inline-flex items-center justify-center gap-1.5 py-2 px-3 text-xs font-semibold rounded-xl transition-all shadow-2xs ${
+                        app.idCardUrl
+                          ? "bg-white hover:bg-gray-100 border border-gray-300 text-gray-900 cursor-pointer active:scale-95"
+                          : "bg-gray-100 border border-gray-200 text-gray-400 cursor-not-allowed opacity-60"
+                      }`}
+                      title={app.idCardUrl ? "View uploaded student ID card" : "No ID card uploaded"}
                     >
                       <Eye className="w-3.5 h-3.5 text-gray-600 shrink-0" />
-                      <span>View ID</span>
+                      <span>View ID Card</span>
                     </button>
 
                     {/* Pending Actions */}
@@ -1029,7 +1052,7 @@ export const StudentVerificationsPanel: React.FC<StudentVerificationsPanelProps>
                     Student ID Inspection: {selectedAppForPreview.fullName}
                   </h3>
                   <p className="text-[11px] text-gray-300">
-                    {selectedAppForPreview.institution} • Roll: {selectedAppForPreview.studentIdNumber}
+                    {selectedAppForPreview.institution} • {selectedAppForPreview.email}
                   </p>
                 </div>
               </div>
@@ -1045,16 +1068,18 @@ export const StudentVerificationsPanel: React.FC<StudentVerificationsPanelProps>
                   <span className="text-[11px] hidden sm:inline">Rotate</span>
                 </button>
 
-                <a
-                  href={selectedAppForPreview.idCardUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="p-2 text-gray-300 hover:text-white rounded-xl bg-white/10 hover:bg-white/20 transition cursor-pointer flex items-center gap-1 text-xs"
-                  title="Open original in new tab"
-                >
-                  <ExternalLink className="w-4 h-4" />
-                  <span className="text-[11px] hidden sm:inline">Original</span>
-                </a>
+                {selectedAppForPreview.idCardUrl && (
+                  <a
+                    href={formatAssetUrl(selectedAppForPreview.idCardUrl)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="p-2 text-gray-300 hover:text-white rounded-xl bg-white/10 hover:bg-white/20 transition cursor-pointer flex items-center gap-1 text-xs"
+                    title="Open original in new tab"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                    <span className="text-[11px] hidden sm:inline">Original</span>
+                  </a>
+                )}
 
                 <button
                   type="button"
@@ -1067,17 +1092,25 @@ export const StudentVerificationsPanel: React.FC<StudentVerificationsPanelProps>
             </div>
 
             {/* Image Canvas Container */}
-            <div className="flex-1 bg-slate-950 p-4 sm:p-8 flex items-center justify-center overflow-auto">
-              <div
-                className="transition-transform duration-300 max-h-[60vh] flex items-center justify-center"
-                style={{ transform: `rotate(${imageRotation}deg)` }}
-              >
-                <img
-                  src={selectedAppForPreview.idCardUrl}
-                  alt={selectedAppForPreview.fullName}
-                  className="max-h-[58vh] max-w-full rounded-xl object-contain shadow-2xl border border-white/20"
-                />
-              </div>
+            <div className="flex-1 bg-slate-950 p-4 sm:p-8 flex items-center justify-center overflow-auto min-h-[350px]">
+              {selectedAppForPreview.idCardUrl ? (
+                <div
+                  className="transition-transform duration-300 max-h-[60vh] flex items-center justify-center"
+                  style={{ transform: `rotate(${imageRotation}deg)` }}
+                >
+                  <img
+                    src={formatAssetUrl(selectedAppForPreview.idCardUrl)}
+                    alt={selectedAppForPreview.fullName}
+                    className="max-h-[58vh] max-w-full rounded-xl object-contain shadow-2xl border border-white/20"
+                  />
+                </div>
+              ) : (
+                <div className="text-center p-8 text-gray-400">
+                  <CreditCard className="w-12 h-12 mx-auto mb-3 text-gray-600" />
+                  <p className="text-sm font-semibold text-gray-300">No Student ID Card Uploaded</p>
+                  <p className="text-xs text-gray-500 mt-1">This record was submitted or granted without an attached ID card image.</p>
+                </div>
+              )}
             </div>
 
             {/* Bottom Decision Footer */}
@@ -1331,29 +1364,6 @@ export const StudentVerificationsPanel: React.FC<StudentVerificationsPanelProps>
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">Course & Year</label>
-                  <input
-                    type="text"
-                    value={manualCourse}
-                    onChange={(e) => setManualCourse(e.target.value)}
-                    placeholder="e.g. BA Malayalam, 2nd Yr"
-                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-2xl text-xs text-gray-900 focus:bg-white focus:outline-none focus:border-black shadow-xs transition"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">Roll / ID Number</label>
-                  <input
-                    type="text"
-                    value={manualRoll}
-                    onChange={(e) => setManualRoll(e.target.value)}
-                    placeholder="e.g. 2024MAL102"
-                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-2xl text-xs font-mono text-gray-900 focus:bg-white focus:outline-none focus:border-black shadow-xs transition"
-                  />
-                </div>
-              </div>
-
               <div>
                 <label className="block text-xs font-bold text-gray-700 mb-1">
                   Student Email Address <span className="text-red-500">*</span>
@@ -1370,7 +1380,7 @@ export const StudentVerificationsPanel: React.FC<StudentVerificationsPanelProps>
 
               {/* Student ID Card Document / Photo Upload */}
               <div>
-                <div className="flex items-center justify-between mb-1">
+                <div className="flex items-center justify-between mb-1.5">
                   <label className="block text-xs font-bold text-gray-700">
                     Student ID Card Document / Photo
                   </label>
@@ -1379,10 +1389,23 @@ export const StudentVerificationsPanel: React.FC<StudentVerificationsPanelProps>
                   </span>
                 </div>
 
+                {/* Hidden File and Camera Inputs */}
+                <input
+                  type="file"
+                  ref={manualCameraInputRef}
+                  accept="image/*"
+                  capture="environment"
+                  className="hidden"
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files[0]) {
+                      handleManualFileChange(e.target.files[0]);
+                    }
+                  }}
+                />
                 <input
                   type="file"
                   ref={manualFileInputRef}
-                  accept="image/png,image/jpeg,image/webp,image/jpg"
+                  accept="image/png,image/jpeg,image/webp,image/jpg,image/*"
                   className="hidden"
                   onChange={(e) => {
                     if (e.target.files && e.target.files[0]) {
@@ -1392,24 +1415,48 @@ export const StudentVerificationsPanel: React.FC<StudentVerificationsPanelProps>
                 />
 
                 {!manualIdCardPreview ? (
-                  <div
-                    onClick={() => manualFileInputRef.current?.click()}
-                    className="border-2 border-dashed border-gray-200 hover:border-gray-400 bg-gray-50/70 hover:bg-gray-50 rounded-2xl p-4 text-center cursor-pointer transition flex flex-col items-center justify-center gap-2 group"
-                  >
-                    <div className="w-10 h-10 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-gray-500 group-hover:text-emerald-600 group-hover:border-emerald-200 shadow-2xs transition">
-                      <UploadCloud className="w-5 h-5" />
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => manualCameraInputRef.current?.click()}
+                        className="py-2.5 px-3 rounded-xl bg-gray-900 hover:bg-black text-white text-xs font-semibold shadow-2xs transition flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+                      >
+                        <Camera className="w-4 h-4 text-[#E4F953]" />
+                        <span>Take Photo</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => manualFileInputRef.current?.click()}
+                        className="py-2.5 px-3 rounded-xl border border-gray-300 bg-white hover:bg-gray-50 text-gray-800 text-xs font-semibold shadow-2xs transition flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+                      >
+                        <UploadCloud className="w-4 h-4 text-gray-600" />
+                        <span>Upload Photo</span>
+                      </button>
                     </div>
-                    <div>
-                      <p className="text-xs font-semibold text-gray-800">
-                        Attach student identity card photo
-                      </p>
-                      <p className="text-[10px] text-gray-400 mt-0.5">
-                        PNG, JPG, or WEBP up to 10MB
-                      </p>
+
+                    <div
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        setManualIsDragOver(true);
+                      }}
+                      onDragLeave={() => setManualIsDragOver(false)}
+                      onDrop={handleManualDrop}
+                      onClick={() => manualFileInputRef.current?.click()}
+                      className={`border-2 border-dashed rounded-xl p-3 text-center cursor-pointer transition flex items-center justify-center gap-2 ${
+                        manualIsDragOver
+                          ? "border-black bg-gray-100"
+                          : "border-gray-200 hover:border-gray-400 bg-gray-50/70 hover:bg-gray-50"
+                      }`}
+                    >
+                      <UploadCloud className="w-4 h-4 text-gray-400" />
+                      <span className="text-[11px] text-gray-500">
+                        Or drag & drop student ID card photo (PNG, JPG, WebP up to 10MB)
+                      </span>
                     </div>
                   </div>
                 ) : (
-                  <div className="relative border border-gray-200 rounded-2xl p-3 bg-gray-50 flex items-center justify-between gap-3">
+                  <div className="relative border border-emerald-200 rounded-2xl p-3 bg-emerald-50/40 flex items-center justify-between gap-3">
                     <div className="flex items-center gap-3 min-w-0">
                       <div className="w-12 h-12 rounded-xl bg-gray-200 overflow-hidden shrink-0 border border-gray-200">
                         <img

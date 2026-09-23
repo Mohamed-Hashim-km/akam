@@ -12,25 +12,25 @@ export class CreateStudentApplicationDto {
   @IsString()
   institution: string;
 
-  @ApiProperty()
-  @IsNotEmpty()
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
-  studentIdNumber: string;
+  studentIdNumber?: string;
 
-  @ApiProperty()
-  @IsNotEmpty()
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
-  course: string;
+  course?: string;
 
   @ApiProperty()
   @IsNotEmpty()
   @IsString()
   email: string;
 
-  @ApiProperty()
-  @IsNotEmpty()
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
-  idCardUrl: string;
+  idCardUrl?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -84,15 +84,15 @@ export class GrantStudentPassDto {
   @IsString()
   institution: string;
 
-  @ApiProperty()
-  @IsNotEmpty()
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
-  studentIdNumber: string;
+  studentIdNumber?: string;
 
-  @ApiProperty()
-  @IsNotEmpty()
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
-  course: string;
+  course?: string;
 
   @ApiProperty()
   @IsNotEmpty()

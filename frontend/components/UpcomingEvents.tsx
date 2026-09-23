@@ -49,6 +49,16 @@ function getImageUrl(url: string | null | undefined): string {
 const isUpcomingDate = (day?: string | null, monthYear?: string | null) => {
   if (!day || !monthYear) return true;
   try {
+    const parts = day.split(/[-–—]|to/i).map((s) => s.trim());
+    const lastPart = parts[parts.length - 1];
+    const match = lastPart.match(/\d+/);
+    if (match) {
+      const dateObj = new Date(`${match[0]} ${monthYear}`);
+      if (!isNaN(dateObj.getTime())) {
+        dateObj.setHours(23, 59, 59, 999);
+        return dateObj >= new Date();
+      }
+    }
     const dateStr = `${day} ${monthYear}`;
     const dateObj = new Date(dateStr);
     if (!isNaN(dateObj.getTime())) {

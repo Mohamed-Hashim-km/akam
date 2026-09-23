@@ -44,6 +44,16 @@ export const metadata: Metadata = {
 const isUpcomingDate = (day?: string | null, monthYear?: string | null) => {
   if (!day || !monthYear) return true;
   try {
+    const parts = day.split(/[-–—]|to/i).map((s) => s.trim());
+    const lastPart = parts[parts.length - 1];
+    const match = lastPart.match(/\d+/);
+    if (match) {
+      const dateObj = new Date(`${match[0]} ${monthYear}`);
+      if (!isNaN(dateObj.getTime())) {
+        dateObj.setHours(23, 59, 59, 999);
+        return dateObj >= new Date();
+      }
+    }
     const dateStr = `${day} ${monthYear}`;
     const dateObj = new Date(dateStr);
     if (!isNaN(dateObj.getTime())) {
@@ -120,7 +130,7 @@ async function getHomePageData() {
       fetch(`${API_BASE_URL}/stories?status=APPROVED&featured=true&limit=10`, FETCH_OPTS(["stories"])),
       fetch(`${API_BASE_URL}/stories?status=APPROVED&limit=10`,              FETCH_OPTS(["stories"])),
       fetch(`${API_BASE_URL}/communities`,                                    FETCH_OPTS(["categories"])),
-      fetch(`${API_BASE_URL}/events`,                                         FETCH_OPTS(["events"])),
+      fetch(`${API_BASE_URL}/events?page=1&limit=8&upcoming=true`,           FETCH_OPTS(["events"])),
       fetch(`${API_BASE_URL}/books`,                                          FETCH_OPTS(["books"])),
       fetch(`${API_BASE_URL}/media?featured=true&limit=4`,                   FETCH_OPTS(["media"])),
       fetch(`${API_BASE_URL}/reviews`,                                        FETCH_OPTS(["reviews"])),
@@ -148,14 +158,24 @@ async function getHomePageData() {
     }));
 
     const categories  = await safeJson(categoriesRes,  pickArray, []);
-    const rawEvents   = await safeJson(eventsRes,       pickArray, []);
+    const rawEvents   = await safeJson(eventsRes,       (j) => j?.data ?? (Array.isArray(j) ? j : []), []);
     const books       = await safeJson(booksRes,        pickArray, []);
     const videos      = await safeJson(videosRes,       (j) => j?.data ?? (Array.isArray(j) ? j : []), []);
     const reviews     = await safeJson(reviewsRes,      pickArray, []);
 
-    const events = rawEvents.filter((e: any) =>
-      e.type !== "PAST_ARCHIVE" && isUpcomingDate(e.day, e.monthYear)
-    );
+    const events = rawEvents.map((e: any) => ({
+      id: e.id,
+      title: e.title,
+      description: e.description,
+      location: e.location,
+      time: e.time || "",
+      day: e.day || "",
+      monthYear: e.monthYear || "",
+      imageSrc: e.imageSrc || (Array.isArray(e.images) && e.images[0]) || "",
+      image: e.imageSrc || (Array.isArray(e.images) && e.images[0]) || "",
+      registerHref: e.registerHref || undefined,
+      type: e.type,
+    }));
 
     const editorsNoteRaw = await safeJson(
       editorsNoteRes,
@@ -191,8 +211,8 @@ export default async function Home() {
       {/* Explore By Interest Section */}
       <ExploreByInterest categories={categories} />
 
-      {/* Upcoming Events Section - fetches live from API (no ISR cache) */}
-      <UpcomingEvents />
+      {/* Upcoming Events Section - Server-side fetched (top 8 upcoming events) */}
+      <UpcomingEvents events={events} />
 
       {/* Featured Video Section - fetches live from API (no ISR cache) */}
       <FeaturedVideo />

@@ -42,6 +42,11 @@ export class CreateEventDto {
   @IsString()
   monthYear?: string;
 
+  @ApiPropertyOptional({ example: '2026-10-21T14:00:00.000Z' })
+  @IsOptional()
+  @IsString()
+  eventDate?: string;
+
   @ApiPropertyOptional({ example: '/images/workshops/writing-masterclass.jpg' })
   @IsOptional()
   @IsString()
