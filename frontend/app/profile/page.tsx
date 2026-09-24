@@ -4,9 +4,10 @@ import React, { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { User, Edit2, Upload, BookOpen, Clock, FileCheck, Shield, ChevronRight, LogOut, Send, FileText, CheckCircle2, Filter, Trash2, X, Eye, XCircle, Palette, Video, Play } from "lucide-react";
+import { User, Edit2, Upload, BookOpen, Clock, FileCheck, Shield, ChevronRight, LogOut, Send, FileText, CheckCircle2, Filter, Trash2, X, Eye, XCircle, Palette, Video, Play, GraduationCap, AlertCircle } from "lucide-react";
 import Button from "@/components/ui/Button";
 import { API_BASE_URL, apiFetch, formatAssetUrl } from "@/lib/config";
+import type { StudentApplicationData } from "@/components/StudentVerificationModal";
 
 interface UserProfile {
   id: string;
@@ -15,6 +16,9 @@ interface UserProfile {
   bio: string | null;
   avatarUrl: string | null;
   role: string;
+  subscriptionStatus?: string | null;
+  subscriptionEndDate?: string | null;
+  isStudent?: boolean;
 }
 
 interface AuthorStory {
@@ -48,6 +52,9 @@ export default function ProfilePage() {
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [storyToDelete, setStoryToDelete] = useState<AuthorStory | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  // Student Pass Application State (read-only status display)
+  const [studentApp, setStudentApp] = useState<StudentApplicationData | null>(null);
 
   // E-Magazine Preview Modal
   const [previewStory, setPreviewStory] = useState<AuthorStory | null>(null);
@@ -199,6 +206,35 @@ export default function ProfilePage() {
     };
   }, [storyToDelete, previewStory]);
 
+  const fetchStudentStatus = async (userEmail?: string) => {
+    const emailToLookup = userEmail || profile?.email;
+    if (!emailToLookup) return;
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/student-verifications/status/${encodeURIComponent(emailToLookup)}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.status && data.status !== "NONE") {
+          setStudentApp(data);
+          localStorage.setItem("akam_student_application", JSON.stringify(data));
+          return;
+        }
+      }
+      const local = typeof window !== "undefined" ? localStorage.getItem("akam_student_application") : null;
+      if (local) {
+        try {
+          const parsed = JSON.parse(local);
+          if (parsed && (!parsed.email || parsed.email.toLowerCase() === emailToLookup.toLowerCase())) {
+            setStudentApp(parsed);
+            return;
+          }
+        } catch {}
+      }
+      setStudentApp(null);
+    } catch (err) {
+      console.error("Error fetching student verification status:", err);
+    }
+  };
+
   const fetchData = async () => {
     const savedUser = typeof window !== "undefined" ? localStorage.getItem("akam_user") : null;
     if (!savedUser) {
@@ -208,18 +244,25 @@ export default function ProfilePage() {
 
     try {
       // 1. Profile
+      let userEmail = "";
       const pRes = await apiFetch(`${API_BASE_URL}/users/me`);
       if (pRes.ok) {
         const pData = await pRes.json();
         setProfile(pData);
         setName(pData.name || "");
         setBio(pData.bio || "");
+        userEmail = pData.email || "";
       }
 
       // 2. Author stories
       const sRes = await apiFetch(`${API_BASE_URL}/stories/my/stories`);
       if (sRes.ok) {
         setStories(await sRes.json());
+      }
+
+      // 3. Student verification status
+      if (userEmail) {
+        fetchStudentStatus(userEmail);
       }
     } catch (err) {
       console.error(err);
@@ -230,6 +273,11 @@ export default function ProfilePage() {
 
   useEffect(() => {
     fetchData();
+    const handleSync = () => {
+      fetchData();
+    };
+    window.addEventListener("akam_user_updated", handleSync);
+    return () => window.removeEventListener("akam_user_updated", handleSync);
   }, []);
 
   const handleUpdateProfile = async (e: React.FormEvent) => {
@@ -358,7 +406,9 @@ export default function ProfilePage() {
         <h2 className="text-2xl font-bold text-gray-900 mb-2">Sign in to view your Profile</h2>
         <p className="text-sm text-gray-500 mb-6">Manage your author profile, saved drafts, and submitted stories.</p>
         <Link href="/">
-          <Button variant="primary" size="md">Go to Homepage</Button>
+          <Button variant="primary" size="sm" className="h-9 px-5 rounded-full text-xs font-semibold shadow-xs cursor-pointer">
+            Go to Homepage
+          </Button>
         </Link>
       </div>
     );
@@ -394,7 +444,7 @@ export default function ProfilePage() {
                   <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
                     {profile.name || profile.email}
                   </h1>
-                  <span className="bg-[#E4F953] text-[#040706] font-bold text-[10px] uppercase tracking-wider px-3 py-1 rounded-xl">
+                  <span className="bg-[#E4F953] text-[#040706] font-bold text-[10px] uppercase tracking-wider px-3 py-1 rounded-full">
                     {profile.role}
                   </span>
                 </div>
@@ -405,37 +455,24 @@ export default function ProfilePage() {
               </div>
 
               {/* Action Buttons */}
-              <div className="shrink-0 flex flex-col gap-2 w-full sm:w-auto">
+              <div className="shrink-0 flex flex-col sm:flex-row gap-2.5 w-full sm:w-auto">
                 <Button
                   variant="secondary"
                   size="sm"
                   icon={<Edit2 className="w-3.5 h-3.5" />}
                   iconPosition="left"
                   onClick={() => setIsEditing(!isEditing)}
-                  className="w-full border border-gray-300 shadow-xs cursor-pointer"
+                  className="h-9 px-4 w-full sm:w-36 justify-center rounded-full border border-gray-300 text-xs font-semibold shadow-xs cursor-pointer"
                 >
                   Edit Profile
                 </Button>
-                {/* {['EDITOR', 'ADMIN'].includes(profile.role) && (
-                  <Link href="/editorial" className="w-full">
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      icon={<Shield className="w-3.5 h-3.5 text-[#E4F953]" />}
-                      iconPosition="left"
-                      className="w-full shadow-xs cursor-pointer"
-                    >
-                      Editorial Workspace
-                    </Button>
-                  </Link>
-                )} */}
                 <Button
                   variant="outline"
                   size="sm"
                   icon={<LogOut className="w-3.5 h-3.5" />}
                   iconPosition="left"
                   onClick={handleLogout}
-                  className="w-full cursor-pointer text-rose-600 border-rose-200 hover:bg-rose-50"
+                  className="h-9 px-4 w-full sm:w-36 justify-center rounded-full text-xs font-semibold cursor-pointer text-rose-600 border border-rose-200 hover:bg-rose-50"
                 >
                   Sign Out
                 </Button>
@@ -475,16 +512,151 @@ export default function ProfilePage() {
                     variant="ghost"
                     size="sm"
                     onClick={() => setIsEditing(false)}
+                    className="h-9 px-4 rounded-full text-xs font-semibold cursor-pointer"
                   >
                     Cancel
                   </Button>
-                  <Button variant="primary" size="md" disabled={saving}>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    disabled={saving}
+                    className="h-9 px-5 rounded-full text-xs font-semibold shadow-xs cursor-pointer"
+                  >
                     {saving ? "Saving..." : "Save Profile"}
                   </Button>
                 </div>
               </form>
             )}
           </div>
+
+          {/* ── Student Pass Application Status Card (Only shown if user has applied) ── */}
+          {studentApp && studentApp.status === "PENDING_APPROVAL" && (
+            <div className="bg-gradient-to-r from-amber-50/90 via-amber-50/40 to-white border border-amber-200/90 rounded-[24px] p-5 sm:p-6 mb-10 shadow-xs">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-start gap-4">
+                  <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0 shadow-2xs mt-0.5">
+                    <GraduationCap className="w-6 h-6" />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="text-base sm:text-lg font-bold text-gray-900">Student Pass Application</h3>
+                      <span className="bg-amber-100 text-amber-800 font-bold text-[10px] uppercase tracking-wider px-3 py-1 rounded-full flex items-center gap-1.5 border border-amber-200">
+                        <Clock className="w-3 h-3 text-amber-600 animate-pulse" />
+                        Under Review
+                      </span>
+                    </div>
+                    <p className="text-xs sm:text-sm text-gray-600 leading-relaxed max-w-2xl">
+                      Your academic verification application for <span className="font-semibold text-gray-900">{studentApp.institution || "your institution"}</span> is currently under review by the Akam Editorial Board.
+                    </p>
+                  </div>
+                </div>
+                {studentApp.referenceId && (
+                  <div className="sm:text-right shrink-0 bg-amber-100/70 border border-amber-200/80 rounded-xl px-3.5 py-2">
+                    <p className="text-[10px] uppercase tracking-wider font-semibold text-amber-800">Application Ref</p>
+                    <p className="font-mono text-xs sm:text-sm font-bold text-amber-950">{studentApp.referenceId}</p>
+                  </div>
+                )}
+              </div>
+              <div className="mt-4 pt-3 border-t border-amber-200/60 flex flex-wrap gap-x-6 gap-y-2 text-xs text-amber-950/80">
+                {(studentApp.fullName || profile?.name) && (
+                  <span><strong className="font-semibold text-amber-950">Student:</strong> {studentApp.fullName || profile?.name}</span>
+                )}
+                {studentApp.institution && (
+                  <span><strong className="font-semibold text-amber-950">College:</strong> {studentApp.institution}</span>
+                )}
+                {(studentApp.email || profile?.email) && (
+                  <span><strong className="font-semibold text-amber-950">Email:</strong> {studentApp.email || profile?.email}</span>
+                )}
+                {studentApp.submittedAt && (
+                  <span><strong className="font-semibold text-amber-950">Submitted On:</strong> {new Date(studentApp.submittedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</span>
+                )}
+              </div>
+            </div>
+          )}
+
+          {((studentApp && studentApp.status === "APPROVED") || profile?.isStudent) && (
+            <div className="bg-gradient-to-r from-emerald-50/90 via-emerald-50/30 to-white border border-emerald-200/90 rounded-[24px] p-5 sm:p-6 mb-10 shadow-xs">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-start gap-4">
+                  <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 shadow-2xs mt-0.5">
+                    <GraduationCap className="w-6 h-6" />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="text-base sm:text-lg font-bold text-gray-900">Student Scholar Pass</h3>
+                      <span className="bg-emerald-100 text-emerald-800 font-bold text-[10px] uppercase tracking-wider px-3 py-1 rounded-full flex items-center gap-1.5 border border-emerald-200">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                        Verified (100% Free)
+                      </span>
+                    </div>
+                    <p className="text-xs sm:text-sm text-gray-600 leading-relaxed max-w-2xl">
+                      Complimentary all-access pass verified for <span className="font-semibold text-gray-900">{studentApp?.institution || "Enrolled Scholar"}</span>. You have unlimited digital reading access to all AKAM Masika editions.
+                    </p>
+                  </div>
+                </div>
+                {studentApp?.referenceId && (
+                  <div className="sm:text-right shrink-0 bg-emerald-100/70 border border-emerald-200/80 rounded-xl px-3.5 py-2">
+                    <p className="text-[10px] uppercase tracking-wider font-semibold text-emerald-800">Pass Ref</p>
+                    <p className="font-mono text-xs sm:text-sm font-bold text-emerald-950">{studentApp.referenceId}</p>
+                  </div>
+                )}
+              </div>
+              <div className="mt-4 pt-3 border-t border-emerald-200/60 flex flex-wrap gap-x-6 gap-y-2 text-xs text-emerald-950/80">
+                {(studentApp?.fullName || profile?.name) && (
+                  <span><strong className="font-semibold text-emerald-950">Student:</strong> {studentApp?.fullName || profile?.name}</span>
+                )}
+                {studentApp?.institution && (
+                  <span><strong className="font-semibold text-emerald-950">College:</strong> {studentApp.institution}</span>
+                )}
+                {(studentApp?.email || profile?.email) && (
+                  <span><strong className="font-semibold text-emerald-950">Email:</strong> {studentApp?.email || profile?.email}</span>
+                )}
+              </div>
+            </div>
+          )}
+
+          {studentApp && studentApp.status === "REJECTED" && (
+            <div className="bg-gradient-to-r from-rose-50/90 via-rose-50/30 to-white border border-rose-200/90 rounded-[24px] p-5 sm:p-6 mb-10 shadow-xs">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-start gap-4">
+                  <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-700 flex items-center justify-center shrink-0 shadow-2xs mt-0.5">
+                    <AlertCircle className="w-6 h-6" />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="text-base sm:text-lg font-bold text-gray-900">Student Pass Application</h3>
+                      <span className="bg-rose-100 text-rose-800 font-bold text-[10px] uppercase tracking-wider px-3 py-1 rounded-full flex items-center gap-1.5 border border-rose-200">
+                        <AlertCircle className="w-3 h-3 text-rose-600" />
+                        Revision Required
+                      </span>
+                    </div>
+                    <p className="text-xs sm:text-sm text-rose-950 leading-relaxed max-w-2xl">
+                      {studentApp.reviewNotes
+                        ? `Editorial Board Feedback: "${studentApp.reviewNotes}"`
+                        : "Your submitted academic credentials could not be verified by the editorial board."}
+                    </p>
+                  </div>
+                </div>
+                {studentApp.referenceId && (
+                  <div className="sm:text-right shrink-0 bg-rose-100/70 border border-rose-200/80 rounded-xl px-3.5 py-2">
+                    <p className="text-[10px] uppercase tracking-wider font-semibold text-rose-800">Application Ref</p>
+                    <p className="font-mono text-xs sm:text-sm font-bold text-rose-950">{studentApp.referenceId}</p>
+                  </div>
+                )}
+              </div>
+              <div className="mt-4 pt-3 border-t border-rose-200/60 flex flex-wrap gap-x-6 gap-y-2 text-xs text-rose-950/80">
+                {(studentApp.fullName || profile?.name) && (
+                  <span><strong className="font-semibold text-rose-950">Student:</strong> {studentApp.fullName || profile?.name}</span>
+                )}
+                {studentApp.institution && (
+                  <span><strong className="font-semibold text-rose-950">College:</strong> {studentApp.institution}</span>
+                )}
+                {(studentApp.email || profile?.email) && (
+                  <span><strong className="font-semibold text-rose-950">Email:</strong> {studentApp.email || profile?.email}</span>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Full Width My Stories Section */}
           <div className="space-y-6">
@@ -494,7 +666,7 @@ export default function ProfilePage() {
                 <span>My Works & Submissions</span>
               </h2>
               <Link href="/submit">
-                <Button variant="primary" size="md" className="text-xs font-semibold shadow-xs">
+                <Button variant="primary" size="sm" className="h-9 px-4 text-xs font-semibold rounded-full shadow-xs cursor-pointer">
                   Submit New Work
                 </Button>
               </Link>
@@ -506,7 +678,7 @@ export default function ProfilePage() {
               <div className="hidden md:flex items-center gap-2">
                 <button
                   onClick={() => setStatusFilter("ALL")}
-                  className={`px-4 py-2 rounded-full text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
+                  className={`h-9 px-4 rounded-full text-xs font-semibold transition-all cursor-pointer whitespace-nowrap inline-flex items-center justify-center ${
                     statusFilter === "ALL"
                       ? "bg-black text-white shadow-xs"
                       : "bg-gray-100 text-gray-600 hover:bg-gray-200"
@@ -516,7 +688,7 @@ export default function ProfilePage() {
                 </button>
                 <button
                   onClick={() => setStatusFilter("DRAFT")}
-                  className={`px-4 py-2 rounded-full text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
+                  className={`h-9 px-4 rounded-full text-xs font-semibold transition-all cursor-pointer whitespace-nowrap inline-flex items-center justify-center ${
                     statusFilter === "DRAFT"
                       ? "bg-black text-white shadow-xs"
                       : "bg-gray-100 text-gray-600 hover:bg-gray-200"
@@ -526,7 +698,7 @@ export default function ProfilePage() {
                 </button>
                 <button
                   onClick={() => setStatusFilter("PENDING")}
-                  className={`px-4 py-2 rounded-full text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
+                  className={`h-9 px-4 rounded-full text-xs font-semibold transition-all cursor-pointer whitespace-nowrap inline-flex items-center justify-center ${
                     statusFilter === "PENDING"
                       ? "bg-black text-white shadow-xs"
                       : "bg-gray-100 text-gray-600 hover:bg-gray-200"
@@ -536,7 +708,7 @@ export default function ProfilePage() {
                 </button>
                 <button
                   onClick={() => setStatusFilter("APPROVED")}
-                  className={`px-4 py-2 rounded-full text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
+                  className={`h-9 px-4 rounded-full text-xs font-semibold transition-all cursor-pointer whitespace-nowrap inline-flex items-center justify-center ${
                     statusFilter === "APPROVED"
                       ? "bg-black text-white shadow-xs"
                       : "bg-gray-100 text-gray-600 hover:bg-gray-200"
@@ -546,7 +718,7 @@ export default function ProfilePage() {
                 </button>
                 <button
                   onClick={() => setStatusFilter("APPROVED_EMAGAZINE")}
-                  className={`px-4 py-2 rounded-full text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
+                  className={`h-9 px-4 rounded-full text-xs font-semibold transition-all cursor-pointer whitespace-nowrap inline-flex items-center justify-center ${
                     statusFilter === "APPROVED_EMAGAZINE"
                       ? "bg-black text-white shadow-xs"
                       : "bg-gray-100 text-gray-600 hover:bg-gray-200"
@@ -558,7 +730,7 @@ export default function ProfilePage() {
 
               {/* Mobile & Tablet Filter Select Dropdown (< 768px) */}
               <div className="md:hidden w-full">
-                <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 shadow-xs">
+                <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-full px-4 h-9 shadow-xs">
                   <Filter className="w-4 h-4 text-gray-600 shrink-0" />
                   <select
                     value={statusFilter}
@@ -580,7 +752,7 @@ export default function ProfilePage() {
                 <FileText className="w-10 h-10 text-gray-300 mx-auto mb-3" />
                 <p className="text-sm text-gray-500 mb-4">No works found under this filter.</p>
                 <Link href="/submit">
-                  <Button variant="secondary" size="md" className="border border-gray-300">
+                  <Button variant="secondary" size="sm" className="h-9 px-4 text-xs font-semibold rounded-full border border-gray-300 shadow-xs cursor-pointer">
                     Submit New Work
                   </Button>
                 </Link>
@@ -637,16 +809,18 @@ export default function ProfilePage() {
                           <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                           <span>Published in official AKAM E-Magazine edition</span>
                         </span>
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          icon={<Eye className="w-3 h-3" />}
-                          iconPosition="left"
-                          className="text-xs px-3 py-1.5 cursor-pointer border border-emerald-200 text-emerald-800 hover:bg-emerald-50 shadow-xs"
-                          onClick={() => openPreview(story)}
-                        >
-                          Preview
-                        </Button>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            icon={<Eye className="w-3.5 h-3.5" />}
+                            iconPosition="left"
+                            className="h-9 px-4 text-xs font-semibold rounded-full cursor-pointer border border-emerald-200 text-emerald-800 hover:bg-emerald-50 shadow-xs"
+                            onClick={() => openPreview(story)}
+                          >
+                            Preview
+                          </Button>
+                        </div>
                       </div>
                     )}
 
@@ -656,16 +830,18 @@ export default function ProfilePage() {
                           <BookOpen className="w-3.5 h-3.5 text-gray-500 shrink-0" />
                           <span>Approved for AKAM E-Magazine edition (stored for periodical)</span>
                         </span>
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          icon={<Eye className="w-3 h-3" />}
-                          iconPosition="left"
-                          className="text-xs px-3 py-1.5 cursor-pointer border border-gray-300 shadow-xs"
-                          onClick={() => openPreview(story)}
-                        >
-                          Preview
-                        </Button>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            icon={<Eye className="w-3.5 h-3.5" />}
+                            iconPosition="left"
+                            className="h-9 px-4 text-xs font-semibold rounded-full cursor-pointer border border-gray-300 shadow-xs"
+                            onClick={() => openPreview(story)}
+                          >
+                            Preview
+                          </Button>
+                        </div>
                       </div>
                     )}
 
@@ -675,57 +851,102 @@ export default function ProfilePage() {
                           <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
                           <span>Published & live on works catalog</span>
                         </span>
-                        <Link href={`/works/${story.slug || story.id}`}>
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            icon={<Eye className="w-3 h-3" />}
-                            iconPosition="left"
-                            className="text-xs px-3 py-1.5 cursor-pointer border border-emerald-200 text-emerald-700 hover:bg-emerald-50 shadow-xs"
-                          >
-                            View on Works
-                          </Button>
-                        </Link>
+                        <div className="flex items-center gap-2">
+                          <Link href={`/works/${story.slug || story.id}`}>
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              icon={<Eye className="w-3.5 h-3.5" />}
+                              iconPosition="left"
+                              className="h-9 px-4 text-xs font-semibold rounded-full cursor-pointer border border-emerald-200 text-emerald-700 hover:bg-emerald-50 shadow-xs"
+                            >
+                              View on Works
+                            </Button>
+                          </Link>
+                        </div>
                       </div>
                     )}
 
-
-                    {/* Draft Actions Bar */}
-                    {(story.status === "DRAFT" || story.status === "REJECTED") && (
-                      <div className="pt-3 border-t border-gray-100 flex items-center justify-between gap-2 flex-wrap">
-                        <span className="text-xs text-gray-500 italic">
-                          {story.status === "DRAFT" ? "Saved Draft" : "Revision Required"}
+                    {/* Pending Actions Bar (Preview, Edit & Delete) */}
+                    {story.status === "PENDING" && (
+                      <div className="pt-3 border-t border-gray-100 flex items-center justify-between gap-2 flex-wrap text-xs">
+                        <span className="text-amber-700 font-medium flex items-center gap-1.5">
+                          <Clock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                          <span>In editorial review queue</span>
                         </span>
                         <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => setStoryToDelete(story)}
-                            className="text-xs px-3 py-1.5 rounded-xl border border-rose-200 text-rose-600 hover:bg-rose-50 hover:border-rose-300 transition-colors inline-flex items-center gap-1 cursor-pointer font-medium shadow-2xs active:scale-95"
-                            title="Delete Draft"
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            icon={<Eye className="w-3.5 h-3.5" />}
+                            iconPosition="left"
+                            className="h-9 px-4 text-xs font-semibold rounded-full cursor-pointer border border-gray-300 shadow-xs"
+                            onClick={() => openPreview(story)}
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
-                            <span>Delete Draft</span>
-                          </button>
+                            Preview
+                          </Button>
                           <Link href={`/submit?id=${story.id}`}>
                             <Button
                               variant="secondary"
                               size="sm"
-                              icon={<Edit2 className="w-3 h-3" />}
+                              icon={<Edit2 className="w-3.5 h-3.5" />}
                               iconPosition="left"
-                              className="text-xs px-3 py-1.5 cursor-pointer border border-gray-300 shadow-xs"
+                              className="h-9 px-4 text-xs font-semibold rounded-full cursor-pointer border border-gray-300 shadow-xs"
+                            >
+                              Edit
+                            </Button>
+                          </Link>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            icon={<Trash2 className="w-3.5 h-3.5" />}
+                            iconPosition="left"
+                            onClick={() => setStoryToDelete(story)}
+                            className="h-9 px-4 text-xs font-semibold rounded-full cursor-pointer text-rose-600 border border-rose-200 hover:bg-rose-50 shadow-xs"
+                          >
+                            Delete
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Draft Actions Bar */}
+                    {(story.status === "DRAFT" || story.status === "REJECTED") && (
+                      <div className="pt-3 border-t border-gray-100 flex items-center justify-between gap-2 flex-wrap text-xs">
+                        <span className="text-xs text-gray-500 italic">
+                          {story.status === "DRAFT" ? "Saved Draft" : "Revision Required"}
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <Link href={`/submit?id=${story.id}`}>
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              icon={<Edit2 className="w-3.5 h-3.5" />}
+                              iconPosition="left"
+                              className="h-9 px-4 text-xs font-semibold rounded-full cursor-pointer border border-gray-300 shadow-xs"
                             >
                               Edit Draft
                             </Button>
                           </Link>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            icon={<Trash2 className="w-3.5 h-3.5" />}
+                            iconPosition="left"
+                            onClick={() => setStoryToDelete(story)}
+                            className="h-9 px-4 text-xs font-semibold rounded-full cursor-pointer text-rose-600 border border-rose-200 hover:bg-rose-50 shadow-xs"
+                          >
+                            Delete Draft
+                          </Button>
                           {story.status === "DRAFT" && (
                             <Button
                               variant="primary"
                               size="sm"
-                              icon={<Send className="w-3 h-3" />}
+                              icon={<Send className="w-3.5 h-3.5" />}
                               iconPosition="left"
                               disabled={actionLoadingId === story.id}
                               onClick={() => handleSubmitDraftForReview(story.id)}
-                              className="text-xs px-3.5 py-1.5 cursor-pointer shadow-xs"
+                              className="h-9 px-4 text-xs font-semibold rounded-full cursor-pointer shadow-xs"
                             >
                               {actionLoadingId === story.id ? "Submitting..." : "Submit to Queue"}
                             </Button>
@@ -758,13 +979,18 @@ export default function ProfilePage() {
                 </div>
                 <div>
                   <h3 className="text-lg font-bold text-gray-950 leading-snug">
-                    Delete Draft?
+                    {storyToDelete.status === "PENDING"
+                      ? "Delete Submission?"
+                      : storyToDelete.status === "DRAFT"
+                      ? "Delete Draft?"
+                      : "Delete Work?"}
                   </h3>
                   <p className="text-xs text-gray-500 mt-1 leading-relaxed">
                     Are you sure you want to permanently delete{" "}
                     <span className="font-semibold text-gray-800">
-                      "{storyToDelete.title || "Untitled Draft"}"
+                      "{storyToDelete.title || "Untitled"}"
                     </span>
+                    {storyToDelete.status === "PENDING" ? " from the review queue" : ""}
                     ? This action cannot be undone.
                   </p>
                 </div>
@@ -772,7 +998,7 @@ export default function ProfilePage() {
               <button
                 type="button"
                 onClick={() => setStoryToDelete(null)}
-                className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors cursor-pointer shrink-0"
+                className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors cursor-pointer shrink-0"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -785,19 +1011,28 @@ export default function ProfilePage() {
                 size="sm"
                 disabled={deletingId === storyToDelete.id}
                 onClick={() => setStoryToDelete(null)}
-                className="border border-gray-200 text-xs px-4 py-2 cursor-pointer"
+                className="h-9 px-4 rounded-full text-xs font-semibold border border-gray-300 text-gray-700 hover:bg-gray-100 cursor-pointer shadow-xs"
               >
                 Cancel
               </Button>
-              <button
+              <Button
                 type="button"
+                variant="primary"
+                size="sm"
                 disabled={deletingId === storyToDelete.id}
                 onClick={() => handleDeleteDraft(storyToDelete.id)}
-                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-semibold shadow-xs transition-colors inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50 active:scale-95"
+                className="h-9 px-4 bg-rose-600 hover:bg-rose-700 text-white rounded-full text-xs font-semibold shadow-xs cursor-pointer disabled:opacity-50"
+                icon={<Trash2 className="w-3.5 h-3.5" />}
+                iconPosition="left"
               >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>{deletingId === storyToDelete.id ? "Deleting..." : "Delete Draft"}</span>
-              </button>
+                {deletingId === storyToDelete.id
+                  ? "Deleting..."
+                  : storyToDelete.status === "PENDING"
+                  ? "Delete Submission"
+                  : storyToDelete.status === "DRAFT"
+                  ? "Delete Draft"
+                  : "Delete Work"}
+              </Button>
             </div>
           </div>
         </div>
@@ -858,9 +1093,9 @@ export default function ProfilePage() {
               <button
                 type="button"
                 onClick={closePreview}
-                className="p-2 text-gray-400 hover:text-gray-700 rounded-full hover:bg-gray-100 cursor-pointer shrink-0"
+                className="w-9 h-9 flex items-center justify-center text-gray-400 hover:text-gray-700 rounded-full hover:bg-gray-100 cursor-pointer shrink-0 transition-colors"
               >
-                <XCircle className="w-6 h-6" />
+                <X className="w-5 h-5" />
               </button>
             </div>
 
@@ -983,7 +1218,7 @@ export default function ProfilePage() {
                 variant="secondary"
                 size="sm"
                 onClick={closePreview}
-                className="justify-center border border-gray-300 text-gray-700 hover:bg-gray-100 cursor-pointer shrink-0"
+                className="h-9 px-4 rounded-full text-xs font-semibold justify-center border border-gray-300 text-gray-700 hover:bg-gray-100 cursor-pointer shrink-0"
               >
                 Close Preview
               </Button>
@@ -993,7 +1228,7 @@ export default function ProfilePage() {
                   <Button
                     variant="primary"
                     size="sm"
-                    className="justify-center bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer shrink-0 whitespace-nowrap"
+                    className="h-9 px-4 rounded-full text-xs font-semibold justify-center bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer shrink-0 whitespace-nowrap shadow-xs"
                   >
                     View on Works
                   </Button>
@@ -1003,6 +1238,7 @@ export default function ProfilePage() {
           </div>
         </div>
       )}
+
     </div>
   );
 }

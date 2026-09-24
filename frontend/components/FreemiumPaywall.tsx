@@ -7,7 +7,6 @@ import dynamic from "next/dynamic";
 import AuthModal from "./AuthModal";
 
 const PayUModal = dynamic(() => import("./PayUModal"), { ssr: false });
-const StudentVerificationModal = dynamic(() => import("./StudentVerificationModal"), { ssr: false });
 
 interface FreemiumPaywallProps {
   /** Set true to actually render the paywall overlay */
@@ -16,6 +15,12 @@ interface FreemiumPaywallProps {
   isLoggedIn: boolean;
   onDismiss?: () => void;
   onSubscribed?: () => void;
+  /**
+   * Called when the user successfully logs in via "Student? Sign in to Apply"
+   * (or clicks "Student? 100% Free Pass" while already logged in).
+   * The parent is responsible for opening StudentVerificationModal.
+   */
+  onStudentApply?: () => void;
 }
 
 const FreemiumPaywall: React.FC<FreemiumPaywallProps> = ({
@@ -23,18 +28,30 @@ const FreemiumPaywall: React.FC<FreemiumPaywallProps> = ({
   isLoggedIn,
   onDismiss,
   onSubscribed,
+  onStudentApply,
 }) => {
   const [payUOpen, setPayUOpen] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
-  const [studentModalOpen, setStudentModalOpen] = useState(false);
+  const [authAction, setAuthAction] = useState<"subscribe" | "student" | null>(null);
 
   if (!visible) return null;
 
   const handleCTA = () => {
     if (!isLoggedIn) {
+      setAuthAction("subscribe");
       setAuthOpen(true);
     } else {
       setPayUOpen(true);
+    }
+  };
+
+  const handleStudentClick = () => {
+    if (!isLoggedIn) {
+      setAuthAction("student");
+      setAuthOpen(true);
+    } else {
+      // Already logged in — open student modal directly via parent callback
+      if (onStudentApply) onStudentApply();
     }
   };
 
@@ -45,8 +62,16 @@ const FreemiumPaywall: React.FC<FreemiumPaywallProps> = ({
 
   const handleAuthSuccess = () => {
     setAuthOpen(false);
-    // After login, open PayU right away
-    setTimeout(() => setPayUOpen(true), 400);
+    if (authAction === "student") {
+      // Notify parent to open StudentVerificationModal.
+      // Use a small delay so the auth modal finishes closing first.
+      setTimeout(() => {
+        if (onStudentApply) onStudentApply();
+      }, 300);
+    } else {
+      setTimeout(() => setPayUOpen(true), 400);
+    }
+    setAuthAction(null);
   };
 
   return (
@@ -95,10 +120,10 @@ const FreemiumPaywall: React.FC<FreemiumPaywallProps> = ({
               </Button>
               <button
                 type="button"
-                onClick={() => setStudentModalOpen(true)}
+                onClick={handleStudentClick}
                 className="text-xs text-emerald-600 hover:text-emerald-700 font-medium underline underline-offset-2 cursor-pointer transition-colors"
               >
-                Student? 100% Free Pass
+                {isLoggedIn ? "Student? 100% Free Pass" : "Student? Sign in to Apply"}
               </button>
               {onDismiss && (
                 <button
@@ -119,7 +144,10 @@ const FreemiumPaywall: React.FC<FreemiumPaywallProps> = ({
       {authOpen && (
         <AuthModal
           isOpen={authOpen}
-          onClose={() => setAuthOpen(false)}
+          onClose={() => {
+            setAuthOpen(false);
+            setAuthAction(null);
+          }}
           onSuccess={handleAuthSuccess}
         />
       )}
@@ -133,14 +161,6 @@ const FreemiumPaywall: React.FC<FreemiumPaywallProps> = ({
           priceAmount={399}
           billingCycle="sixmonth"
           onSuccess={handleSubscribeSuccess}
-        />
-      )}
-
-      {/* Student Verification Modal */}
-      {studentModalOpen && (
-        <StudentVerificationModal
-          isOpen={studentModalOpen}
-          onClose={() => setStudentModalOpen(false)}
         />
       )}
     </>

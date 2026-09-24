@@ -11,6 +11,7 @@ export default function PlansPage() {
   const [payUModalOpen, setPayUModalOpen] = useState(false);
   const [studentModalOpen, setStudentModalOpen] = useState(false);
   const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [authAction, setAuthAction] = useState<"subscribe" | "student" | null>(null);
   const [user, setUser] = useState<any>(null);
 
   // User subscription states
@@ -58,9 +59,19 @@ export default function PlansPage() {
 
   const handleSubscribeRequest = () => {
     if (!user) {
+      setAuthAction("subscribe");
       setAuthModalOpen(true);
     } else {
       setPayUModalOpen(true);
+    }
+  };
+
+  const handleStudentApplyRequest = () => {
+    if (!user) {
+      setAuthAction("student");
+      setAuthModalOpen(true);
+    } else {
+      setStudentModalOpen(true);
     }
   };
 
@@ -71,7 +82,7 @@ export default function PlansPage() {
       {/* ── Features Comparison Table Section ────────────────────────── */}
       <ReadingPlansSection
         onSubscribe={handleSubscribeRequest}
-        onStudentApply={() => setStudentModalOpen(true)}
+        onStudentApply={handleStudentApplyRequest}
         isLoggedIn={Boolean(user)}
       />
 
@@ -85,14 +96,22 @@ export default function PlansPage() {
         onSuccess={() => setIsPassActive(true)}
       />
 
-      {/* ── Auth Modal (if user clicks subscribe while logged out) ───── */}
+      {/* ── Auth Modal (if user clicks subscribe or student pass while logged out) ───── */}
       <AuthModal
         isOpen={authModalOpen}
-        onClose={() => setAuthModalOpen(false)}
+        onClose={() => {
+          setAuthModalOpen(false);
+          setAuthAction(null);
+        }}
         onSuccess={(loggedInUser) => {
           setUser(loggedInUser);
           setAuthModalOpen(false);
-          setPayUModalOpen(true);
+          if (authAction === "student") {
+            setStudentModalOpen(true);
+          } else if (authAction === "subscribe") {
+            setPayUModalOpen(true);
+          }
+          setAuthAction(null);
         }}
       />
 

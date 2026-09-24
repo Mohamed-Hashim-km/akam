@@ -68,6 +68,7 @@ import {
   GraduationCap,
   Play,
   CreditCard,
+  PenLine,
 } from "lucide-react";
 import Button from "@/components/ui/Button";
 import AuthModal from "@/components/AuthModal";
@@ -452,7 +453,7 @@ function EditorialDashboardContent() {
   // Add Submission (Painting / Video) Modal for an Author
   const [addSubmissionModalOpen, setAddSubmissionModalOpen] = useState(false);
   const [addSubmissionAuthorTarget, setAddSubmissionAuthorTarget] = useState<RosterUser | null>(null);
-  const [addSubmissionType, setAddSubmissionType] = useState<"PAINTING" | "VIDEO">("PAINTING");
+  const [addSubmissionType, setAddSubmissionType] = useState<"STORY" | "PAINTING" | "VIDEO">("STORY");
   const [addSubmissionTitle, setAddSubmissionTitle] = useState("");
   const [addSubmissionDescription, setAddSubmissionDescription] = useState("");
   const [addSubmissionCategory, setAddSubmissionCategory] = useState("Art");
@@ -860,6 +861,7 @@ function EditorialDashboardContent() {
   // Media Showcase State
   const [mediaList, setMediaList] = useState<any[]>([]);
   const [mediaMeta, setMediaMeta] = useState({ total: 0, page: 1, limit: 10, totalPages: 1 });
+  const [mediaCategoryFilter, setMediaCategoryFilter] = useState("ALL");
   const [showAddMediaModal, setShowAddMediaModal] = useState(false);
   const [editingMediaId, setEditingMediaId] = useState<string | null>(null);
   const [mediaFormTitle, setMediaFormTitle] = useState("");
@@ -1060,6 +1062,7 @@ function EditorialDashboardContent() {
     page: number = currentPage,
     query: string = searchQuery,
     emSubTab: "PENDING" | "PUBLISHED" = emagazineSubTab,
+    mediaCat: string = mediaCategoryFilter,
   ) => {
     setLoading(true);
     try {
@@ -1239,7 +1242,8 @@ function EditorialDashboardContent() {
         }
       } else if (tab === "media") {
         const mSearch = query ? `&search=${encodeURIComponent(query)}` : "";
-        const mRes = await apiFetch(`${API_BASE_URL}/editorial/media?page=${page}&limit=9${mSearch}`);
+        const mCat = mediaCat && mediaCat !== "ALL" ? `&category=${encodeURIComponent(mediaCat)}` : "";
+        const mRes = await apiFetch(`${API_BASE_URL}/editorial/media?page=${page}&limit=9${mSearch}${mCat}`);
         if (mRes.ok) {
           const json = await mRes.json();
           if (json.data) {
@@ -2214,9 +2218,9 @@ function EditorialDashboardContent() {
 
   useEffect(() => {
     if (user && ["EDITOR", "ADMIN"].includes(user.role)) {
-      fetchDashboardData(activeTab, currentPage, searchQuery, emagazineSubTab);
+      fetchDashboardData(activeTab, currentPage, searchQuery, emagazineSubTab, mediaCategoryFilter);
     }
-  }, [activeTab, currentPage, reportStatusFilter, reportTypeFilter, inquiryStatusFilter, eventFilterType, emagazineSubTab]);
+  }, [activeTab, currentPage, reportStatusFilter, reportTypeFilter, inquiryStatusFilter, eventFilterType, emagazineSubTab, mediaCategoryFilter]);
 
   // Server-side debounced search handler
   useEffect(() => {
@@ -2738,6 +2742,43 @@ function EditorialDashboardContent() {
     }
   };
 
+  // ─── Markdown / HTML helpers (matching submit/page.tsx Live Reader View) ───
+  const convertMarkdownToHtml = (mdStr: string): string => {
+    if (!mdStr) return "";
+    let html = mdStr.replace(/\r\n/g, "\n");
+    html = html.replace(/&nbsp;/gi, " ").replace(/&#160;/gi, " ");
+    html = html.replace(/!\[(.*?)\]\((.*?)\)/g, '<div contenteditable="false" class="my-6 text-center select-none"><img src="$2" alt="$1" class="max-h-[420px] w-auto mx-auto rounded-2xl border border-gray-200 shadow-md object-cover inline-block" /></div><p><br></p>');
+    html = html.replace(/^###\s+(.*)$/gm, '<h3 class="text-xl font-bold my-3 text-gray-900">$1</h3>');
+    html = html.replace(/^##\s+(.*)$/gm, '<h2 class="text-2xl font-bold my-4 text-gray-950">$1</h2>');
+    html = html.replace(/\*\*(.*?)\*\*/g, "<b>$1</b>").replace(/__(.*?)__/g, "<b>$1</b>");
+    html = html.replace(/\*(.*?)\*/g, "<i>$1</i>");
+    html = html.replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-emerald-700 underline font-medium hover:text-emerald-900">$1</a>');
+    html = html.replace(/^>\s+(.*)$/gm, '<blockquote class="border-l-4 border-emerald-500 pl-4 py-2 italic my-4 text-gray-800 bg-gray-50/70 rounded-r-xl">$1</blockquote>');
+    html = html.replace(/^[\*\-]\s+(.*)$/gm, '<ul class="my-2"><li class="ml-4 list-disc mb-1 text-gray-900">$1</li></ul>');
+    html = html.replace(/^\d+\.\s+(.*)$/gm, '<ol class="my-2"><li class="ml-4 list-decimal mb-1 text-gray-900">$1</li></ol>');
+    html = html.replace(/\*\*/g, "");
+    const lines = html.split("\n");
+    const resultBlocks: string[] = [];
+    let currentParagraphLines: string[] = [];
+    const flushParagraph = () => {
+      if (currentParagraphLines.length > 0) {
+        const text = currentParagraphLines.join("<br>");
+        if (text.trim()) resultBlocks.push(`<p class="mb-6 leading-[1.9] text-gray-900 whitespace-pre-wrap">${text}</p>`);
+        currentParagraphLines = [];
+      }
+    };
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) { flushParagraph(); continue; }
+      if (trimmed.startsWith('<div contenteditable="false"') || trimmed.startsWith("<h2") || trimmed.startsWith("<h3") || trimmed.startsWith("<blockquote") || trimmed.startsWith("<ul") || trimmed.startsWith("<ol") || trimmed.startsWith("<p")) {
+        flushParagraph(); resultBlocks.push(trimmed); continue;
+      }
+      currentParagraphLines.push(trimmed);
+    }
+    flushParagraph();
+    return resultBlocks.join("");
+  };
+
   const renderStoryContent = (contentStr?: string | null) => {
     if (!contentStr || typeof contentStr !== "string" || !contentStr.trim()) {
       return (
@@ -2747,38 +2788,7 @@ function EditorialDashboardContent() {
       );
     }
 
-    // ── Markdown-to-HTML inline converter (same logic as submit page) ──────
-    const mdToHtml = (md: string): string => {
-      let h = md;
-      h = h.replace(/&nbsp;/gi, " ");
-      // Images
-      h = h.replace(/!\[(.*?)\]\((.*?)\)/g, (_m, alt, src) => {
-        return `<img src="${formatAssetUrl(src)}" alt="${alt}" class="my-6 w-full max-w-3xl mx-auto max-h-[500px] object-cover rounded-2xl shadow-xs" />`;
-      });
-      // Headings
-      h = h.replace(/^###\s+(.*)$/gm, '<h3 class="text-xl font-bold my-4 text-gray-900">$1</h3>');
-      h = h.replace(/^##\s+(.*)$/gm, '<h2 class="text-2xl font-bold my-5 text-gray-950">$1</h2>');
-      // Bold / Italic
-      h = h.replace(/\*\*(.*?)\*\*/g, "<b>$1</b>");
-      h = h.replace(/__(.*?)__/g, "<b>$1</b>");
-      h = h.replace(/\*(.*?)\*/g, "<i>$1</i>");
-      // Blockquote
-      h = h.replace(
-        /^>\s+(.*)$/gm,
-        '<blockquote class="border-l-4 border-emerald-500 pl-4 py-2 italic my-4 text-gray-800 bg-gray-50/70 rounded-r-xl">$1</blockquote>',
-      );
-      // Links
-      h = h.replace(
-        /\[(.*?)\]\((.*?)\)/g,
-        '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-emerald-700 underline font-medium hover:text-emerald-900">$1</a>',
-      );
-      // Lists
-      h = h.replace(/^[\*\-]\s+(.*)$/gm, '<li class="ml-5 list-disc mb-1 text-gray-900">$1</li>');
-      h = h.replace(/^(\d+)\.\s+(.*)$/gm, '<li class="ml-5 list-decimal mb-1 text-gray-900">$2</li>');
-      return h;
-    };
-
-    // ── Split content at image boundaries ────────────────────────────────────
+    // Split content at image boundaries
     const withHtmlImgs = contentStr.replace(/!\[(.*?)\]\((.*?)\)/g, (_m, alt, src) => `<img src="${formatAssetUrl(src)}" alt="${alt}" />`);
     const imgRegex = /<img\s+[^>]*src=["']([^"']+)["'][^>]*>/gi;
     const parts: Array<{ type: "text"; value: string } | { type: "image"; src: string; alt: string }> = [];
@@ -2800,18 +2810,17 @@ function EditorialDashboardContent() {
     }
     if (parts.length === 0) parts.push({ type: "text", value: contentStr });
 
-    // ── Render ────────────────────────────────────────────────────────────────
     return (
-      <div className="space-y-0">
+      <div className="space-y-4 pt-2 text-gray-900 font-normal text-base sm:text-lg max-w-3xl mx-auto">
         {parts.map((part, idx) => {
           if (part.type === "image") {
             return (
-              <div key={idx} className="my-8 flex justify-center">
+              <div key={idx} className="my-6 sm:my-8 flex justify-center">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={formatAssetUrl(part.src)}
                   alt={part.alt}
-                  className="w-full max-w-3xl h-auto max-h-[520px] object-cover rounded-2xl shadow-xs border border-gray-100"
+                  className="w-full max-w-3xl h-auto max-h-[500px] object-cover rounded-2xl shadow-xs border border-gray-100"
                   onError={(e) => {
                     (e.currentTarget as HTMLElement).style.display = "none";
                   }}
@@ -2820,44 +2829,14 @@ function EditorialDashboardContent() {
             );
           }
 
-          // Text part — split by newlines and render paragraphs + spacers
-          const rawText = part.value.replace(/\r\n/g, "\n");
-          const lines = rawText.split("\n");
-          const blocks: React.ReactNode[] = [];
-          let paraLines: string[] = [];
-
-          const flushPara = (key: string) => {
-            if (paraLines.length > 0) {
-              const combined = paraLines.join("<br />");
-              if (combined.trim()) {
-                blocks.push(
-                  <div
-                    key={key}
-                    className="text-[#1A1A1A] text-base sm:text-lg leading-[1.9] mb-6 font-normal [&_b]:font-bold [&_i]:italic [&_a]:text-emerald-700 [&_a]:underline [&_h2]:text-2xl [&_h2]:font-bold [&_h2]:my-4 [&_h3]:text-xl [&_h3]:font-bold [&_h3]:my-3 [&_blockquote]:border-l-4 [&_blockquote]:border-emerald-500 [&_blockquote]:pl-4 [&_blockquote]:italic [&_blockquote]:my-3 [&_li]:ml-5 [&_li]:list-disc"
-                    dangerouslySetInnerHTML={{ __html: mdToHtml(combined) }}
-                  />,
-                );
-              }
-              paraLines = [];
-            }
-          };
-
-          lines.forEach((line, li) => {
-            if (line.trim() === "") {
-              if (paraLines.length > 0) {
-                // First blank line after text → flush paragraph
-                flushPara(`${idx}-p-${li}`);
-              } else {
-                // Consecutive blank line → section gap spacer
-                blocks.push(<div key={`${idx}-gap-${li}`} className="mb-10 select-none" aria-hidden="true" />);
-              }
-            } else {
-              paraLines.push(line);
-            }
-          });
-          flushPara(`${idx}-p-end`);
-
-          return <div key={idx}>{blocks}</div>;
+          const renderedChunkHtml = convertMarkdownToHtml(part.value);
+          return (
+            <div
+              key={idx}
+              className="prose prose-lg max-w-none text-gray-900 leading-[1.9] font-normal [&_p]:mb-6 [&_p]:mt-0 [&_p]:leading-[1.9] [&_p]:text-[#1A1A1A] [&_b]:font-bold [&_strong]:font-bold [&_i]:italic [&_em]:italic [&_a]:text-emerald-700 [&_a]:underline [&_a]:font-medium [&_ul]:list-disc [&_ul]:pl-6 [&_ul]:mb-4 [&_ol]:list-decimal [&_ol]:pl-6 [&_ol]:mb-4 [&_h2]:text-2xl [&_h2]:font-bold [&_h2]:mt-6 [&_h2]:mb-3 [&_h2]:text-gray-950 [&_h3]:text-xl [&_h3]:font-bold [&_h3]:mt-5 [&_h3]:mb-2 [&_h3]:text-gray-900 [&_blockquote]:border-l-4 [&_blockquote]:border-emerald-500 [&_blockquote]:pl-4 [&_blockquote]:py-2 [&_blockquote]:italic [&_blockquote]:my-4 [&_blockquote]:bg-gray-50/70 [&_blockquote]:rounded-r-xl"
+              dangerouslySetInnerHTML={{ __html: renderedChunkHtml }}
+            />
+          );
         })}
       </div>
     );
@@ -4252,17 +4231,6 @@ function EditorialDashboardContent() {
                           <h4 className="font-bold text-gray-900 text-sm truncate">{u.name || "No name set"}</h4>
                           <p className="text-xs text-gray-500 truncate">{u.email}</p>
                           <p className="text-xs text-gray-700 font-medium truncate mt-0.5">📞 {u.phone || "+91 98470 12345"}</p>
-                          <div className="mt-1">
-                            {u.privacyPolicyAccepted ?? true ? (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-lg">
-                                <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Terms Accepted
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-lg">
-                                <Clock className="w-3 h-3 text-amber-500" /> Terms Pending
-                              </span>
-                            )}
-                          </div>
                         </div>
                       </div>
                       <select
@@ -4288,85 +4256,47 @@ function EditorialDashboardContent() {
                         <button
                           type="button"
                           onClick={() => handleOpenEditAuthor(u)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-200 shadow-xs cursor-pointer transition-all"
+                          title="Edit"
+                          className="inline-flex items-center justify-center w-8 h-8 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-200 shadow-xs cursor-pointer transition-all"
                         >
                           <Edit3 className="w-3.5 h-3.5 text-gray-600" />
-                          Edit
                         </button>
                         <button
                           type="button"
                           onClick={() => handleOpenDeleteAuthor(u)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 shadow-xs cursor-pointer transition-all"
+                          title="Delete"
+                          className="inline-flex items-center justify-center w-8 h-8 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 shadow-xs cursor-pointer transition-all"
                         >
                           <Trash2 className="w-3.5 h-3.5 text-rose-500" />
-                          Delete
-                        </button>
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          size="sm"
-                          icon={<BookOpen className="w-3.5 h-3.5" />}
-                          iconPosition="left"
-                          onClick={() => {
-                            setStoryAuthorTarget(u);
-                            setStoryStudioTitle("");
-                            setStoryStudioContent("");
-                            setStoryStudioCoverFile(null);
-                            setStoryStudioCoverPreview(null);
-                            setAuthorStoryStudioOpen(true);
-                          }}
-                          className="text-xs px-2.5 py-1.5 border border-gray-300 font-semibold cursor-pointer shadow-2xs whitespace-nowrap"
-                        >
-                          + Article / Story
-                        </Button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setAddSubmissionAuthorTarget(u);
-                            setAddSubmissionType("PAINTING");
-                            setAddSubmissionTitle("");
-                            setAddSubmissionDescription("");
-                            setAddSubmissionVideoUrl("");
-                            setAddSubmissionPaintingFile(null);
-                            setAddSubmissionPaintingPreview(null);
-                            setAddSubmissionError(null);
-                            setAddSubmissionSuccess(null);
-                            setAddSubmissionModalOpen(true);
-                          }}
-                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold text-purple-700 bg-purple-50 border border-purple-200 hover:bg-purple-100 shadow-xs cursor-pointer transition-all"
-                        >
-                          🎨 + Painting
                         </button>
                         <button
                           type="button"
                           onClick={() => {
                             setAddSubmissionAuthorTarget(u);
-                            setAddSubmissionType("VIDEO");
+                            setAddSubmissionType("STORY");
                             setAddSubmissionTitle("");
                             setAddSubmissionDescription("");
-                            setAddSubmissionVideoUrl("");
-                            setAddSubmissionPaintingFile(null);
-                            setAddSubmissionPaintingPreview(null);
                             setAddSubmissionError(null);
-                            setAddSubmissionSuccess(null);
                             setAddSubmissionModalOpen(true);
                           }}
-                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 hover:bg-blue-100 shadow-xs cursor-pointer transition-all"
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold text-white bg-gray-900 border border-gray-800 hover:bg-gray-700 shadow-xs cursor-pointer transition-all whitespace-nowrap"
                         >
-                          🎬 + Video
+                          <PenLine className="w-3.5 h-3.5" /> Start Writing
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => handleToggleFeaturedAuthor(u.id)}
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer shadow-xs ${
-                            u.isFeatured
-                              ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
-                              : "bg-gray-100 text-gray-600 border border-gray-200"
-                          }`}
-                        >
-                          <Sparkles className={`w-3.5 h-3.5 ${u.isFeatured ? "text-emerald-600 fill-emerald-600" : "text-gray-400"}`} />
-                          {u.isFeatured ? "Featured" : "+ Feature"}
-                        </button>
+                        {u.role === "AUTHOR" && (
+                          <button
+                            type="button"
+                            onClick={() => handleToggleFeaturedAuthor(u.id)}
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer shadow-xs ${
+                              u.isFeatured
+                                ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                                : "bg-gray-100 text-gray-600 border border-gray-200"
+                            }`}
+                          >
+                            <Sparkles className={`w-3.5 h-3.5 ${u.isFeatured ? "text-emerald-600 fill-emerald-600" : "text-gray-400"}`} />
+                            {u.isFeatured ? "Featured" : "+ Feature"}
+                          </button>
+                        )}
                       </div>
 
                       <div className="flex items-center gap-1.5 ml-auto">
@@ -4411,18 +4341,17 @@ function EditorialDashboardContent() {
               {/* Desktop Table View (>= 640px) */}
               <div className="hidden sm:block bg-white border border-gray-200 rounded-[28px] overflow-hidden shadow-xs">
                 <div className="overflow-x-auto w-full">
-                  <table className="w-full text-left text-xs border-collapse min-w-[1100px]">
+                  <table className="w-full text-left text-xs border-collapse min-w-[900px]">
                     <thead>
                       <tr className="bg-gray-50 border-b border-gray-200 text-gray-500 font-semibold uppercase tracking-wider whitespace-nowrap">
                         <th className="py-4 px-6 min-w-[200px]">User</th>
                         <th className="py-4 px-6 min-w-[200px]">Email Address</th>
                         <th className="py-4 px-6 min-w-[150px]">Phone Number</th>
-                        <th className="py-4 px-6 min-w-[140px]">Privacy Terms</th>
                         <th className="py-4 px-6 min-w-[140px]">Role Tier</th>
                         <th className="py-4 px-6 min-w-[170px]">Masika Featured</th>
                         <th className="py-4 px-6 min-w-[130px]">Priority (#)</th>
                         <th className="py-4 px-6 min-w-[120px]">Joined Date</th>
-                        <th className="py-4 px-6 min-w-[260px] text-right">Actions</th>
+                        <th className="py-4 px-6 min-w-[180px] text-right">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 text-gray-800">
@@ -4445,19 +4374,6 @@ function EditorialDashboardContent() {
                             <span className="font-medium text-gray-900">{u.phone || "+91 98470 12345"}</span>
                           </td>
                           <td className="py-4 px-6 whitespace-nowrap">
-                            {u.privacyPolicyAccepted ?? true ? (
-                              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-xl">
-                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                                Accepted
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-xl">
-                                <Clock className="w-3.5 h-3.5 text-amber-500" />
-                                Pending
-                              </span>
-                            )}
-                          </td>
-                          <td className="py-4 px-6 whitespace-nowrap">
                             <select
                               value={u.role}
                               onChange={(e) => handleRoleChange(u.id, e.target.value)}
@@ -4477,18 +4393,22 @@ function EditorialDashboardContent() {
                             </select>
                           </td>
                           <td className="py-4 px-6 whitespace-nowrap">
-                            <button
-                              type="button"
-                              onClick={() => handleToggleFeaturedAuthor(u.id)}
-                              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer shadow-xs ${
-                                u.isFeatured
-                                  ? "bg-emerald-100 text-emerald-800 border border-emerald-300 hover:bg-emerald-200"
-                                  : "bg-gray-100 text-gray-600 border border-gray-200 hover:bg-gray-200"
-                              }`}
-                            >
-                              <Sparkles className={`w-3.5 h-3.5 ${u.isFeatured ? "text-emerald-600 fill-emerald-600" : "text-gray-400"}`} />
-                              {u.isFeatured ? "Featured Author" : "+ Feature Author"}
-                            </button>
+                            {u.role === "AUTHOR" ? (
+                              <button
+                                type="button"
+                                onClick={() => handleToggleFeaturedAuthor(u.id)}
+                                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer shadow-xs ${
+                                  u.isFeatured
+                                    ? "bg-emerald-100 text-emerald-800 border border-emerald-300 hover:bg-emerald-200"
+                                    : "bg-gray-100 text-gray-600 border border-gray-200 hover:bg-gray-200"
+                                }`}
+                              >
+                                <Sparkles className={`w-3.5 h-3.5 ${u.isFeatured ? "text-emerald-600 fill-emerald-600" : "text-gray-400"}`} />
+                                {u.isFeatured ? "Featured Author" : "+ Feature Author"}
+                              </button>
+                            ) : (
+                              <span className="text-xs text-gray-400 font-medium">—</span>
+                            )}
                           </td>
                           <td className="py-4 px-6 whitespace-nowrap">
                             <div className="flex items-center gap-1.5">
@@ -4534,73 +4454,31 @@ function EditorialDashboardContent() {
                                 type="button"
                                 onClick={() => handleOpenEditAuthor(u)}
                                 title="Edit Author Profile"
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 border border-gray-200 transition-all cursor-pointer shadow-xs hover:border-gray-300"
+                                className="inline-flex items-center justify-center w-8 h-8 rounded-xl text-gray-700 bg-gray-100 hover:bg-gray-200 border border-gray-200 transition-all cursor-pointer shadow-xs hover:border-gray-300"
                               >
                                 <Edit3 className="w-3.5 h-3.5 text-gray-600" />
-                                Edit
                               </button>
                               <button
                                 type="button"
                                 onClick={() => handleOpenDeleteAuthor(u)}
                                 title="Delete Author Account"
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition-all cursor-pointer shadow-xs hover:border-rose-300"
+                                className="inline-flex items-center justify-center w-8 h-8 rounded-xl text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition-all cursor-pointer shadow-xs hover:border-rose-300"
                               >
                                 <Trash2 className="w-3.5 h-3.5 text-rose-500" />
-                                Delete
-                              </button>
-                              <Button
-                                type="button"
-                                variant="secondary"
-                                size="sm"
-                                icon={<BookOpen className="w-3.5 h-3.5" />}
-                                iconPosition="left"
-                                onClick={() => {
-                                  setStoryAuthorTarget(u);
-                                  setStoryStudioTitle("");
-                                  setStoryStudioContent("");
-                                  setStoryStudioCoverFile(null);
-                                  setStoryStudioCoverPreview(null);
-                                  setAuthorStoryStudioOpen(true);
-                                }}
-                                className="border border-gray-300 text-xs px-3 py-1.5 font-semibold cursor-pointer shadow-xs hover:bg-gray-100 inline-flex items-center gap-1.5 whitespace-nowrap"
-                              >
-                                + Article / Story
-                              </Button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setAddSubmissionAuthorTarget(u);
-                                  setAddSubmissionType("PAINTING");
-                                  setAddSubmissionTitle("");
-                                  setAddSubmissionDescription("");
-                                  setAddSubmissionVideoUrl("");
-                                  setAddSubmissionPaintingFile(null);
-                                  setAddSubmissionPaintingPreview(null);
-                                  setAddSubmissionError(null);
-                                  setAddSubmissionSuccess(null);
-                                  setAddSubmissionModalOpen(true);
-                                }}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-purple-700 bg-purple-50 border border-purple-200 hover:bg-purple-100 shadow-xs cursor-pointer transition-all whitespace-nowrap"
-                              >
-                                🎨 + Painting
                               </button>
                               <button
                                 type="button"
                                 onClick={() => {
                                   setAddSubmissionAuthorTarget(u);
-                                  setAddSubmissionType("VIDEO");
+                                  setAddSubmissionType("STORY");
                                   setAddSubmissionTitle("");
                                   setAddSubmissionDescription("");
-                                  setAddSubmissionVideoUrl("");
-                                  setAddSubmissionPaintingFile(null);
-                                  setAddSubmissionPaintingPreview(null);
                                   setAddSubmissionError(null);
-                                  setAddSubmissionSuccess(null);
                                   setAddSubmissionModalOpen(true);
                                 }}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 hover:bg-blue-100 shadow-xs cursor-pointer transition-all whitespace-nowrap"
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-white bg-gray-900 border border-gray-800 hover:bg-gray-700 shadow-xs cursor-pointer transition-all whitespace-nowrap"
                               >
-                                🎬 + Video
+                                <PenLine className="w-3.5 h-3.5" /> Start Writing
                               </button>
                             </div>
                           </td>
@@ -5559,6 +5437,32 @@ function EditorialDashboardContent() {
                 </Button>
               </div>
 
+              {/* Category Filter Pills */}
+              <div className="flex flex-wrap items-center gap-2">
+                {[
+                  { id: "ALL", label: "All Media" },
+                  { id: "interviews", label: "Interviews" },
+                  { id: "discussions", label: "Discussions & Debates" },
+                  { id: "cultural", label: "Cultural Programmes" },
+                  { id: "recordings", label: "Event Recordings" },
+                ].map((cat) => (
+                  <button
+                    key={cat.id}
+                    onClick={() => {
+                      setMediaCategoryFilter(cat.id);
+                      if (currentPage !== 1) setCurrentPage(1);
+                    }}
+                    className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${
+                      mediaCategoryFilter === cat.id
+                        ? "bg-black text-white shadow-xs"
+                        : "bg-white text-gray-600 hover:bg-gray-100 hover:text-gray-900 border border-gray-200/80 shadow-xs"
+                    }`}
+                  >
+                    {cat.label}
+                  </button>
+                ))}
+              </div>
+
               {/* Media List Grid */}
               {mediaList.length === 0 ? (
                 <div className="bg-white rounded-[28px] p-12 text-center border border-gray-200/80 shadow-xs">
@@ -5592,7 +5496,13 @@ function EditorialDashboardContent() {
                             className="w-full h-full object-cover"
                           />
                           <div className="absolute top-2 left-2 bg-black/75 text-white text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider backdrop-blur-xs">
-                            {item.category}
+                            {item.category === "discussions" || item.category === "conversations"
+                              ? "Discussions & Debates"
+                              : item.category === "cultural"
+                              ? "Cultural Programmes"
+                              : item.category === "recordings"
+                              ? "Event Recordings"
+                              : "Interviews"}
                           </div>
 
                           <div className="absolute top-2 right-2 flex items-center gap-1.5">
@@ -5644,7 +5554,7 @@ function EditorialDashboardContent() {
                             onClick={() => {
                               setEditingMediaId(item.id);
                               setMediaFormTitle(item.title);
-                              setMediaFormCategory(item.category);
+                              setMediaFormCategory(item.category === "conversations" ? "discussions" : item.category);
                               setMediaFormYoutubeUrl(item.youtubeUrl);
                               setMediaFormDesc(item.description);
                               setMediaFormPublished(item.isPublished);
@@ -6547,7 +6457,7 @@ function EditorialDashboardContent() {
               </div>
             )}
 
-            {/* Article / Story Cover Image (Card style matching LatestStories) */}
+            {/* Article / Story Cover Image */}
             {selectedStory.submissionType !== "VIDEO" && selectedStory.submissionType !== "PAINTING" && (selectedStory.coverImageUrl || selectedStory.mediaUrl) && (
               <div className="relative w-64 sm:w-72 md:w-80 aspect-square mx-auto mb-8 shrink-0 rounded-[22px] overflow-hidden bg-gray-100 border border-gray-200/80 shadow-md">
                 <Image
@@ -6562,7 +6472,7 @@ function EditorialDashboardContent() {
             )}
 
             {/* Content Parser */}
-            <div className="mb-6 flex-1">
+            <div className="mb-6 flex-1 max-w-3xl mx-auto w-full">
               {renderStoryContent(selectedStory.content)}
             </div>
 
@@ -7923,7 +7833,7 @@ function EditorialDashboardContent() {
                   className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-900 outline-none focus:border-black shadow-xs cursor-pointer"
                 >
                   <option value="interviews">Interviews</option>
-                  <option value="conversations">Conversations</option>
+                  <option value="discussions">Discussions & Debates</option>
                   <option value="cultural">Cultural Programmes</option>
                   <option value="recordings">Event Recordings</option>
                 </select>
@@ -8996,27 +8906,31 @@ function EditorialDashboardContent() {
             <div className="flex items-center justify-between pb-4 border-b border-gray-100">
               <div className="flex items-center gap-3">
                 <div className={`w-11 h-11 rounded-2xl flex items-center justify-center font-bold shadow-xs ${
-                  addSubmissionType === "PAINTING"
+                  addSubmissionType === "STORY"
+                    ? "bg-gray-100 text-gray-800"
+                    : addSubmissionType === "PAINTING"
                     ? "bg-purple-100 text-purple-800"
                     : "bg-blue-100 text-blue-800"
                 }`}>
-                  {addSubmissionType === "PAINTING" ? "🎨" : "🎬"}
+                  {addSubmissionType === "STORY" ? <FileText className="w-5 h-5" /> : addSubmissionType === "PAINTING" ? <Palette className="w-5 h-5" /> : <Video className="w-5 h-5" />}
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
                     <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-lg ${
-                      addSubmissionType === "PAINTING"
+                      addSubmissionType === "STORY"
+                        ? "bg-gray-100 text-gray-800 border border-gray-200"
+                        : addSubmissionType === "PAINTING"
                         ? "bg-purple-100 text-purple-800 border border-purple-200"
                         : "bg-blue-100 text-blue-800 border border-blue-200"
                     }`}>
-                      {addSubmissionType === "PAINTING" ? "Painting Artwork" : "Video Feature"}
+                      {addSubmissionType === "STORY" ? "Article / Story" : addSubmissionType === "PAINTING" ? "Painting Artwork" : "Video Feature"}
                     </span>
                   </div>
                   <h2 className="text-xl sm:text-2xl font-bold text-gray-950 mt-0.5">
-                    Add {addSubmissionType === "PAINTING" ? "Painting" : "Video"} for {addSubmissionAuthorTarget.name || addSubmissionAuthorTarget.email}
+                    Start Writing for {addSubmissionAuthorTarget.name || addSubmissionAuthorTarget.email}
                   </h2>
                   <p className="text-xs text-gray-500">
-                    Publish or save a {addSubmissionType.toLowerCase()} submission on behalf of this author.
+                    Choose a content type and submit on behalf of this author.
                   </p>
                 </div>
               </div>
@@ -9030,7 +8944,21 @@ function EditorialDashboardContent() {
             </div>
 
             {/* Type Switcher */}
-            <div className="grid grid-cols-2 gap-2 p-1.5 bg-gray-100 rounded-2xl">
+            <div className="grid grid-cols-3 gap-2 p-1.5 bg-gray-100 rounded-2xl">
+              <button
+                type="button"
+                onClick={() => {
+                  setAddSubmissionType("STORY");
+                  setAddSubmissionError(null);
+                }}
+                className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  addSubmissionType === "STORY"
+                    ? "bg-white text-gray-900 shadow-xs"
+                    : "text-gray-600 hover:text-gray-900"
+                }`}
+              >
+                <FileText className="w-3.5 h-3.5" /> Article
+              </button>
               <button
                 type="button"
                 onClick={() => {
@@ -9044,7 +8972,7 @@ function EditorialDashboardContent() {
                     : "text-gray-600 hover:text-gray-900"
                 }`}
               >
-                🎨 Painting
+                <Palette className="w-3.5 h-3.5" /> Painting
               </button>
               <button
                 type="button"
@@ -9059,7 +8987,7 @@ function EditorialDashboardContent() {
                     : "text-gray-600 hover:text-gray-900"
                 }`}
               >
-                🎬 Video
+                <Video className="w-3.5 h-3.5" /> Video
               </button>
             </div>
 
@@ -9073,7 +9001,40 @@ function EditorialDashboardContent() {
 
             {/* Form Fields */}
             <div className="space-y-4">
-              {/* Title & Category row */}
+              {/* STORY: CTA to open Article Studio */}
+              {addSubmissionType === "STORY" && (
+                <div className="rounded-2xl border-2 border-dashed border-gray-200 bg-gray-50 p-8 flex flex-col items-center text-center gap-4">
+                  <div className="w-14 h-14 rounded-2xl bg-gray-900 flex items-center justify-center text-2xl shadow-sm">
+                    <PenLine className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-gray-900">Open Article Studio</p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Writing an article uses the full rich-text editor. Click below to open the Article Studio for{" "}
+                      <span className="font-semibold text-gray-800">{addSubmissionAuthorTarget?.name || addSubmissionAuthorTarget?.email}</span>.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAddSubmissionModalOpen(false);
+                      setStoryAuthorTarget(addSubmissionAuthorTarget);
+                      setStoryStudioTitle("");
+                      setStoryStudioContent("");
+                      setStoryStudioCoverFile(null);
+                      setStoryStudioCoverPreview(null);
+                      setAuthorStoryStudioOpen(true);
+                    }}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-white bg-gray-900 hover:bg-gray-700 border border-gray-800 shadow-xs cursor-pointer transition-all"
+                  >
+                    <BookOpen className="w-4 h-4" />
+                    Open Article Studio
+                  </button>
+                </div>
+              )}
+
+              {/* PAINTING / VIDEO: Title & Category row */}
+              {addSubmissionType !== "STORY" && (
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="sm:col-span-2">
                   <label className="block text-xs font-bold text-gray-900 mb-1.5 uppercase tracking-wider">
@@ -9113,8 +9074,12 @@ function EditorialDashboardContent() {
                   </select>
                 </div>
               </div>
+              )}
 
-              {/* Description (Required) */}
+
+
+              {/* Description (Required) - only for PAINTING / VIDEO */}
+              {addSubmissionType !== "STORY" && (
               <div>
                 <label className="block text-xs font-bold text-gray-900 mb-1.5 uppercase tracking-wider">
                   Description <span className="text-rose-500">*</span>
@@ -9132,6 +9097,9 @@ function EditorialDashboardContent() {
                   className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium text-gray-900 outline-none focus:border-black focus:bg-white transition-all shadow-xs resize-none"
                 />
               </div>
+              )}
+
+
 
               {/* PAINTING Type Specifics */}
               {addSubmissionType === "PAINTING" && (
@@ -9303,6 +9271,7 @@ function EditorialDashboardContent() {
                 Cancel
               </Button>
 
+              {addSubmissionType !== "STORY" && (
               <div className="flex items-center gap-2 w-full sm:w-auto">
                 <Button
                   type="button"
@@ -9327,6 +9296,7 @@ function EditorialDashboardContent() {
                   {savingAddSubmission ? "Publishing..." : `Publish ${addSubmissionType === "PAINTING" ? "Painting" : "Video"} Directly`}
                 </Button>
               </div>
+              )}
             </div>
           </div>
         </div>
