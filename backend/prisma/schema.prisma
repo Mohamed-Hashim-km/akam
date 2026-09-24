@@ -445,7 +445,7 @@ model MediaVideo {
   id          String   @id @default(uuid())
   title       String
   description String   @db.Text
-  category    String   // 'interviews' | 'conversations' | 'cultural' | 'recordings'
+  category    String   // 'interviews' | 'discussions' | 'cultural' | 'recordings' | 'conversations'
   youtubeUrl  String
   youtubeId   String
   isPublished Boolean  @default(true)

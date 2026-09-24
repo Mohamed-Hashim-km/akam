@@ -38,6 +38,7 @@ import { useSubscription } from "@/lib/useSubscription";
 import dynamic from "next/dynamic";
 
 const FreemiumPaywall = dynamic(() => import("@/components/FreemiumPaywall"), { ssr: false });
+const StudentVerificationModal = dynamic(() => import("@/components/StudentVerificationModal"), { ssr: false });
 
 // Swiper CSS imports
 import "swiper/css";
@@ -113,6 +114,9 @@ export default function WorkDetailPage() {
   const [submittingReport, setSubmittingReport] = useState(false);
   const [reportSuccess, setReportSuccess] = useState(false);
 
+  // Student Verification Modal — lifted to page level so it survives FreemiumPaywall unmount
+  const [studentModalOpen, setStudentModalOpen] = useState(false);
+
   // Reading Progress State
   const [readingProgress, setReadingProgress] = useState(0);
   const progressTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -120,7 +124,7 @@ export default function WorkDetailPage() {
 
   // Load user data from localStorage
   // ── Freemium / Subscription ─────────────────────────────────────────────
-  const { isSubscribed, refreshSubscription } = useSubscription();
+  const { isSubscribed, isLoading: isSubscriptionLoading, refreshSubscription } = useSubscription();
 
   const loadUser = () => {
     const savedUser = localStorage.getItem("akam_user");
@@ -445,34 +449,47 @@ export default function WorkDetailPage() {
     }
   };
 
+  // ─── Markdown / HTML helpers (matching submit/page.tsx Live Reader View) ───
+  const convertMarkdownToHtml = (mdStr: string): string => {
+    if (!mdStr) return "";
+    let html = mdStr.replace(/\r\n/g, "\n");
+    html = html.replace(/&nbsp;/gi, " ").replace(/&#160;/gi, " ");
+    html = html.replace(/!\[(.*?)\]\((.*?)\)/g, '<div contenteditable="false" class="my-6 text-center select-none"><img src="$2" alt="$1" class="max-h-[420px] w-auto mx-auto rounded-2xl border border-gray-200 shadow-md object-cover inline-block" /></div><p><br></p>');
+    html = html.replace(/^###\s+(.*)$/gm, '<h3 class="text-xl font-bold my-3 text-gray-900">$1</h3>');
+    html = html.replace(/^##\s+(.*)$/gm, '<h2 class="text-2xl font-bold my-4 text-gray-950">$1</h2>');
+    html = html.replace(/\*\*(.*?)\*\*/g, "<b>$1</b>").replace(/__(.*?)__/g, "<b>$1</b>");
+    html = html.replace(/\*(.*?)\*/g, "<i>$1</i>");
+    html = html.replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-emerald-700 underline font-medium hover:text-emerald-900">$1</a>');
+    html = html.replace(/^>\s+(.*)$/gm, '<blockquote class="border-l-4 border-emerald-500 pl-4 py-2 italic my-4 text-gray-800 bg-gray-50/70 rounded-r-xl">$1</blockquote>');
+    html = html.replace(/^[\*\-]\s+(.*)$/gm, '<ul class="my-2"><li class="ml-4 list-disc mb-1 text-gray-900">$1</li></ul>');
+    html = html.replace(/^\d+\.\s+(.*)$/gm, '<ol class="my-2"><li class="ml-4 list-decimal mb-1 text-gray-900">$1</li></ol>');
+    html = html.replace(/\*\*/g, "");
+    const lines = html.split("\n");
+    const resultBlocks: string[] = [];
+    let currentParagraphLines: string[] = [];
+    const flushParagraph = () => {
+      if (currentParagraphLines.length > 0) {
+        const text = currentParagraphLines.join("<br>");
+        if (text.trim()) resultBlocks.push(`<p class="mb-6 leading-[1.9] text-gray-900 whitespace-pre-wrap">${text}</p>`);
+        currentParagraphLines = [];
+      }
+    };
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) { flushParagraph(); continue; }
+      if (trimmed.startsWith('<div contenteditable="false"') || trimmed.startsWith("<h2") || trimmed.startsWith("<h3") || trimmed.startsWith("<blockquote") || trimmed.startsWith("<ul") || trimmed.startsWith("<ol") || trimmed.startsWith("<p")) {
+        flushParagraph(); resultBlocks.push(trimmed); continue;
+      }
+      currentParagraphLines.push(trimmed);
+    }
+    flushParagraph();
+    return resultBlocks.join("");
+  };
+
   const renderStoryBody = (contentStr?: string) => {
     if (!contentStr || !contentStr.trim()) {
-      return (
-       null
-      );
+      return null;
     }
-
-    // Markdown -> HTML inline converter
-    const mdToHtml = (md: string): string => {
-      let h = md.replace(/&nbsp;/gi, " ");
-      // Headings
-      h = h.replace(/^###\s+(.*)$/gm, '<h3 class="text-xl font-bold my-4 text-gray-900">$1</h3>');
-      h = h.replace(/^##\s+(.*)$/gm, '<h2 class="text-2xl font-bold my-5 text-gray-950">$1</h2>');
-      // Bold / Italic
-      h = h.replace(/\*\*(.*?)\*\*/g, "<b>$1</b>");
-      h = h.replace(/__(.*?)__/g, "<b>$1</b>");
-      h = h.replace(/\*(.*?)\*/g, "<i>$1</i>");
-      // Blockquote
-      h = h.replace(/^>\s+(.*)$/gm, '<blockquote class="border-l-4 border-emerald-500 pl-4 py-2 italic my-4 text-gray-800 bg-gray-50/70 rounded-r-xl">$1</blockquote>');
-      // Links
-      h = h.replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-emerald-700 underline font-medium hover:text-emerald-900">$1</a>');
-      // Lists
-      h = h.replace(/^[\*\-]\s+(.*)$/gm, '<li class="ml-5 list-disc mb-1 text-gray-900">$1</li>');
-      h = h.replace(/^(\d+)\.\s+(.*)$/gm, '<li class="ml-5 list-decimal mb-1 text-gray-900">$2</li>');
-      // Strip leftover ** markers
-      h = h.replace(/\*\*/g, "");
-      return h;
-    };
 
     // Split at image boundaries
     const withImgs = contentStr.replace(/!\[(.*?)\]\((.*?)\)/g, '<img src="$2" alt="$1" />');
@@ -496,59 +513,29 @@ export default function WorkDetailPage() {
     }
     if (parts.length === 0) parts.push({ type: "text", value: contentStr });
 
-    // Render
+    // Render with identical typography prose tokens as submit/page.tsx:L821
     return (
-      <div className="space-y-0">
-        {parts.map((part, idx) => {
+      <div className="space-y-4 pt-2 text-gray-900 font-normal text-base sm:text-lg">
+        {parts.map((part, index) => {
           if (part.type === "image") {
             return (
-              <div key={idx} className="my-8 sm:my-10 flex justify-center">
+              <div key={index} className="my-6 sm:my-8 flex justify-center">
                 <img
-                  src={part.src}
+                  src={formatAssetUrl(part.src)}
                   alt={part.alt}
-                  className="w-full max-w-4xl h-auto max-h-[600px] object-cover rounded-2xl shadow-xs"
+                  className="w-full max-w-3xl h-auto max-h-[500px] object-cover rounded-2xl shadow-xs"
                 />
               </div>
             );
           }
-
-          // Text — line-by-line: first blank = paragraph end, extra blanks = section gap
-          const lines = part.value.replace(/\r\n/g, "\n").split("\n");
-          const blocks: React.ReactNode[] = [];
-          let paraLines: string[] = [];
-
-          const flushPara = (key: string) => {
-            if (paraLines.length > 0) {
-              const combined = paraLines.join("<br />");
-              if (combined.trim()) {
-                blocks.push(
-                  <div
-                    key={key}
-                    className="text-[#1A1A1A] text-base sm:text-lg leading-[1.9] mb-6 font-normal [&_b]:font-bold [&_i]:italic [&_a]:text-emerald-700 [&_a]:underline [&_a]:hover:text-emerald-900 [&_h2]:text-2xl [&_h2]:font-bold [&_h2]:my-5 [&_h2]:text-gray-950 [&_h3]:text-xl [&_h3]:font-bold [&_h3]:my-4 [&_h3]:text-gray-900 [&_blockquote]:border-l-4 [&_blockquote]:border-emerald-500 [&_blockquote]:pl-4 [&_blockquote]:py-2 [&_blockquote]:italic [&_blockquote]:my-4 [&_blockquote]:bg-gray-50/70 [&_blockquote]:rounded-r-xl [&_li]:ml-5 [&_li]:list-disc [&_li]:mb-1"
-                    dangerouslySetInnerHTML={{ __html: mdToHtml(combined) }}
-                  />
-                );
-              }
-              paraLines = [];
-            }
-          };
-
-          lines.forEach((line, li) => {
-            if (line.trim() === "") {
-              if (paraLines.length > 0) {
-                flushPara(`${idx}-p-${li}`);
-              } else {
-                blocks.push(
-                  <div key={`${idx}-gap-${li}`} className="mb-10 select-none" aria-hidden="true" />
-                );
-              }
-            } else {
-              paraLines.push(line);
-            }
-          });
-          flushPara(`${idx}-p-end`);
-
-          return <div key={idx}>{blocks}</div>;
+          const renderedChunkHtml = convertMarkdownToHtml(part.value);
+          return (
+            <div
+              key={index}
+              className="prose prose-lg max-w-none text-gray-900 leading-[1.9] font-normal [&_p]:mb-6 [&_p]:mt-0 [&_p]:leading-[1.9] [&_p]:text-[#1A1A1A] [&_b]:font-bold [&_strong]:font-bold [&_i]:italic [&_em]:italic [&_a]:text-emerald-700 [&_a]:underline [&_a]:font-medium [&_ul]:list-disc [&_ul]:pl-6 [&_ul]:mb-4 [&_ol]:list-decimal [&_ol]:pl-6 [&_ol]:mb-4 [&_h2]:text-2xl [&_h2]:font-bold [&_h2]:mt-6 [&_h2]:mb-3 [&_h2]:text-gray-950 [&_h3]:text-xl [&_h3]:font-bold [&_h3]:mt-5 [&_h3]:mb-2 [&_h3]:text-gray-900 [&_blockquote]:border-l-4 [&_blockquote]:border-emerald-500 [&_blockquote]:pl-4 [&_blockquote]:py-2 [&_blockquote]:italic [&_blockquote]:my-4 [&_blockquote]:bg-gray-50/70 [&_blockquote]:rounded-r-xl"
+              dangerouslySetInnerHTML={{ __html: renderedChunkHtml }}
+            />
+          );
         })}
       </div>
     );
@@ -644,7 +631,7 @@ export default function WorkDetailPage() {
       <main className="container max-w-5xl lg:max-w-6xl px-4 sm:px-6 lg:px-8 mx-auto py-10 sm:py-16">
         <article>
           {/* Header Metadata Section */}
-          <header className="mb-12 text-center max-w-3xl lg:max-w-4xl mx-auto">
+          <header className="mb-10 text-center max-w-3xl mx-auto">
             <div className="flex items-center justify-center gap-2 mb-4">
               <span className="bg-[#E4F953] text-[#040706] font-bold text-[10px] uppercase tracking-wider px-3.5 py-1.5 rounded-xl shadow-xs inline-block">
                 {(story.category || "Fiction").toUpperCase()}
@@ -751,13 +738,14 @@ export default function WorkDetailPage() {
           ) : null}
 
           {/* Narrative Body Text */}
-          <div ref={storyContentRef} className="max-w-3xl lg:max-w-4xl mx-auto relative">
+          <div ref={storyContentRef} className="max-w-3xl mx-auto relative">
             {/* For non-subscribers: show preview only with paywall anchored directly below */}
             {(() => {
               const userRoleUpper = (user?.role || "").toUpperCase();
               const isStaff = ["ADMIN", "EDITOR", "EDITORIAL", "CHIEF_EDITOR", "STAFF_EDITOR"].includes(userRoleUpper);
               const isAuthor = Boolean(user && (user.id === story.authorId || user.email === story.authorEmail));
-              const canReadFull = isStaff || isAuthor || isSubscribed || story.hasFullAccess;
+              // Wait for server subscription check before allowing full access
+              const canReadFull = !isSubscriptionLoading && (isStaff || isAuthor || isSubscribed || story.hasFullAccess);
 
               if (!canReadFull) {
                 return (
@@ -776,6 +764,7 @@ export default function WorkDetailPage() {
                         await refreshSubscription();
                         await fetchStoryData(false);
                       }}
+                      onStudentApply={() => setStudentModalOpen(true)}
                     />
                   </div>
                 );
@@ -786,7 +775,7 @@ export default function WorkDetailPage() {
           </div>
 
           {/* Social Engagement Floating Pill Bar */}
-          <div className="max-w-3xl lg:max-w-4xl mx-auto mt-12 pt-8 border-t border-gray-200">
+          <div className="max-w-3xl mx-auto mt-12 pt-8 border-t border-gray-200">
             <div className="flex items-center justify-between bg-white border border-gray-200 rounded-2xl p-4 shadow-xs">
               <div className="flex items-center gap-3">
                 {/* Like Button */}
@@ -841,7 +830,7 @@ export default function WorkDetailPage() {
 
           {/* Author Card Footer */}
           {story.authorBio && (
-            <div className="max-w-3xl lg:max-w-4xl mx-auto mt-10 bg-white border border-gray-200 rounded-3xl p-6 sm:p-8 flex items-start gap-4 shadow-xs">
+            <div className="max-w-3xl mx-auto mt-10 bg-white border border-gray-200 rounded-3xl p-6 sm:p-8 flex items-start gap-4 shadow-xs">
               <div className="w-14 h-14 rounded-full bg-gray-200 overflow-hidden relative shadow-xs shrink-0">
                 {story.authorAvatarUrl ? (
                   <Image
@@ -865,7 +854,7 @@ export default function WorkDetailPage() {
           )}
 
           {/* Reader Discussion / Comments Section */}
-          <section id="comments-section" className="max-w-3xl lg:max-w-4xl mx-auto mt-14 pt-8 border-t border-gray-200">
+          <section id="comments-section" className="max-w-3xl mx-auto mt-14 pt-8 border-t border-gray-200">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-bold text-gray-950 flex items-center gap-2">
                 <MessageSquare className="w-5 h-5 text-gray-700" />
@@ -1205,6 +1194,14 @@ export default function WorkDetailPage() {
           fetchEngagement(story.id);
         }}
       />
+
+      {/* Student Verification Modal — page-level so it survives FreemiumPaywall unmount */}
+      {studentModalOpen && (
+        <StudentVerificationModal
+          isOpen={studentModalOpen}
+          onClose={() => setStudentModalOpen(false)}
+        />
+      )}
     </div>
   );
 }

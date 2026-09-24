@@ -39,8 +39,6 @@ export interface StudentApplication {
   referenceId: string;
   fullName: string;
   institution: string;
-  studentIdNumber?: string;
-  course?: string;
   email: string;
   idCardUrl?: string;
   idCardName?: string;
@@ -452,8 +450,6 @@ export const StudentVerificationsPanel: React.FC<StudentVerificationsPanelProps>
       referenceId: refId,
       fullName: manualName.trim(),
       institution: manualCollege.trim(),
-      studentIdNumber: "STUDENT_PASS",
-      course: "Student Pass",
       email: manualEmail.trim(),
       idCardUrl: finalIdCardUrl,
       idCardName: finalIdCardName,
@@ -482,8 +478,6 @@ export const StudentVerificationsPanel: React.FC<StudentVerificationsPanelProps>
           referenceId: refId,
           fullName: newApp.fullName,
           institution: newApp.institution,
-          studentIdNumber: newApp.studentIdNumber,
-          course: newApp.course,
           email: newApp.email,
           idCardUrl: newApp.idCardUrl,
           idCardName: newApp.idCardName,
@@ -1366,14 +1360,14 @@ export const StudentVerificationsPanel: React.FC<StudentVerificationsPanelProps>
 
               <div>
                 <label className="block text-xs font-bold text-gray-700 mb-1">
-                  Student Email Address <span className="text-red-500">*</span>
+                  Email Address <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="email"
                   required
                   value={manualEmail}
                   onChange={(e) => setManualEmail(e.target.value)}
-                  placeholder="student@college.edu"
+                  placeholder="student@example.com"
                   className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-2xl text-xs text-gray-900 focus:bg-white focus:outline-none focus:border-black shadow-xs transition"
                 />
               </div>

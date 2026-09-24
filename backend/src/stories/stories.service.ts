@@ -484,8 +484,8 @@ export class StoriesService {
   async update(id: string, authorId: string, dto: UpdateStoryDto): Promise<StoryRow> {
     const story = await this.findRawStory(id);
     if (story.authorId !== authorId) throw new ForbiddenException('Not your story');
-    if (!['DRAFT', 'REJECTED'].includes(story.status)) {
-      throw new BadRequestException('Only DRAFT or REJECTED stories can be edited');
+    if (!['DRAFT', 'REJECTED', 'PENDING'].includes(story.status)) {
+      throw new BadRequestException('Only DRAFT, REJECTED, or PENDING stories can be edited');
     }
 
     const updates: string[] = ['"updatedAt" = now()'];
@@ -530,8 +530,8 @@ export class StoriesService {
   async submitForReview(id: string, authorId: string): Promise<{ id: string; status: string }> {
     const story = await this.findRawStory(id);
     if (story.authorId !== authorId) throw new ForbiddenException('Not your story');
-    if (!['DRAFT', 'REJECTED'].includes(story.status)) {
-      throw new BadRequestException('Only DRAFT or REJECTED stories can be submitted');
+    if (!['DRAFT', 'REJECTED', 'PENDING'].includes(story.status)) {
+      throw new BadRequestException('Only DRAFT, REJECTED, or PENDING stories can be submitted');
     }
     if (!story.coverImageUrl) {
       throw new BadRequestException('A cover image is required before submitting your story for editorial review');

@@ -59,7 +59,7 @@ export default function RootLayout({
     >
       <body className="flex flex-col min-h-screen text-dark-bg font-poppins">
         <LayoutShell>{children}</LayoutShell>
-        <Script src="/smoothScroll/smoothScroll.js" strategy="afterInteractive" />
+        {/* <Script src="/smoothScroll/smoothScroll.js" strategy="afterInteractive" /> */}
       </body>
     </html>
   );

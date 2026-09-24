@@ -23,8 +23,6 @@ export interface StudentApplicationRecord {
   referenceId: string;
   fullName: string;
   institution: string;
-  studentIdNumber: string;
-  course: string;
   email: string;
   idCardUrl: string;
   idCardName?: string;
@@ -112,7 +110,27 @@ export class SettingsService {
     if (row && row.value !== undefined && row.value !== null) {
       const list = typeof row.value === 'string' ? JSON.parse(row.value) : row.value;
       if (Array.isArray(list)) {
-        return list;
+        let hasLegacyFields = false;
+        const cleaned = list.map((item: any) => {
+          if (item.studentIdNumber !== undefined || item.course !== undefined) {
+            hasLegacyFields = true;
+          }
+          const { studentIdNumber, course, ...clean } = item;
+          return clean as StudentApplicationRecord;
+        });
+
+        if (hasLegacyFields) {
+          this.prisma
+            .execute(
+              `UPDATE site_setting SET value = $1::jsonb, "updatedAt" = now() WHERE key = 'student_applications'`,
+              [JSON.stringify(cleaned)],
+            )
+            .catch((e) =>
+              this.logger.warn(`Could not persist cleaned student applications: ${e.message}`),
+            );
+        }
+
+        return cleaned;
       }
     }
 
@@ -123,8 +141,6 @@ export class SettingsService {
         referenceId: 'AKAM-STU-2026-91024',
         fullName: 'Devika Madhavan',
         institution: "Maharaja's College, Ernakulam",
-        studentIdNumber: '2024MAL5581',
-        course: 'MA Malayalam Literature, 1st Year',
         email: 'devika.m@maharajas.ac.in',
         idCardUrl: '/images/home/aboutDigital.png',
         idCardName: 'Devika_College_ID.png',
@@ -136,8 +152,6 @@ export class SettingsService {
         referenceId: 'AKAM-STU-2026-72419',
         fullName: 'Arjun Radhakrishnan',
         institution: 'University of Calicut, Thenhipalam',
-        studentIdNumber: '2023ENG8841',
-        course: 'BA English & Comparative Literature',
         email: 'arjun.radha@uoc.ac.in',
         idCardUrl: '/images/home/aboutDigital.png',
         idCardName: 'Arjun_Student_Pass.jpg',
@@ -152,8 +166,6 @@ export class SettingsService {
         referenceId: 'AKAM-STU-2026-44012',
         fullName: 'Rahul Menon',
         institution: 'NSS College, Ottapalam',
-        studentIdNumber: '2022HST1092',
-        course: 'BA History, Final Year',
         email: 'rahul.menon99@gmail.com',
         idCardUrl: '/images/home/aboutDigital.png',
         idCardName: 'Menon_ID_Scan.png',
@@ -215,10 +227,8 @@ export class SettingsService {
         (a) =>
           a.fullName?.toLowerCase().includes(q) ||
           a.institution?.toLowerCase().includes(q) ||
-          a.studentIdNumber?.toLowerCase().includes(q) ||
           a.email?.toLowerCase().includes(q) ||
-          a.referenceId?.toLowerCase().includes(q) ||
-          a.course?.toLowerCase().includes(q),
+          a.referenceId?.toLowerCase().includes(q),
       );
     }
 
@@ -247,8 +257,6 @@ export class SettingsService {
   async submitStudentApplication(dto: {
     fullName: string;
     institution: string;
-    studentIdNumber?: string;
-    course?: string;
     email: string;
     idCardUrl?: string;
     idCardName?: string;
@@ -264,8 +272,6 @@ export class SettingsService {
       referenceId: refId,
       fullName: dto.fullName,
       institution: dto.institution,
-      studentIdNumber: dto.studentIdNumber || 'STUDENT_PASS',
-      course: dto.course || 'Student Pass',
       email: dto.email,
       idCardUrl: dto.idCardUrl || '',
       idCardName: dto.idCardName || '',
@@ -276,8 +282,7 @@ export class SettingsService {
     const existingIndex = list.findIndex(
       (item) =>
         item.referenceId === refId ||
-        (item.email && dto.email && item.email.trim().toLowerCase() === dto.email.trim().toLowerCase()) ||
-        (item.email === dto.email && item.studentIdNumber === dto.studentIdNumber),
+        (item.email && dto.email && item.email.trim().toLowerCase() === dto.email.trim().toLowerCase()),
     );
 
     if (existingIndex >= 0) {
@@ -335,8 +340,6 @@ export class SettingsService {
       referenceId: refId,
       fullName: dto.fullName.trim(),
       institution: dto.institution.trim(),
-      studentIdNumber: dto.studentIdNumber?.trim() || 'STUDENT_PASS',
-      course: dto.course?.trim() || 'Student Pass',
       email: dto.email.trim(),
       idCardUrl: dto.idCardUrl || '/images/home/aboutDigital.png',
       idCardName: dto.idCardName || 'Direct_Editorial_Grant.png',
@@ -787,18 +790,10 @@ export class SettingsService {
                 </tr>
                 <tr>
                   <td style="padding: 13px 18px; border-bottom: 1px solid #1E2D27; font-size: 12px; color: #6B7280;">
-                    Student Roll / ID
-                  </td>
-                  <td style="padding: 13px 18px; border-bottom: 1px solid #1E2D27; font-size: 12px; font-weight: 600; color: #E5E7EB; font-family: monospace;">
-                    ${record.studentIdNumber}
-                  </td>
-                </tr>
-                <tr>
-                  <td style="padding: 13px 18px; border-bottom: 1px solid #1E2D27; font-size: 12px; color: #6B7280;">
-                    Course of Study
+                    Email
                   </td>
                   <td style="padding: 13px 18px; border-bottom: 1px solid #1E2D27; font-size: 12px; font-weight: 600; color: #E5E7EB;">
-                    ${record.course}
+                    ${record.email}
                   </td>
                 </tr>
                 <tr>
@@ -900,8 +895,6 @@ export class SettingsService {
         <div style="background: #0A120E; border: 1px solid #16382B; border-radius: 12px; padding: 18px; margin-bottom: 24px; font-size: 13px;">
           <div style="margin-bottom: 8px;"><strong style="color: #E4F953;">Applicant:</strong> <span style="color: #ffffff;">${record.fullName}</span></div>
           <div style="margin-bottom: 8px;"><strong style="color: #E4F953;">Institution:</strong> <span style="color: #ffffff;">${record.institution}</span></div>
-          <div style="margin-bottom: 8px;"><strong style="color: #E4F953;">Course / Year:</strong> <span style="color: #ffffff;">${record.course}</span></div>
-          <div style="margin-bottom: 8px;"><strong style="color: #E4F953;">Student ID:</strong> <span style="color: #ffffff;">${record.studentIdNumber}</span></div>
           <div style="margin-bottom: 8px;"><strong style="color: #E4F953;">Email:</strong> <span style="color: #ffffff;">${record.email}</span></div>
           <div><strong style="color: #E4F953;">Reference ID:</strong> <span style="color: #ffffff;">${record.referenceId}</span></div>
         </div>

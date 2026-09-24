@@ -12,7 +12,7 @@ export class CreateMediaDto {
   @IsNotEmpty()
   description: string;
 
-  @ApiProperty({ description: 'Category (interviews | conversations | cultural | recordings)' })
+  @ApiProperty({ description: 'Category (interviews | discussions | cultural | recordings | conversations)' })
   @IsString()
   @IsNotEmpty()
   category: string;

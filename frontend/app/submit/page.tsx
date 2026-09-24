@@ -39,30 +39,73 @@ import {
   Video,
   Play,
   ArrowRight,
+  Sparkles,
+  RotateCcw,
 } from "lucide-react";
 import Button from "@/components/ui/Button";
 import { API_BASE_URL, apiFetch } from "@/lib/config";
 
 type SubmissionType = "STORY" | "PAINTING" | "VIDEO";
 
-const SUBMISSION_TABS: { type: SubmissionType; label: string; icon: React.ReactNode; description: string }[] = [
+interface SubmissionTabItem {
+  type: SubmissionType;
+  label: string;
+  icon: React.ReactNode;
+  description: string;
+  activeCard: string;
+  activeIconWrapper: string;
+  activeLabel: string;
+  activeDesc: string;
+  activeCheck: string;
+  inactiveCard: string;
+  inactiveIconWrapper: string;
+}
+
+const SUBMISSION_TABS: SubmissionTabItem[] = [
   {
     type: "STORY",
     label: "Article / Story",
     icon: <BookOpen className="w-5 h-5" />,
     description: "Write & submit an article, blog, story, or essay",
+    // globals.css L15: --color-primary-green: #21B573
+    activeCard: "border-[#21B573] bg-[#21B573] text-white shadow-md hover:bg-[#1ea266]",
+    activeIconWrapper: "bg-white/20 text-white",
+    activeLabel: "text-white",
+    activeDesc: "text-white/85",
+    activeCheck: "text-white",
+    inactiveCard:
+      "border-gray-200 bg-white text-gray-700 hover:border-[#21B573] hover:bg-[#21B573]/10 hover:shadow-xs",
+    inactiveIconWrapper: "bg-gray-100 text-gray-700 group-hover:bg-[#21B573]/20 group-hover:text-[#21B573]",
   },
   {
     type: "PAINTING",
     label: "Painting",
     icon: <Palette className="w-5 h-5" />,
     description: "Upload a painting, artwork, or visual piece",
+    // Creative Purple (matches artwork badges & upload container across the app)
+    activeCard: "border-purple-600 bg-purple-600 text-white shadow-md hover:bg-purple-700",
+    activeIconWrapper: "bg-white/20 text-white",
+    activeLabel: "text-white",
+    activeDesc: "text-white/85",
+    activeCheck: "text-white",
+    inactiveCard:
+      "border-gray-200 bg-white text-gray-700 hover:border-purple-500 hover:bg-purple-50 hover:shadow-xs",
+    inactiveIconWrapper: "bg-gray-100 text-gray-700 group-hover:bg-purple-100 group-hover:text-purple-600",
   },
   {
     type: "VIDEO",
     label: "Video",
     icon: <Video className="w-5 h-5" />,
     description: "Share a YouTube or Vimeo video link",
+    // globals.css L17: --color-brand-yellow: #E4F953
+    activeCard: "border-[#cce42e] bg-[#E4F953] text-[#040706] shadow-md hover:bg-[#d8ed3e]",
+    activeIconWrapper: "bg-[#040706]/10 text-[#040706]",
+    activeLabel: "text-[#040706]",
+    activeDesc: "text-[#040706]/75",
+    activeCheck: "text-[#040706]",
+    inactiveCard:
+      "border-gray-200 bg-white text-gray-700 hover:border-[#cce42e] hover:bg-[#E4F953]/25 hover:shadow-xs",
+    inactiveIconWrapper: "bg-gray-100 text-gray-700 group-hover:bg-[#E4F953]/35 group-hover:text-[#040706]",
   },
 ];
 
@@ -80,6 +123,130 @@ function extractYoutubeId(url: string): string | null {
 function extractVimeoId(url: string): string | null {
   const m = url.match(/vimeo\.com\/(\d+)/);
   return m ? m[1] : null;
+}
+
+function createDemoImageFile(
+  name: string,
+  titleText: string,
+  subtitleText: string,
+  color1: string,
+  color2: string
+): { file: File; previewUrl: string } | null {
+  if (typeof window === "undefined" || typeof document === "undefined") return null;
+  try {
+    const canvas = document.createElement("canvas");
+    canvas.width = 1200;
+    canvas.height = 750;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+
+    // Gradient background
+    const gradient = ctx.createLinearGradient(0, 0, 1200, 750);
+    gradient.addColorStop(0, color1);
+    gradient.addColorStop(1, color2);
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 1200, 750);
+
+    // Subtle background decorative circles
+    ctx.fillStyle = "rgba(255, 255, 255, 0.08)";
+    ctx.beginPath();
+    ctx.arc(1060, 160, 280, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = "rgba(255, 255, 255, 0.05)";
+    ctx.beginPath();
+    ctx.arc(140, 620, 220, 0, Math.PI * 2);
+    ctx.fill();
+
+    // AKAM Brand Pill
+    ctx.fillStyle = "#E4F953";
+    if (typeof (ctx as any).roundRect === "function") {
+      (ctx as any).roundRect(80, 70, 180, 42, 21);
+    } else {
+      ctx.fillRect(80, 70, 180, 42);
+    }
+    ctx.fill();
+
+    ctx.font = "bold 16px sans-serif";
+    ctx.fillStyle = "#040706";
+    ctx.fillText("AKAM DIGITAL", 115, 97);
+
+    // Decorative divider line
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.25)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(80, 410);
+    ctx.lineTo(1120, 410);
+    ctx.stroke();
+
+    // Main Title
+    ctx.font = "bold 44px sans-serif";
+    ctx.fillStyle = "#ffffff";
+    ctx.fillText(titleText, 80, 360);
+
+    // Subtitle
+    ctx.font = "normal 24px sans-serif";
+    ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
+    ctx.fillText(subtitleText, 80, 470);
+
+    // Tagline
+    ctx.font = "italic 18px sans-serif";
+    ctx.fillStyle = "rgba(255, 255, 255, 0.65)";
+    ctx.fillText("Akam Cultural Editorial • Featured Showcase", 80, 680);
+
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
+    const arr = dataUrl.split(",");
+    const bstr = atob(arr[1]);
+    let n = bstr.length;
+    const u8arr = new Uint8Array(n);
+    while (n--) {
+      u8arr[n] = bstr.charCodeAt(n);
+    }
+    const blob = new Blob([u8arr], { type: "image/jpeg" });
+    const file = new File([blob], name, { type: "image/jpeg" });
+    const previewUrl = URL.createObjectURL(blob);
+    return { file, previewUrl };
+  } catch (err) {
+    console.error("Failed to generate demo image:", err);
+    return null;
+  }
+}
+
+async function fetchYoutubeThumbnailFile(
+  youtubeId: string
+): Promise<{ file: File; previewUrl: string } | null> {
+  if (typeof window === "undefined") return null;
+  try {
+    const maxresUrl = `https://img.youtube.com/vi/${youtubeId}/maxresdefault.jpg`;
+    const hqUrl = `https://img.youtube.com/vi/${youtubeId}/hqdefault.jpg`;
+
+    let res = await fetch(maxresUrl);
+    let blob = res.ok ? await res.blob() : null;
+
+    if (!blob || blob.size < 2000) {
+      const fallbackRes = await fetch(hqUrl);
+      if (fallbackRes.ok) {
+        blob = await fallbackRes.blob();
+      }
+    }
+
+    if (blob) {
+      const file = new File([blob], `youtube-${youtubeId}.jpg`, { type: "image/jpeg" });
+      const previewUrl = URL.createObjectURL(blob);
+      return { file, previewUrl };
+    }
+
+    return {
+      file: new File([], `youtube-${youtubeId}.jpg`, { type: "image/jpeg" }),
+      previewUrl: hqUrl,
+    };
+  } catch (err) {
+    console.error("Failed to fetch YouTube thumbnail:", err);
+    return {
+      file: new File([], `youtube-${youtubeId}.jpg`, { type: "image/jpeg" }),
+      previewUrl: `https://img.youtube.com/vi/${youtubeId}/hqdefault.jpg`,
+    };
+  }
 }
 
 export default function SubmitWorkPage() {
@@ -201,11 +368,23 @@ export default function SubmitWorkPage() {
   useEffect(() => {
     if (!videoUrl.trim()) { setVideoPreviewId(null); return; }
     const ytId = extractYoutubeId(videoUrl);
-    if (ytId) { setVideoPreviewId({ type: "youtube", id: ytId }); return; }
+    if (ytId) {
+      setVideoPreviewId({ type: "youtube", id: ytId });
+      // Auto-fetch YouTube thumbnail so no separate cover upload is needed
+      if (!coverFile) {
+        fetchYoutubeThumbnailFile(ytId).then((thumb) => {
+          if (thumb) {
+            setCoverFile(thumb.file);
+            setCoverPreview(thumb.previewUrl);
+          }
+        });
+      }
+      return;
+    }
     const vimId = extractVimeoId(videoUrl);
     if (vimId) { setVideoPreviewId({ type: "vimeo", id: vimId }); return; }
     setVideoPreviewId(null);
-  }, [videoUrl]);
+  }, [videoUrl, coverFile]);
 
   // ─── Formatting helpers ───────────────────────────────────────────────────
   const updateActiveStates = () => {
@@ -479,6 +658,136 @@ export default function SubmitWorkPage() {
     }
   };
 
+  // ─── Demo Auto-Fill ────────────────────────────────────────────────────────
+  const fillDemoData = (type: SubmissionType = submissionType) => {
+    setError(null);
+    setSubmissionType(type);
+
+    if (type === "STORY") {
+      const cat =
+        categories.find(
+          (c: any) =>
+            c.name.toLowerCase().includes("culture") ||
+            c.name.toLowerCase().includes("fiction")
+        )?.name || (categories.length > 0 ? categories[0].name : "Culture");
+      setCategory(cat);
+      setTitle("തീരദേശ സ്മൃതികൾ: മലബാറിന്റെ സാംസ്കാരിക വഴികൾ");
+      setDescription(
+        "നൂറ്റാണ്ടുകളായി അറബിക്കടലിന്റെ തീരത്ത് വികസിച്ച സാംസ്കാരിക പാരമ്പര്യങ്ങളും കടലോര ജീവിതത്തിന്റെ വികാരഭരിതമായ അനുഭവങ്ങളും."
+      );
+
+      const storyCoverUrl =
+        "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSzeHMSIaqaxC25O13SYjHLvs1aIp15uDe_ZUDc9fBJkdfE81bLm9RDiEg&s=10";
+      setCoverPreview(storyCoverUrl);
+      fetch(storyCoverUrl)
+        .then((res) => res.blob())
+        .then((blob) => {
+          const file = new File([blob], "story-cover.jpg", {
+            type: blob.type || "image/jpeg",
+          });
+          setCoverFile(file);
+          setCoverPreview(URL.createObjectURL(blob));
+        })
+        .catch((err) => {
+          console.error("Failed to fetch story cover image blob:", err);
+          setCoverPreview(storyCoverUrl);
+        });
+
+      const storyHtml = `<h2>തീരദേശ സ്മൃതികൾ: മലബാറിന്റെ സാംസ്കാരിക വഴികൾ</h2>
+<p>നൂറ്റാണ്ടുകളായി അറബിക്കടലിന്റെ തിരമാലകൾ തീരത്തോട് മന്ത്രിക്കുന്ന കഥകൾ മലബാറിന്റെ സംസ്കാരത്തെ രൂപപ്പെടുത്തിയിട്ടുണ്ട്. ഉപ്പുകാറ്റും തടിപ്പണിയുടെ ഗന്ധവും ഇഴചേർന്ന ബേപ്പൂരിന്റെ ചരിത്രം ഉരു നിർമ്മാണത്തിന്റെ വൈദഗ്ധ്യവും സമുദ്രവാണിജ്യത്തിന്റെ പാരമ്പര്യവും നമ്മെ ഓർമ്മിപ്പിക്കുന്നു.</p>
+<blockquote class="border-l-4 border-emerald-500 pl-4 py-2 italic my-4 text-gray-800 bg-gray-50/70 rounded-r-xl">"കടൽ വെറുമൊരു ജലാശയമല്ല; അത് തലമുറകളുടെ ഓർമ്മകളും കാത്തിരിപ്പുകളും കണ്ണീരും സംഗമിക്കുന്ന വികാരമാണ്."</blockquote>
+<h3>സാംസ്കാരിക സങ്കലനവും സാഹിത്യ പാരമ്പര്യവും</h3>
+<p>തീരദേശ ജീവിതം മലയാള സാഹിത്യത്തിനും കലകൾക്കും നൽകിയ സംഭാവനകൾ നിസ്തുലമാണ്. മാപ്പിളപ്പാട്ടുകളിലെ സംഗീതവും നാടൻ പാട്ടുകളിലെ കടൽപ്പാട്ടുകളും മനുഷ്യന്റെ അതിജീവനത്തെയും സ്നേഹത്തെയും അടയാളപ്പെടുത്തുന്നു.</p>
+<ul class="my-2">
+<li class="ml-4 list-disc mb-1 text-gray-900"><b>ബേപ്പൂർ ഉരു നിർമ്മാണം:</b> ലോകപ്രശസ്തമായ പാരമ്പര്യ തടിപ്പണി വിസ്മയം.</li>
+<li class="ml-4 list-disc mb-1 text-gray-900"><b>സമുദ്രവ്യാപാര ചരിത്രം:</b> പുരാതന തുറമുഖങ്ങളും സംസ്കാരങ്ങളുടെ കൈമാറ്റവും.</li>
+<li class="ml-4 list-disc mb-1 text-gray-900"><b>വാമൊഴി സാഹിത്യം:</b> കടലോര മനുഷ്യരുടെ അനുഭവ സാക്ഷ്യങ്ങൾ.</li>
+</ul>
+<p>കാലം മാറുമ്പോഴും ഈ തീരങ്ങൾ നമ്മുടെ ഓർമ്മകളിൽ ജ്വലിച്ചുനിൽക്കുന്നു. പുത്തൻ തലമുറയ്ക്ക് ഈ പാരമ്പര്യം പകർന്നുനൽകുക എന്നത് നമ്മുടെ സാംസ്കാരിക ഉത്തരവാദിത്തമാണ്.</p>`;
+
+      setContent(storyHtml);
+      if (editorRef.current) {
+        editorRef.current.innerHTML = storyHtml;
+      } else {
+        setTimeout(() => {
+          if (editorRef.current) {
+            editorRef.current.innerHTML = storyHtml;
+          }
+        }, 60);
+      }
+      setSuccess("Demo article loaded! You can preview or submit now.");
+    } else if (type === "PAINTING") {
+      const cat =
+        categories.find((c: any) => c.name.toLowerCase().includes("art"))
+          ?.name || (categories.length > 0 ? categories[0].name : "Art");
+      setCategory(cat);
+      setTitle("സന്ധ്യാരാഗം (Colors of Twilight)");
+      setDescription(
+        "കേരളത്തിലെ കായലോരങ്ങളിൽ സന്ധ്യാസമയത്ത് വിരിയുന്ന വർണ്ണവിന്യാസങ്ങളെ പ്രമേയമാക്കിയുള്ള ആധുനിക അക്രിലിക് പെയിന്റിംഗ്."
+      );
+
+      const paintingImgUrl = "https://m.media-amazon.com/images/I/81gi8NfPpIL.jpg";
+      setCoverPreview(paintingImgUrl);
+      fetch(paintingImgUrl)
+        .then((res) => res.blob())
+        .then((blob) => {
+          const file = new File([blob], "painting-artwork.jpg", {
+            type: blob.type || "image/jpeg",
+          });
+          setCoverFile(file);
+          setCoverPreview(URL.createObjectURL(blob));
+        })
+        .catch((err) => {
+          console.error("Failed to fetch painting image blob:", err);
+          setCoverPreview(paintingImgUrl);
+        });
+      setSuccess("Demo painting artwork loaded! Ready to submit.");
+    } else if (type === "VIDEO") {
+      const cat =
+        categories.find(
+          (c: any) =>
+            c.name.toLowerCase().includes("film") ||
+            c.name.toLowerCase().includes("culture")
+        )?.name || (categories.length > 0 ? categories[0].name : "Culture");
+      setCategory(cat);
+      setTitle("സാഹിത്യവും സമൂഹവും: ഒരു സാംസ്കാരിക സംവാദം");
+      setDescription(
+        "സമകാലിക മലയാള സാഹിത്യവും മാറുന്ന സാമൂഹ്യ യാഥാർത്ഥ്യങ്ങളും ചർച്ച ചെയ്യുന്ന പ്രത്യേക അഭിമുഖ പരിപാടി."
+      );
+      const demoUrl = "https://youtu.be/DERdRMLM9QU?si=fx8nO8brSFjXcGkl";
+      const ytId = extractYoutubeId(demoUrl) || "DERdRMLM9QU";
+      setVideoUrl(demoUrl);
+      setVideoPreviewId({ type: "youtube", id: ytId });
+
+      fetchYoutubeThumbnailFile(ytId).then((thumb) => {
+        if (thumb) {
+          setCoverFile(thumb.file);
+          setCoverPreview(thumb.previewUrl);
+        }
+      });
+      setSuccess("Demo video & YouTube thumbnail loaded!");
+    }
+
+    setTimeout(() => {
+      setSuccess(null);
+    }, 3500);
+  };
+
+  const clearForm = () => {
+    setTitle("");
+    setDescription("");
+    setContent("");
+    if (editorRef.current) {
+      editorRef.current.innerHTML = "";
+    }
+    setCoverFile(null);
+    setCoverPreview(null);
+    setVideoUrl("");
+    setVideoPreviewId(null);
+    setError(null);
+    setSuccess(null);
+  };
+
   // ─── Story reader preview ──────────────────────────────────────────────────
   const renderVisualContent = () => {
     const rawHtml = editorRef.current ? editorRef.current.innerHTML : content;
@@ -550,12 +859,15 @@ export default function SubmitWorkPage() {
             >
               <ArrowLeft className="w-3.5 h-3.5 text-gray-700" /> Go Back
             </button>
-            <h1 className="text-3xl lg:text-4xl font-bold text-gray-900 tracking-tight">
-              {editingStoryId ? "Edit Submission" : "Submit Your Work"}
-            </h1>
-            <p className="text-sm text-[#646464] mt-1">
-              AKAM Digital Platform — share your articles, stories, blogs, paintings, and videos with the world.
-            </p>
+
+            <div>
+              <h1 className="text-3xl lg:text-4xl font-bold text-gray-900 tracking-tight">
+                {editingStoryId ? "Edit Submission" : "Submit Your Work"}
+              </h1>
+              <p className="text-sm text-[#646464] mt-1">
+                AKAM Digital Platform — share your articles, stories, blogs, paintings, and videos with the world.
+              </p>
+            </div>
           </div>
 
           {/* Submission Type Selector */}
@@ -563,31 +875,60 @@ export default function SubmitWorkPage() {
             <div className="mb-8">
               <p className="text-xs font-semibold text-gray-700 uppercase tracking-wider mb-3">What are you submitting?</p>
               <div className="grid grid-cols-3 gap-3">
-                {SUBMISSION_TABS.map((tab) => (
-                  <button
-                    key={tab.type}
-                    type="button"
-                    onClick={() => { setSubmissionType(tab.type); setError(null); }}
-                    className={`relative flex flex-col items-center gap-2 p-4 sm:p-5 rounded-2xl border-2 transition-all cursor-pointer text-center ${
-                      submissionType === tab.type
-                        ? "border-black bg-black text-white shadow-md"
-                        : "border-gray-200 bg-white text-gray-700 hover:border-gray-400 hover:bg-gray-50"
-                    }`}
-                  >
-                    <div className={`p-2.5 rounded-xl ${submissionType === tab.type ? "bg-white/15" : "bg-gray-100"}`}>
-                      {tab.icon}
-                    </div>
-                    <span className="font-bold text-sm">{tab.label}</span>
-                    <span className={`text-[11px] leading-snug hidden sm:block ${submissionType === tab.type ? "text-white/70" : "text-gray-400"}`}>
-                      {tab.description}
-                    </span>
-                    {submissionType === tab.type && (
-                      <div className="absolute top-3 right-3">
-                        <CheckCircle2 className="w-4 h-4 text-white" />
+                {SUBMISSION_TABS.map((tab) => {
+                  const isActive = submissionType === tab.type;
+                  return (
+                    <button
+                      key={tab.type}
+                      type="button"
+                      onClick={() => {
+                        setSubmissionType(tab.type);
+                        setError(null);
+                      }}
+                      className={`group relative flex flex-col items-center gap-2 p-4 sm:p-5 rounded-2xl border-2 transition-all cursor-pointer text-center ${
+                        isActive ? tab.activeCard : tab.inactiveCard
+                      }`}
+                    >
+                      <div
+                        className={`p-2.5 rounded-xl transition-colors ${
+                          isActive ? tab.activeIconWrapper : tab.inactiveIconWrapper
+                        }`}
+                      >
+                        {tab.icon}
                       </div>
-                    )}
-                  </button>
-                ))}
+                      <span
+                        className={`font-bold text-sm ${
+                          isActive ? tab.activeLabel : "text-gray-900 group-hover:text-black"
+                        }`}
+                      >
+                        {tab.label}
+                      </span>
+                      <span
+                        className={`text-[11px] leading-snug hidden sm:block ${
+                          isActive ? tab.activeDesc : "text-gray-400 group-hover:text-gray-600"
+                        }`}
+                      >
+                        {tab.description}
+                      </span>
+                      {isActive && (
+                        <div className="absolute top-3 right-3">
+                          <CheckCircle2 className={`w-4 h-4 ${tab.activeCheck}`} />
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="flex items-center justify-between mt-3 px-1 text-xs text-gray-500">
+                <span>Presenting or testing?</span>
+                <button
+                  type="button"
+                  onClick={() => fillDemoData(submissionType)}
+                  className="inline-flex items-center gap-1 font-semibold text-amber-700 hover:text-amber-900 transition-all cursor-pointer"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                  Auto-fill {submissionType === "STORY" ? "Article / Story" : submissionType === "PAINTING" ? "Painting Artwork" : "Video"}
+                </button>
               </div>
             </div>
           )}

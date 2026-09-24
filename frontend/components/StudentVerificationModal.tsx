@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import {
   X,
   GraduationCap,
@@ -20,8 +21,6 @@ import { API_BASE_URL, apiFetch, formatAssetUrl } from "@/lib/config";
 export interface StudentApplicationData {
   fullName: string;
   institution: string;
-  studentIdNumber?: string;
-  course?: string;
   email: string;
   idCardUrl?: string;
   idCardName?: string;
@@ -44,6 +43,7 @@ export const StudentVerificationModal: React.FC<StudentVerificationModalProps> =
   onClose,
   onStatusChange,
 }) => {
+  const router = useRouter();
   const [existingApplication, setExistingApplication] = useState<StudentApplicationData | null>(null);
 
   // Form State: student name, university, email, id card photo
@@ -205,7 +205,7 @@ export const StudentVerificationModal: React.FC<StudentVerificationModalProps> =
       return;
     }
     if (!email.trim() || !email.includes("@")) {
-      setErrorMessage("Please enter a valid student email address.");
+      setErrorMessage("Please enter a valid email address.");
       return;
     }
     if (!idCardFile && !idCardPreview) {
@@ -247,8 +247,6 @@ export const StudentVerificationModal: React.FC<StudentVerificationModalProps> =
     const applicationRecord: StudentApplicationData = {
       fullName: fullName.trim(),
       institution: institution.trim(),
-      studentIdNumber: "STUDENT_PASS",
-      course: "Student Pass",
       email: email.trim(),
       idCardUrl: uploadedUrl,
       idCardName: idCardName || "Student_ID_Card.jpg",
@@ -284,6 +282,12 @@ export const StudentVerificationModal: React.FC<StudentVerificationModalProps> =
     if (onStatusChange) {
       onStatusChange("PENDING_APPROVAL");
     }
+
+    // Redirect to profile page after a short delay so the user can see the success state
+    setTimeout(() => {
+      onClose();
+      router.push("/profile");
+    }, 1800);
   };
 
   return (
@@ -540,14 +544,14 @@ export const StudentVerificationModal: React.FC<StudentVerificationModalProps> =
 
                 <div>
                   <label className="block text-xs font-bold text-gray-700 mb-1">
-                    Student Email <span className="text-red-500">*</span>
+                    Email <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="email"
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="student@university.edu or your personal email"
+                    placeholder="your.email@example.com"
                     className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-xs text-gray-900 focus:bg-white focus:outline-none focus:border-[#0FA975] focus:ring-1 focus:ring-[#0FA975]"
                   />
                   <span className="text-[10px] text-gray-400 mt-1 block">

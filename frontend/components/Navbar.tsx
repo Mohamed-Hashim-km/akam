@@ -693,7 +693,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             ) : (
               <button
                 onClick={() => handleOpenSignIn("/profile")}
-                className="text-sm font-medium text-gray-900 bg-white border border-gray-200 px-5 py-2 rounded-full hover:bg-gray-50 transition-colors shadow-2xs cursor-pointer"
+                className="text-sm font-medium text-gray-900 bg-white border border-gray-200 px-6 py-2.5 rounded-full hover:bg-gray-50 transition-colors shadow-xs cursor-pointer"
               >
                 Sign in
               </button>

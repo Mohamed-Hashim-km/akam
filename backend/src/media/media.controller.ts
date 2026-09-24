@@ -9,7 +9,7 @@ export class MediaController {
 
   @Get()
   @ApiOperation({ summary: 'Get published media videos paginated by category or featured status' })
-  @ApiQuery({ name: 'category', required: false, description: 'interviews | conversations | cultural | recordings' })
+  @ApiQuery({ name: 'category', required: false, description: 'interviews | discussions | cultural | recordings' })
   @ApiQuery({ name: 'featured', required: false, description: 'true | false' })
   @ApiQuery({ name: 'page', required: false })
   @ApiQuery({ name: 'limit', required: false })

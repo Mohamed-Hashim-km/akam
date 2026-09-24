@@ -516,13 +516,15 @@ export const ReadingPlansSection: React.FC<ReadingPlansSectionProps> = ({
             </Button>
 
             {onStudentApply && (
-              <button
+              <Button
                 type="button"
                 onClick={onStudentApply}
-                className="w-full sm:w-auto px-6 py-3 rounded-full border border-gray-300 bg-white text-gray-800 text-sm font-semibold hover:bg-gray-50 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+                variant="secondary"
+                size="md"
+                className="w-full sm:w-auto px-7 py-3 text-sm font-medium shadow-xs cursor-pointer border border-gray-300 text-gray-800 hover:bg-gray-50"
               >
-                <span>Apply for Free Student Pass</span>
-              </button>
+                {loggedIn ? "Apply for Free Student Pass" : "Sign in for Student Pass"}
+              </Button>
             )}
           </div>
         </div>
