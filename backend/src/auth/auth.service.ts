@@ -316,8 +316,8 @@ export class AuthService {
       user: {
         ...user,
         subscriptionStatus: subIsActive ? 'ACTIVE' : (sub ? 'EXPIRED' : null),
-        subscriptionEndDate: sub ? new Date(sub.endDate).toISOString() : null,
-        isStudent: sub?.isStudent ?? false,
+        subscriptionEndDate: subIsActive && sub ? new Date(sub.endDate).toISOString() : null,
+        isStudent: Boolean(subIsActive && sub?.isStudent),
       },
     };
   }

@@ -11,6 +11,21 @@ export function extractYouTubeId(url: string): string {
   return match && match[2].length === 11 ? match[2] : url.trim();
 }
 
+export function normalizeMediaCategory(category?: string): string {
+  if (!category) return '';
+  const lower = category.trim().toLowerCase();
+  if (
+    lower === 'conversations' ||
+    lower === 'discussions' ||
+    lower === 'discussions_and_debates' ||
+    lower === 'debates' ||
+    lower === 'discussions & debates'
+  ) {
+    return 'discussions';
+  }
+  return lower;
+}
+
 @Injectable()
 export class MediaService {
   constructor(private readonly prisma: PrismaService) {}
@@ -42,8 +57,13 @@ export class MediaService {
     }
 
     if (category && category !== 'ALL') {
-      params.push(category);
-      whereClause += ` AND "category" = $${params.length}`;
+      const normCat = normalizeMediaCategory(category);
+      if (normCat === 'discussions') {
+        whereClause += ` AND "category" IN ('conversations', 'discussions')`;
+      } else {
+        params.push(category);
+        whereClause += ` AND "category" = $${params.length}`;
+      }
     }
 
     const countSql = `SELECT COUNT(*) FROM "media_video" ${whereClause}`;
@@ -82,8 +102,13 @@ export class MediaService {
     const params: any[] = [];
 
     if (category && category !== 'ALL') {
-      params.push(category);
-      whereConditions.push(`"category" = $${params.length}`);
+      const normCat = normalizeMediaCategory(category);
+      if (normCat === 'discussions') {
+        whereConditions.push(`"category" IN ('conversations', 'discussions')`);
+      } else {
+        params.push(category);
+        whereConditions.push(`"category" = $${params.length}`);
+      }
     }
 
     if (search && search.trim()) {
@@ -137,6 +162,7 @@ export class MediaService {
     const ytId = extractYouTubeId(dto.youtubeUrl);
     const isPublished = dto.isPublished !== undefined ? dto.isPublished : true;
     const isFeatured = dto.isFeatured !== undefined ? dto.isFeatured : false;
+    const category = normalizeMediaCategory(dto.category) || dto.category;
 
     if (isFeatured) {
       await this.checkFeaturedLimit();
@@ -152,7 +178,7 @@ export class MediaService {
       id,
       dto.title,
       dto.description,
-      dto.category,
+      category,
       dto.youtubeUrl,
       ytId,
       isPublished,
@@ -164,7 +190,8 @@ export class MediaService {
     const existing = await this.findOne(id);
     const title = dto.title ?? existing.title;
     const description = dto.description ?? existing.description;
-    const category = dto.category ?? existing.category;
+    const rawCategory = dto.category !== undefined ? dto.category : existing.category;
+    const category = normalizeMediaCategory(rawCategory) || rawCategory;
     const youtubeUrl = dto.youtubeUrl ?? existing.youtubeUrl;
     const youtubeId = dto.youtubeUrl ? extractYouTubeId(dto.youtubeUrl) : existing.youtubeId;
     const isPublished = dto.isPublished !== undefined ? dto.isPublished : existing.isPublished;

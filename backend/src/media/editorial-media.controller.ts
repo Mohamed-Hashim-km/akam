@@ -30,7 +30,7 @@ export class EditorialMediaController {
   @ApiQuery({ name: 'page', required: false })
   @ApiQuery({ name: 'limit', required: false })
   @ApiQuery({ name: 'search', required: false })
-  @ApiQuery({ name: 'category', required: false })
+  @ApiQuery({ name: 'category', required: false, description: 'interviews | discussions | cultural | recordings' })
   findAll(
     @Query('page') page?: string,
     @Query('limit') limit?: string,

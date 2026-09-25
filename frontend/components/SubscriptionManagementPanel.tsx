@@ -247,7 +247,7 @@ export const SubscriptionManagementPanel: React.FC<SubscriptionManagementPanelPr
         window.dispatchEvent(new Event("akam_subscription_refresh"));
       }
       if (onNotify) {
-        onNotify(`✅ Successfully granted ${grantMonths}-month pass to ${grantEmail}`);
+        onNotify(`Successfully granted ${grantMonths}-month pass to ${grantEmail}`);
       }
       handleRefresh();
     } catch (err: any) {
@@ -949,16 +949,16 @@ export const SubscriptionManagementPanel: React.FC<SubscriptionManagementPanelPr
 
       {/* Modal: Grant / Extend Subscription */}
       {grantModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs font-poppins animate-in fade-in duration-200">
-          <div className="bg-white border border-gray-200 rounded-3xl max-w-md w-full max-h-[90vh] overflow-y-auto p-5 sm:p-6 shadow-2xl relative">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs font-poppins animate-in fade-in duration-200">
+          <div className="bg-white border border-gray-200 rounded-2xl sm:rounded-3xl max-w-md w-full max-h-[92vh] sm:max-h-[90vh] overflow-y-auto p-4 sm:p-6 shadow-2xl relative">
             <button
               onClick={() => setGrantModalOpen(false)}
-              className="absolute top-5 right-5 text-gray-400 hover:text-gray-600 cursor-pointer"
+              className="absolute top-4 sm:top-5 right-4 sm:right-5 text-gray-400 hover:text-gray-600 cursor-pointer p-1"
             >
               <X className="w-5 h-5" />
             </button>
 
-            <div className="flex items-center gap-3 mb-5">
+            <div className="flex items-center gap-3 mb-5 pr-8">
               <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
                 <CreditCard className="w-5 h-5" />
               </div>
@@ -986,7 +986,7 @@ export const SubscriptionManagementPanel: React.FC<SubscriptionManagementPanelPr
                     value={grantEmail}
                     onChange={(e) => setGrantEmail(e.target.value)}
                     placeholder="user@example.com"
-                    className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-xl focus:outline-hidden focus:border-gray-950"
+                    className="w-full pl-9 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-hidden focus:border-gray-950 text-xs"
                   />
                 </div>
               </div>
@@ -1032,7 +1032,7 @@ export const SubscriptionManagementPanel: React.FC<SubscriptionManagementPanelPr
                 <select
                   value={grantMonths}
                   onChange={(e) => setGrantMonths(parseInt(e.target.value, 10))}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-hidden focus:border-gray-950 bg-white"
+                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl focus:outline-hidden focus:border-gray-950 bg-white text-xs"
                 >
                   <option value={6}>6 Months (Standard Akam Pass)</option>
                   <option value={12}>12 Months (1 Year)</option>
@@ -1048,15 +1048,15 @@ export const SubscriptionManagementPanel: React.FC<SubscriptionManagementPanelPr
                   value={grantNote}
                   onChange={(e) => setGrantNote(e.target.value)}
                   placeholder="e.g. Granted by Chief Editor / Offline payment"
-                  className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:outline-hidden focus:border-gray-950"
+                  className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-hidden focus:border-gray-950 text-xs"
                 />
               </div>
 
-              <div className="pt-2 flex items-center justify-end gap-2">
+              <div className="pt-3 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2 border-t border-gray-100">
                 <button
                   type="button"
                   onClick={() => setGrantModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-gray-600 hover:bg-gray-100 transition cursor-pointer font-medium"
+                  className="w-full sm:w-auto px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-100 transition cursor-pointer font-medium text-xs justify-center"
                 >
                   Cancel
                 </button>
@@ -1065,7 +1065,7 @@ export const SubscriptionManagementPanel: React.FC<SubscriptionManagementPanelPr
                   size="md"
                   type="submit"
                   disabled={grantLoading}
-                  className="cursor-pointer"
+                  className="w-full sm:w-auto justify-center cursor-pointer text-xs"
                 >
                   {grantLoading ? (
                     <span className="flex items-center gap-1.5">
@@ -1084,8 +1084,8 @@ export const SubscriptionManagementPanel: React.FC<SubscriptionManagementPanelPr
 
       {/* Modal: Confirm Cancel */}
       {cancellingSub && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs font-poppins animate-in fade-in duration-200">
-          <div className="bg-white border border-gray-200 rounded-3xl max-w-sm w-full max-h-[90vh] overflow-y-auto p-5 sm:p-6 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs font-poppins animate-in fade-in duration-200">
+          <div className="bg-white border border-gray-200 rounded-2xl sm:rounded-3xl max-w-sm w-full max-h-[90vh] overflow-y-auto p-5 sm:p-6 shadow-2xl">
             <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mb-4">
               <Ban className="w-6 h-6" />
             </div>
@@ -1095,11 +1095,11 @@ export const SubscriptionManagementPanel: React.FC<SubscriptionManagementPanelPr
               <strong className="text-gray-800">{cancellingSub.userEmail}</strong>? The user will immediately revert
               to free preview access.
             </p>
-            <div className="flex items-center justify-end gap-2">
+            <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2">
               <button
                 type="button"
                 onClick={() => setCancellingSub(null)}
-                className="px-4 py-2 rounded-xl text-gray-600 hover:bg-gray-100 transition cursor-pointer font-medium text-xs"
+                className="w-full sm:w-auto px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-100 transition cursor-pointer font-medium text-xs text-center"
               >
                 Keep Active
               </button>
@@ -1107,7 +1107,7 @@ export const SubscriptionManagementPanel: React.FC<SubscriptionManagementPanelPr
                 type="button"
                 onClick={handleCancelConfirm}
                 disabled={cancelLoading}
-                className="px-4 py-2 rounded-xl bg-rose-600 text-white hover:bg-rose-700 transition cursor-pointer font-medium text-xs disabled:opacity-50"
+                className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-rose-600 text-white hover:bg-rose-700 transition cursor-pointer font-medium text-xs disabled:opacity-50 text-center"
               >
                 {cancelLoading ? "Cancelling..." : "Yes, Cancel Pass"}
               </button>

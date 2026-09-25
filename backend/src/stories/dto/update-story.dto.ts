@@ -26,4 +26,8 @@ export class UpdateStoryDto {
   @IsOptional()
   @IsString()
   mediaUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  coverImageUrl?: string;
 }

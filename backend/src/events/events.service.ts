@@ -24,7 +24,7 @@ export interface EventItem {
   updatedAt: Date;
 }
 
-const SELECT_FIELDS = `id, type, title, description, location, time, day, "monthYear", "imageSrc", images, "videoUrl", "registerHref", "isPublished", "createdAt", "updatedAt"`;
+const SELECT_FIELDS = `id, type, title, description, location, time, day, "monthYear", "eventDate", "imageSrc", images, "videoUrl", "registerHref", "isPublished", "createdAt", "updatedAt"`;
 
 @Injectable()
 export class EventsService {
@@ -35,12 +35,16 @@ export class EventsService {
 
   // ── Public Endpoints ─────────────────────────────────────────────────────
   async findAllPublished(type?: EventType): Promise<EventItem[]> {
+    const orderClause = type === EventType.PAST_ARCHIVE
+      ? `ORDER BY "createdAt" DESC`
+      : `ORDER BY CASE WHEN "eventDate" IS NOT NULL THEN "eventDate" ELSE '9999-12-31'::timestamp END ASC, "createdAt" DESC`;
+
     if (type) {
       return this.prisma.query<EventItem>(
         `SELECT ${SELECT_FIELDS}
          FROM "event"
          WHERE "isPublished" = true AND type::text = $1
-         ORDER BY "createdAt" DESC`,
+         ${orderClause}`,
         [type]
       );
     }
@@ -48,8 +52,68 @@ export class EventsService {
       `SELECT ${SELECT_FIELDS}
        FROM "event"
        WHERE "isPublished" = true
-       ORDER BY "createdAt" DESC`
+       ${orderClause}`
     );
+  }
+
+  async findPublishedPaginated(
+    type?: EventType,
+    page: number = 1,
+    limit: number = 6,
+    upcomingOnly: boolean = true,
+  ) {
+    const offset = (page - 1) * limit;
+    const whereConditions: string[] = ['"isPublished" = true'];
+    const params: any[] = [];
+
+    if (type) {
+      params.push(type);
+      whereConditions.push(`type::text = $${params.length}`);
+    }
+
+    if (upcomingOnly && type !== EventType.PAST_ARCHIVE) {
+      whereConditions.push(`type::text != 'PAST_ARCHIVE'`);
+      whereConditions.push(`("eventDate" IS NULL OR "eventDate" >= CURRENT_DATE)`);
+    }
+
+    const whereClause = `WHERE ${whereConditions.join(' AND ')}`;
+
+    const countRow = await this.prisma.queryOne<{ total: string }>(
+      `SELECT COUNT(*)::int as total
+       FROM "event"
+       ${whereClause}`,
+      params
+    );
+    const total = parseInt(countRow?.total ?? '0', 10);
+
+    const dataParams = [...params, limit, offset];
+    const limitIdx = params.length + 1;
+    const offsetIdx = params.length + 2;
+
+    const orderByClause = (upcomingOnly && type !== EventType.PAST_ARCHIVE)
+      ? `ORDER BY CASE WHEN "eventDate" IS NOT NULL THEN "eventDate" ELSE '9999-12-31'::timestamp END ASC, "createdAt" DESC`
+      : `ORDER BY "createdAt" DESC`;
+
+    const data = await this.prisma.query<EventItem>(
+      `SELECT ${SELECT_FIELDS}
+       FROM "event"
+       ${whereClause}
+       ${orderByClause}
+       LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
+      dataParams
+    );
+
+    const hasMore = offset + data.length < total;
+    return {
+      data,
+      meta: {
+        page,
+        limit,
+        total,
+        hasMore,
+        totalPages: Math.ceil(total / limit) || 1,
+      },
+    };
   }
 
   async findPastArchivesPaginated(page: number = 1, limit: number = 6) {
@@ -59,10 +123,7 @@ export class EventsService {
       `SELECT COUNT(*)::int as total
        FROM "event"
        WHERE "isPublished" = true
-         AND (
-           type::text = 'PAST_ARCHIVE'
-           OR ("eventDate" IS NOT NULL AND "eventDate" < NOW())
-         )`
+         AND type::text = 'PAST_ARCHIVE'`
     );
     const total = parseInt(countRow?.total ?? '0', 10);
 
@@ -70,10 +131,7 @@ export class EventsService {
       `SELECT ${SELECT_FIELDS}
        FROM "event"
        WHERE "isPublished" = true
-         AND (
-           type::text = 'PAST_ARCHIVE'
-           OR ("eventDate" IS NOT NULL AND "eventDate" < NOW())
-         )
+         AND type::text = 'PAST_ARCHIVE'
        ORDER BY "createdAt" DESC
        LIMIT $1 OFFSET $2`,
       [limit, offset]
@@ -153,7 +211,7 @@ export class EventsService {
 
     const dataSql = `
       SELECT 
-        e.id, e.type, e.title, e.description, e.location, e.time, e.day, e."monthYear", e."imageSrc", e.images, e."videoUrl", e."registerHref", e."isPublished", e."createdAt", e."updatedAt",
+        e.id, e.type, e.title, e.description, e.location, e.time, e.day, e."monthYear", e."eventDate", e."imageSrc", e.images, e."videoUrl", e."registerHref", e."isPublished", e."createdAt", e."updatedAt",
         COALESCE((SELECT COUNT(*)::int FROM "event_registration" er WHERE er."eventId" = e.id), 0) AS "registrationCount"
       FROM "event" e
       ${whereClause}
@@ -217,9 +275,22 @@ export class EventsService {
       ? dto.images
       : (dto.imageSrc ? [dto.imageSrc] : []);
 
+    let eventDate: Date | null = null;
+    if (dto.eventDate) {
+      const parsed = new Date(dto.eventDate);
+      if (!isNaN(parsed.getTime())) eventDate = parsed;
+    } else if (dto.day && dto.monthYear) {
+      const parts = dto.day.split(/[-–—]|to/i).map((s: string) => s.trim());
+      const firstNum = parts[0]?.match(/\d+/);
+      if (firstNum) {
+        const parsed = new Date(`${firstNum[0]} ${dto.monthYear}`);
+        if (!isNaN(parsed.getTime())) eventDate = parsed;
+      }
+    }
+
     const row = await this.prisma.queryOne<EventItem>(
-      `INSERT INTO "event" (id, type, title, description, location, time, day, "monthYear", "imageSrc", images, "videoUrl", "registerHref", "isPublished")
-       VALUES ($1, $2::"EventType", $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+      `INSERT INTO "event" (id, type, title, description, location, time, day, "monthYear", "eventDate", "imageSrc", images, "videoUrl", "registerHref", "isPublished")
+       VALUES ($1, $2::"EventType", $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
        RETURNING ${SELECT_FIELDS}`,
       [
         id,
@@ -230,6 +301,7 @@ export class EventsService {
         dto.time ?? null,
         dto.day ?? null,
         dto.monthYear ?? null,
+        eventDate,
         dto.imageSrc ?? (imagesList[0] || null),
         imagesList,
         dto.videoUrl ?? null,
@@ -257,6 +329,27 @@ export class EventsService {
     const registerHref = dto.registerHref !== undefined ? dto.registerHref : existing.registerHref;
     const isPublished = dto.isPublished !== undefined ? dto.isPublished : existing.isPublished;
 
+    let eventDate = existing.eventDate;
+    if (dto.eventDate !== undefined) {
+      if (dto.eventDate) {
+        const parsed = new Date(dto.eventDate);
+        if (!isNaN(parsed.getTime())) eventDate = parsed;
+      } else {
+        eventDate = null;
+      }
+    } else if (dto.day !== undefined || dto.monthYear !== undefined) {
+      const dayVal = dto.day !== undefined ? dto.day : existing.day;
+      const myVal = dto.monthYear !== undefined ? dto.monthYear : existing.monthYear;
+      if (dayVal && myVal) {
+        const parts = dayVal.split(/[-–—]|to/i).map((s: string) => s.trim());
+        const firstNum = parts[0]?.match(/\d+/);
+        if (firstNum) {
+          const parsed = new Date(`${firstNum[0]} ${myVal}`);
+          if (!isNaN(parsed.getTime())) eventDate = parsed;
+        }
+      }
+    }
+
     if (dto.imageSrc !== undefined && dto.imageSrc !== existing.imageSrc && existing.imageSrc) {
       this.uploadsService.deleteFileByUrl(existing.imageSrc);
     }
@@ -271,15 +364,16 @@ export class EventsService {
          time = $5,
          day = $6,
          "monthYear" = $7,
-         "imageSrc" = $8,
-         images = $9,
-         "videoUrl" = $10,
-         "registerHref" = $11,
-         "isPublished" = $12,
+         "eventDate" = $8,
+         "imageSrc" = $9,
+         images = $10,
+         "videoUrl" = $11,
+         "registerHref" = $12,
+         "isPublished" = $13,
          "updatedAt" = CURRENT_TIMESTAMP
-       WHERE id = $13
+       WHERE id = $14
        RETURNING ${SELECT_FIELDS}`,
-      [type, title, description, location, time, day, monthYear, imageSrc, imagesList, videoUrl, registerHref, isPublished, id]
+      [type, title, description, location, time, day, monthYear, eventDate, imageSrc, imagesList, videoUrl, registerHref, isPublished, id]
     );
 
     return row!;

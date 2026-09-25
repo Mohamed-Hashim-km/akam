@@ -54,8 +54,8 @@ export class ModerationController {
   @Get('editorial/reports')
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('EDITOR', 'ADMIN')
-  @ApiOperation({ summary: '[Editor] List reported content' })
+  @Roles('EDITOR', 'ADMIN', 'MODERATOR')
+  @ApiOperation({ summary: '[Editor/Moderator] List reported content' })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiQuery({ name: 'status', required: false, description: 'Status filter (ALL, PENDING, RESOLVED, DISMISSED)' })
@@ -74,8 +74,8 @@ export class ModerationController {
   @Get('editorial/reports/pending-count')
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('EDITOR', 'ADMIN')
-  @ApiOperation({ summary: '[Editor] Get pending reports count' })
+  @Roles('EDITOR', 'ADMIN', 'MODERATOR')
+  @ApiOperation({ summary: '[Editor/Moderator] Get pending reports count' })
   async getPendingCount() {
     return this.moderationService.getPendingCount();
   }
@@ -84,8 +84,8 @@ export class ModerationController {
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('EDITOR', 'ADMIN')
-  @ApiOperation({ summary: '[Editor] Resolve or dismiss a report' })
+  @Roles('EDITOR', 'ADMIN', 'MODERATOR')
+  @ApiOperation({ summary: '[Editor/Moderator] Resolve or dismiss a report' })
   async updateReportStatus(
     @Param('reportId') reportId: string,
     @Body() dto: UpdateReportStatusDto,

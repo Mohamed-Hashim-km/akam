@@ -23,7 +23,7 @@ export interface MediaSectionProps {
 
 const mediaCategories = [
   { id: "interviews", label: "Interviews" },
-  { id: "conversations", label: "Conversations" },
+  { id: "discussions", label: "Discussions & Debates" },
   { id: "cultural", label: "Cultural Programmes" },
   { id: "recordings", label: "Event Recordings" },
 ];

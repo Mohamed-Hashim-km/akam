@@ -15,7 +15,7 @@ import "swiper/css/navigation";
 
 export interface SessionItem {
   id: string;
-  category: "reading" | "discussions" | "workshop" | "exhibition" | "film_screening";
+  category: "all" | "reading" | "discussions" | "workshop" | "exhibition" | "film_screening" | "other";
   title: string;
   description: string;
   location: string;
@@ -32,15 +32,45 @@ export interface EventSessionsProps {
 }
 
 // Tab → backend EventType mapping
-const CATEGORY_TABS: { id: SessionItem["category"]; label: string; apiType: string }[] = [
-  { id: "reading",       label: "Reading Events",  apiType: "READING_SESSION" },
-  { id: "discussions",   label: "Discussions",     apiType: "DISCUSSION" },
-  { id: "workshop",      label: "Workshop",        apiType: "WORKSHOP" },
-  { id: "exhibition",    label: "Exhibition",      apiType: "EXHIBITION" },
-  { id: "film_screening",label: "Film Screening",  apiType: "FILM_SCREENING" },
+const CATEGORY_TABS: { id: SessionItem["category"]; label: string; apiType?: string }[] = [
+  { id: "all",            label: "All Events",      apiType: "" },
+  { id: "reading",        label: "Reading Events",  apiType: "READING_SESSION" },
+  { id: "discussions",    label: "Discussions",     apiType: "DISCUSSION" },
+  { id: "workshop",       label: "Workshop",        apiType: "WORKSHOP" },
+  { id: "exhibition",     label: "Exhibition",      apiType: "EXHIBITION" },
+  { id: "film_screening", label: "Film Screening",  apiType: "FILM_SCREENING" },
+  { id: "other",          label: "Other Events",    apiType: "OTHER" },
 ];
 
-// Keep only events that are today or in the future
+const API_TYPE_TO_CATEGORY: Record<string, SessionItem["category"]> = {
+  READING_SESSION: "reading",
+  DISCUSSION: "discussions",
+  WORKSHOP: "workshop",
+  EXHIBITION: "exhibition",
+  FILM_SCREENING: "film_screening",
+  OTHER: "other",
+};
+
+const CATEGORY_LABELS: Record<string, string> = {
+  reading: "Reading Event",
+  discussions: "Discussion",
+  workshop: "Workshop",
+  exhibition: "Exhibition",
+  film_screening: "Film Screening",
+  other: "Other Event",
+};
+
+function getImageUrl(url: string | null | undefined): string {
+  if (!url) return "";
+  if (url.startsWith("http://") || url.startsWith("https://")) return url;
+  if (url.startsWith("/")) {
+    const serverUrl = API_BASE_URL.replace(/\/api$/, "");
+    return `${serverUrl}${url}`;
+  }
+  return url;
+}
+
+// Keep only events that are today or in the future (supports single day and multi-day range)
 function isUpcomingEvent(day?: string | null, monthYear?: string | null, eventDate?: string | null): boolean {
   if (eventDate) {
     const d = new Date(eventDate);
@@ -50,6 +80,17 @@ function isUpcomingEvent(day?: string | null, monthYear?: string | null, eventDa
     }
   }
   if (day && monthYear) {
+    // If day is a range like "12 – 15" or "28 Oct – 02 Nov", extract the end part to see if event is still active
+    const parts = day.split(/[-–—]|to/i).map((s) => s.trim());
+    const lastPart = parts[parts.length - 1];
+    const match = lastPart.match(/\d+/);
+    if (match) {
+      const d = new Date(`${match[0]} ${monthYear}`);
+      if (!isNaN(d.getTime())) {
+        d.setHours(23, 59, 59, 999);
+        return d >= new Date();
+      }
+    }
     const d = new Date(`${day} ${monthYear}`);
     if (!isNaN(d.getTime())) {
       d.setHours(23, 59, 59, 999);
@@ -62,7 +103,16 @@ function isUpcomingEvent(day?: string | null, monthYear?: string | null, eventDa
 function compareEventsAsc(a: any, b: any): number {
   const parse = (e: any) => {
     if (e.eventDate) { const d = new Date(e.eventDate); if (!isNaN(d.getTime())) return d; }
-    if (e.day && e.monthYear) { const d = new Date(`${e.day} ${e.monthYear}`); if (!isNaN(d.getTime())) return d; }
+    if (e.day && e.monthYear) {
+      const parts = e.day.split(/[-–—]|to/i).map((s: string) => s.trim());
+      const firstNum = parts[0]?.match(/\d+/);
+      if (firstNum) {
+        const d = new Date(`${firstNum[0]} ${e.monthYear}`);
+        if (!isNaN(d.getTime())) return d;
+      }
+      const d = new Date(`${e.day} ${e.monthYear}`);
+      if (!isNaN(d.getTime())) return d;
+    }
     return null;
   };
   const da = parse(a); const db = parse(b);
@@ -70,29 +120,41 @@ function compareEventsAsc(a: any, b: any): number {
   return da.getTime() - db.getTime();
 }
 
-function mapToSession(e: any, category: SessionItem["category"]): SessionItem {
+function mapToSession(e: any, fallbackCategory: SessionItem["category"]): SessionItem {
+  const category = (e.type && API_TYPE_TO_CATEGORY[e.type]) ? API_TYPE_TO_CATEGORY[e.type] : fallbackCategory;
+  const imageSrc = e.imageSrc || (Array.isArray(e.images) && e.images.length > 0 ? e.images[0] : undefined);
   return {
-    id: e.id, category,
-    title: e.title, description: e.description, location: e.location,
-    time: e.time || "", day: e.day || "", monthYear: e.monthYear || "",
-    imageSrc: e.imageSrc || undefined,
+    id: e.id,
+    category,
+    title: e.title,
+    description: e.description,
+    location: e.location,
+    time: e.time || "",
+    day: e.day || "",
+    monthYear: e.monthYear || "",
+    imageSrc: imageSrc || undefined,
     registerHref: e.registerHref || undefined,
   };
 }
+
+const PAGE_LIMIT = 6;
 
 export const EventSessions: React.FC<EventSessionsProps> = ({
   sessions: initialSessions,
 }) => {
   const [swiperInstance, setSwiperInstance] = useState<SwiperClass | null>(null);
-  const [activeTab, setActiveTab] = useState<SessionItem["category"]>("reading");
+  const [activeTab, setActiveTab] = useState<SessionItem["category"]>("all");
   const [selectedEventForReg, setSelectedEventForReg] = useState<SessionItem | null>(null);
 
-  // Per-tab cache — avoids re-fetching the same tab twice in a session
+  // Per-tab cache & pagination state
   const [tabCache, setTabCache] = useState<Partial<Record<SessionItem["category"], SessionItem[]>>>({});
+  const [tabPages, setTabPages] = useState<Partial<Record<SessionItem["category"], number>>>({});
+  const [tabHasMore, setTabHasMore] = useState<Partial<Record<SessionItem["category"], boolean>>>({});
   const [tabLoading, setTabLoading] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [displaySessions, setDisplaySessions] = useState<SessionItem[]>([]);
 
-  // ── server-side fetch per tab ──────────────────────────────────────────────
+  // ── server-side initial fetch per tab (Page 1) ──────────────────────────────
   const fetchTab = useCallback(async (tab: SessionItem["category"]) => {
     // Use initialSessions prop path if provided (SSR-seed mode)
     if (initialSessions !== undefined) return;
@@ -103,36 +165,110 @@ export const EventSessions: React.FC<EventSessionsProps> = ({
       return;
     }
 
-    const apiType = CATEGORY_TABS.find((t) => t.id === tab)?.apiType;
-    if (!apiType) return;
+    const tabConfig = CATEGORY_TABS.find((t) => t.id === tab);
+    if (!tabConfig) return;
 
     setTabLoading(true);
     try {
-      // Server filters by type — exactly like editorial does with ?type=X
-      const res = await fetch(`${API_BASE_URL}/events?type=${apiType}`);
+      const typeQuery = tabConfig.apiType ? `type=${tabConfig.apiType}&` : "";
+      const url = `${API_BASE_URL}/events?${typeQuery}page=1&limit=${PAGE_LIMIT}&upcoming=true`;
+
+      const res = await fetch(url);
       if (!res.ok) return;
       const json = await res.json();
-      const raw: any[] = Array.isArray(json) ? json : json.data ?? [];
+      const raw: any[] = json.data ?? (Array.isArray(json) ? json : []);
+      const meta = json.meta;
 
       const mapped = raw
-        .filter((e) => e.isPublished !== false && isUpcomingEvent(e.day, e.monthYear, e.eventDate))
+        .filter((e) => e.isPublished !== false && e.type !== "PAST_ARCHIVE" && isUpcomingEvent(e.day, e.monthYear, e.eventDate))
         .sort(compareEventsAsc)
         .map((e) => mapToSession(e, tab));
 
       setTabCache((prev) => ({ ...prev, [tab]: mapped }));
+      setTabPages((prev) => ({ ...prev, [tab]: 1 }));
+      setTabHasMore((prev) => ({
+        ...prev,
+        [tab]: meta ? Boolean(meta.hasMore) : raw.length >= PAGE_LIMIT,
+      }));
       setDisplaySessions(mapped);
     } catch (err) {
-      console.error("EventSessions: failed to fetch type", apiType, err);
+      console.error("EventSessions: failed to fetch tab", tabConfig.id, err);
     } finally {
       setTabLoading(false);
     }
   }, [initialSessions, tabCache]);
 
+  // ── server-side load more (Infinite Carousel Pagination) ────────────────────
+  const loadNextPage = useCallback(async () => {
+    if (isLoadingMore || tabLoading || initialSessions !== undefined) return;
+    const hasMore = tabHasMore[activeTab];
+    if (!hasMore) return;
+
+    const currentPage = tabPages[activeTab] || 1;
+    const nextPage = currentPage + 1;
+    const tabConfig = CATEGORY_TABS.find((t) => t.id === activeTab);
+    if (!tabConfig) return;
+
+    setIsLoadingMore(true);
+    try {
+      const typeQuery = tabConfig.apiType ? `type=${tabConfig.apiType}&` : "";
+      const url = `${API_BASE_URL}/events?${typeQuery}page=${nextPage}&limit=${PAGE_LIMIT}&upcoming=true`;
+
+      const res = await fetch(url);
+      if (!res.ok) {
+        setTabHasMore((prev) => ({ ...prev, [activeTab]: false }));
+        return;
+      }
+      const json = await res.json();
+      const raw: any[] = json.data ?? (Array.isArray(json) ? json : []);
+      const meta = json.meta;
+
+      if (raw.length > 0) {
+        const newMapped = raw
+          .filter((e) => e.isPublished !== false && e.type !== "PAST_ARCHIVE" && isUpcomingEvent(e.day, e.monthYear, e.eventDate))
+          .sort(compareEventsAsc)
+          .map((e) => mapToSession(e, activeTab));
+
+        setDisplaySessions((prev) => {
+          const existingIds = new Set(prev.map((i) => i.id));
+          const unique = newMapped.filter((i) => !existingIds.has(i.id));
+          const combined = [...prev, ...unique];
+          setTabCache((c) => ({ ...c, [activeTab]: combined }));
+          return combined;
+        });
+
+        setTabPages((prev) => ({ ...prev, [activeTab]: nextPage }));
+        setTabHasMore((prev) => ({
+          ...prev,
+          [activeTab]: meta ? Boolean(meta.hasMore) : raw.length >= PAGE_LIMIT,
+        }));
+      } else {
+        setTabHasMore((prev) => ({ ...prev, [activeTab]: false }));
+      }
+    } catch (err) {
+      console.error("EventSessions: failed to load next page", err);
+      setTabHasMore((prev) => ({ ...prev, [activeTab]: false }));
+    } finally {
+      setIsLoadingMore(false);
+    }
+  }, [activeTab, isLoadingMore, tabLoading, tabHasMore, tabPages, initialSessions]);
+
+  // Keep swiper instance updated when slides change
+  useEffect(() => {
+    if (swiperInstance) {
+      swiperInstance.update();
+    }
+  }, [displaySessions.length, swiperInstance]);
+
   // Fetch on mount and tab change
   useEffect(() => {
     if (initialSessions !== undefined) {
       // Props-provided path (if ever called with SSR data)
-      setDisplaySessions(initialSessions.filter((s) => s.category === activeTab));
+      setDisplaySessions(
+        activeTab === "all"
+          ? initialSessions
+          : initialSessions.filter((s) => s.category === activeTab)
+      );
       return;
     }
     fetchTab(activeTab);
@@ -217,6 +353,17 @@ export const EventSessions: React.FC<EventSessionsProps> = ({
                     1024: { slidesPerView: 2.7, spaceBetween: 24 },
                     1280: { slidesPerView: 3.1, spaceBetween: 24 },
                   }}
+                  onSlideChange={(swiper) => {
+                    // If user is within 2 slides of the end, prefetch next page
+                    if (tabHasMore[activeTab] && !isLoadingMore && swiper.activeIndex >= displaySessions.length - 2) {
+                      loadNextPage();
+                    }
+                  }}
+                  onReachEnd={() => {
+                    if (tabHasMore[activeTab] && !isLoadingMore) {
+                      loadNextPage();
+                    }
+                  }}
                   className="w-full !pb-4 [&_.swiper-wrapper]:!items-stretch"
                 >
                   {displaySessions.map((item) => {
@@ -226,7 +373,7 @@ export const EventSessions: React.FC<EventSessionsProps> = ({
                           {/* Background Image — only if imageSrc exists */}
                           {item.imageSrc && (
                             <Image
-                              src={item.imageSrc}
+                              src={getImageUrl(item.imageSrc)}
                               alt={item.title}
                               fill
                               className="object-cover transition-transform duration-700 group-hover:scale-105"
@@ -266,6 +413,16 @@ export const EventSessions: React.FC<EventSessionsProps> = ({
                       </SwiperSlide>
                     );
                   })}
+
+                  {/* Loading slide for next page */}
+                  {isLoadingMore && (
+                    <SwiperSlide key="loading-slide" className="flex flex-col">
+                      <div className="relative h-[380px] sm:h-[420px] rounded-[28px] overflow-hidden flex flex-col items-center justify-center p-6 bg-white/70 backdrop-blur-xs border border-white/50 shadow-sm animate-pulse">
+                        <Loader2 className="w-8 h-8 text-[#4EB2E4] animate-spin mb-3" />
+                        <span className="text-xs font-semibold text-gray-600">Loading more events…</span>
+                      </div>
+                    </SwiperSlide>
+                  )}
                 </Swiper>
 
                 {/* Carousel Nav Arrows */}
@@ -278,17 +435,34 @@ export const EventSessions: React.FC<EventSessionsProps> = ({
                     <ChevronLeft className="w-5 h-5" />
                   </button>
                   <button
-                    onClick={() => swiperInstance?.slideNext()}
-                    className="w-10 h-10 rounded-full border border-gray-400/40 bg-white/80 backdrop-blur-xs flex items-center justify-center text-gray-700 hover:bg-white hover:text-black transition-all focus:outline-none cursor-pointer shadow-2xs"
+                    onClick={() => {
+                      if (swiperInstance) {
+                        if (swiperInstance.isEnd && tabHasMore[activeTab] && !isLoadingMore) {
+                          loadNextPage();
+                        } else {
+                          swiperInstance.slideNext();
+                        }
+                      }
+                    }}
+                    disabled={isLoadingMore}
+                    className="w-10 h-10 rounded-full border border-gray-400/40 bg-white/80 backdrop-blur-xs flex items-center justify-center text-gray-700 hover:bg-white hover:text-black transition-all focus:outline-none cursor-pointer shadow-2xs disabled:opacity-60"
                     aria-label="Next slide"
                   >
-                    <ChevronRight className="w-5 h-5" />
+                    {isLoadingMore ? (
+                      <Loader2 className="w-4 h-4 animate-spin text-[#4EB2E4]" />
+                    ) : (
+                      <ChevronRight className="w-5 h-5" />
+                    )}
                   </button>
                 </div>
               </>
             ) : (
               <div className="w-full py-14 flex flex-col items-center justify-center text-center text-gray-400 gap-2">
-                <p className="text-sm font-medium">No upcoming {CATEGORY_TABS.find(t => t.id === activeTab)?.label.toLowerCase()} at the moment.</p>
+                <p className="text-sm font-medium">
+                  {activeTab === "all"
+                    ? "No upcoming events at the moment."
+                    : `No upcoming ${CATEGORY_TABS.find((t) => t.id === activeTab)?.label.toLowerCase() || "events"} at the moment.`}
+                </p>
               </div>
             )}
           </div>

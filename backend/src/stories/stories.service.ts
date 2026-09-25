@@ -43,6 +43,7 @@ type StoryRow = {
   authorEmail?: string;
   authorAvatarUrl?: string | null;
   authorBio?: string | null;
+  authorIsShadowBanned?: boolean;
   createdAt: string;
   updatedAt?: string;
 };
@@ -135,7 +136,7 @@ export class StoriesService {
       
       <div class="highlight-card">
         <div class="highlight-title">${story.title}</div>
-        <div class="highlight-meta">Category: ${story.category || 'General'} • Format: ${story.submissionType || 'Story'}</div>
+        <div class="highlight-meta">${story.submissionType !== 'PAINTING' && story.submissionType !== 'VIDEO' && story.category ? `Category: ${story.category} • ` : ''}Format: ${story.submissionType || 'Story'}</div>
       </div>
 
       <p>Thank you for contributing to AKAM Digital and sharing your creative voice with our reader community.</p>
@@ -227,6 +228,8 @@ export class StoriesService {
     category?: string,
     authorId?: string,
     featured?: string,
+    submissionType?: string,
+    sortBy?: string,
   ) {
     const page = pageVal && pageVal > 0 ? pageVal : 1;
     const limit = limitVal && limitVal > 0 ? limitVal : 10;
@@ -247,8 +250,27 @@ export class StoriesService {
       params.push(storyStatus);
     }
 
+    const isEditorialQuery = status === 'CATALOG' || status === 'ALL' || status === 'EMAGAZINE_ALL';
+    if (!isEditorialQuery) {
+      whereSql += ` AND (u."isShadowBanned" IS NOT TRUE)`;
+    }
+
     if (featured === 'true' || featured === '1') {
       whereSql += ` AND s."isFeatured" = true`;
+    }
+
+    if (submissionType && submissionType.trim() && submissionType.toUpperCase() !== 'ALL') {
+      const typeUpper = submissionType.trim().toUpperCase();
+      if (typeUpper === 'VIDEO') {
+        whereSql += ` AND (s."submissionType" = 'VIDEO'::"SubmissionType" OR LOWER(s.category) = 'video')`;
+      } else if (typeUpper === 'PAINTING') {
+        whereSql += ` AND (s."submissionType" = 'PAINTING'::"SubmissionType" OR LOWER(s.category) = 'painting' OR LOWER(s.category) = 'art')`;
+      } else if (typeUpper === 'STORY') {
+        whereSql += ` AND (s."submissionType" = 'STORY'::"SubmissionType" OR s."submissionType" IS NULL) AND LOWER(COALESCE(s.category, '')) NOT IN ('video', 'painting', 'art')`;
+      } else {
+        params.push(typeUpper);
+        whereSql += ` AND s."submissionType" = $${params.length}::"SubmissionType"`;
+      }
     }
 
     if (authorId && authorId.trim()) {
@@ -275,6 +297,15 @@ export class StoriesService {
     );
     const total = parseInt(countRow?.count ?? '0', 10);
 
+    let orderBySql = `ORDER BY s."isFeatured" DESC NULLS LAST, s."createdAt" DESC`;
+    if (sortBy === 'oldest') {
+      orderBySql = `ORDER BY s."createdAt" ASC`;
+    } else if (sortBy === 'title_asc') {
+      orderBySql = `ORDER BY s.title ASC`;
+    } else if (sortBy === 'featured') {
+      orderBySql = `ORDER BY s."isFeatured" DESC NULLS LAST, s."createdAt" DESC`;
+    }
+
     const queryParams = [...params, limit, offset];
     const data = await this.prisma.query<StoryRow>(
       `SELECT
@@ -287,13 +318,12 @@ export class StoriesService {
        FROM story s
        JOIN "user" u ON u.id = s."authorId"
        ${whereSql}
-       ORDER BY s."isFeatured" DESC NULLS LAST, s."createdAt" DESC
+       ${orderBySql}
        LIMIT $${queryParams.length - 1} OFFSET $${queryParams.length}`,
       queryParams,
     );
 
     // For public catalog queries (not internal editorial), truncate content to preview only
-    const isEditorialQuery = status === 'CATALOG' || status === 'ALL' || status === 'EMAGAZINE_ALL';
     if (!isEditorialQuery) {
       for (const item of data) {
         if (item.content) {
@@ -325,7 +355,8 @@ export class StoriesService {
          s."authorId",
          u.name AS "authorName",
          u."avatarUrl" AS "authorAvatarUrl",
-         u.bio AS "authorBio"
+         u.bio AS "authorBio",
+         u."isShadowBanned" AS "authorIsShadowBanned"
        FROM story s
        JOIN "user" u ON u.id = s."authorId"
        WHERE s.id = $1 OR s.slug = $1
@@ -378,13 +409,33 @@ export class StoriesService {
     idOrSlug: string,
     userId?: string,
     userRole?: string,
-  ): Promise<StoryRow & { hasFullAccess?: boolean; totalLength?: number; previewLength?: number }> {
+  ): Promise<StoryRow & { hasFullAccess?: boolean; totalLength?: number; previewLength?: number; disputeInfo?: any }> {
     const story = await this.findRawStory(idOrSlug);
 
     // Determine access permissions
     const isAuthor = Boolean(userId && story.authorId === userId);
     const roleUpper = (userRole || '').toUpperCase();
-    const isEditorOrAdmin = ['ADMIN', 'EDITOR', 'EDITORIAL', 'CHIEF_EDITOR', 'STAFF_EDITOR'].includes(roleUpper);
+    const isEditorOrAdmin = ['ADMIN', 'EDITOR', 'EDITORIAL', 'CHIEF_EDITOR', 'STAFF_EDITOR', 'MODERATOR'].includes(roleUpper);
+
+    if (story.authorIsShadowBanned && !isAuthor && !isEditorOrAdmin) {
+      throw new NotFoundException('Story not found');
+    }
+
+    if (story.status === 'DISPUTED' && !isAuthor && !isEditorOrAdmin) {
+      throw new NotFoundException('This work is currently under editorial dispute review and temporarily unavailable.');
+    }
+
+    let disputeInfo: any = null;
+    if (story.status === 'DISPUTED' && (isAuthor || isEditorOrAdmin)) {
+      disputeInfo = await this.prisma.queryOne(
+        `SELECT id, reason, details, "editorialNote", "disputedAt", "disputeExpiresAt", "authorResponse", "authorRespondedAt"
+         FROM story_report
+         WHERE "storyId" = $1 AND status = 'DISPUTED'
+         ORDER BY "createdAt" DESC LIMIT 1`,
+        [story.id],
+      );
+    }
+
     let isSubscribed = false;
 
     if (userId) {
@@ -419,13 +470,25 @@ export class StoriesService {
       hasFullAccess,
       totalLength,
       previewLength,
+      disputeInfo,
     };
   }
 
-  async getAuthorStories(authorId: string): Promise<StoryRow[]> {
-    return this.prisma.query<StoryRow>(
-      `SELECT id, title, slug, description, category, "coverImageUrl", "submissionType", "mediaUrl", status, "createdAt", "updatedAt"
-       FROM story WHERE "authorId" = $1 ORDER BY "updatedAt" DESC`,
+  async getAuthorStories(authorId: string): Promise<any[]> {
+    return this.prisma.query<any>(
+      `SELECT s.id, s.title, s.slug, s.description, s.category, s."coverImageUrl", s."submissionType", s."mediaUrl", s.status, s."rejectionNote", s."createdAt", s."updatedAt",
+              r.id AS "activeDisputeId",
+              r.reason AS "disputeReason",
+              r.details AS "disputeDetails",
+              r."editorialNote" AS "disputeEditorialNote",
+              r."disputedAt",
+              r."disputeExpiresAt",
+              r."authorResponse" AS "disputeAuthorResponse",
+              r."authorRespondedAt" AS "disputeAuthorRespondedAt"
+       FROM story s
+       LEFT JOIN story_report r ON r."storyId" = s.id AND r.status = 'DISPUTED'
+       WHERE s."authorId" = $1
+       ORDER BY s."updatedAt" DESC`,
       [authorId],
     );
   }
@@ -465,17 +528,19 @@ export class StoriesService {
       slug = `${baseSlug}-${counter}`;
     }
 
-    const categoryVal = dto.category?.trim() || 'General';
+    const isPaintingOrVideo = dto.submissionType === 'PAINTING' || dto.submissionType === 'VIDEO';
+    const categoryVal = isPaintingOrVideo ? (dto.category?.trim() || null) : (dto.category?.trim() || 'General');
     const descriptionVal = dto.description?.trim() || null;
     const submissionTypeVal = dto.submissionType || 'STORY';
     const mediaUrlVal = dto.mediaUrl?.trim() || null;
+    const coverImageUrlVal = dto.coverImageUrl?.trim() || (isPaintingOrVideo ? (dto.mediaUrl?.trim() || null) : null);
     const contentVal = dto.content ?? '';
 
     const story = await this.prisma.queryOne<StoryRow>(
-      `INSERT INTO story (id, title, slug, description, content, category, status, "submissionType", "mediaUrl", "authorId", "createdAt", "updatedAt")
-       VALUES (gen_random_uuid()::text, $1, $2, $3, $4, $5, $6::"StoryStatus", $7::"SubmissionType", $8, $9, now(), now())
-       RETURNING id, title, slug, description, category, "submissionType", "mediaUrl", status, "createdAt"`,
-      [dto.title, slug, descriptionVal, contentVal, categoryVal, initialStatus, submissionTypeVal, mediaUrlVal, targetAuthorId],
+      `INSERT INTO story (id, title, slug, description, content, category, status, "submissionType", "mediaUrl", "coverImageUrl", "authorId", "createdAt", "updatedAt")
+       VALUES (gen_random_uuid()::text, $1, $2, $3, $4, $5, $6::"StoryStatus", $7::"SubmissionType", $8, $9, $10, now(), now())
+       RETURNING id, title, slug, description, category, "submissionType", "mediaUrl", "coverImageUrl", status, "createdAt"`,
+      [dto.title, slug, descriptionVal, contentVal, categoryVal, initialStatus, submissionTypeVal, mediaUrlVal, coverImageUrlVal, targetAuthorId],
     );
 
     return story!;
@@ -484,8 +549,8 @@ export class StoriesService {
   async update(id: string, authorId: string, dto: UpdateStoryDto): Promise<StoryRow> {
     const story = await this.findRawStory(id);
     if (story.authorId !== authorId) throw new ForbiddenException('Not your story');
-    if (!['DRAFT', 'REJECTED'].includes(story.status)) {
-      throw new BadRequestException('Only DRAFT or REJECTED stories can be edited');
+    if (!['DRAFT', 'REJECTED', 'PENDING'].includes(story.status)) {
+      throw new BadRequestException('Only DRAFT, REJECTED, or PENDING stories can be edited');
     }
 
     const updates: string[] = ['"updatedAt" = now()'];
@@ -504,7 +569,8 @@ export class StoriesService {
       updates.push(`content = $${params.length}`);
     }
     if (dto.category !== undefined) {
-      params.push(dto.category);
+      const isPaintingOrVideo = (dto.submissionType || story.submissionType) === 'PAINTING' || (dto.submissionType || story.submissionType) === 'VIDEO';
+      params.push(isPaintingOrVideo ? (dto.category?.trim() || null) : (dto.category?.trim() || 'General'));
       updates.push(`category = $${params.length}`);
     }
     if (dto.submissionType !== undefined) {
@@ -515,6 +581,10 @@ export class StoriesService {
       params.push(dto.mediaUrl);
       updates.push(`"mediaUrl" = $${params.length}`);
     }
+    if (dto.coverImageUrl !== undefined) {
+      params.push(dto.coverImageUrl?.trim() || null);
+      updates.push(`"coverImageUrl" = $${params.length}`);
+    }
 
     params.push(id);
     const idParamIndex = params.length;
@@ -522,7 +592,7 @@ export class StoriesService {
     return (await this.prisma.queryOne<StoryRow>(
       `UPDATE story SET ${updates.join(', ')}
        WHERE id = $${idParamIndex}
-       RETURNING id, title, slug, description, category, "submissionType", "mediaUrl", status, "updatedAt"`,
+       RETURNING id, title, slug, description, category, "submissionType", "mediaUrl", "coverImageUrl", status, "updatedAt"`,
       params,
     ))!;
   }
@@ -530,11 +600,19 @@ export class StoriesService {
   async submitForReview(id: string, authorId: string): Promise<{ id: string; status: string }> {
     const story = await this.findRawStory(id);
     if (story.authorId !== authorId) throw new ForbiddenException('Not your story');
-    if (!['DRAFT', 'REJECTED'].includes(story.status)) {
-      throw new BadRequestException('Only DRAFT or REJECTED stories can be submitted');
+    if (!['DRAFT', 'REJECTED', 'PENDING'].includes(story.status)) {
+      throw new BadRequestException('Only DRAFT, REJECTED, or PENDING stories can be submitted');
     }
     if (!story.coverImageUrl) {
-      throw new BadRequestException('A cover image is required before submitting your story for editorial review');
+      if (story.mediaUrl) {
+        await this.prisma.execute(
+          `UPDATE story SET "coverImageUrl" = $1, "updatedAt" = now() WHERE id = $2`,
+          [story.mediaUrl, id],
+        );
+        story.coverImageUrl = story.mediaUrl;
+      } else {
+        throw new BadRequestException('A cover image is required before submitting your story for editorial review');
+      }
     }
 
     await this.prisma.execute(
@@ -651,9 +729,15 @@ export class StoriesService {
       return { id, status: 'APPROVED' };
     } else if (dto.decision === 'UNPUBLISHED') {
       await this.prisma.execute(
-        `UPDATE story SET status = 'UNPUBLISHED'::"StoryStatus", "rejectionNote" = null, "updatedAt" = now()
+        `UPDATE story SET status = 'UNPUBLISHED'::"StoryStatus", "rejectionNote" = $2, "updatedAt" = now()
          WHERE id = $1`,
-        [id],
+        [id, dto.rejectionNote ?? null],
+      );
+      await this.notificationsService.notifyAuthorOfRejection(
+        story.authorId,
+        story.title,
+        id,
+        dto.rejectionNote || 'unpublish',
       );
       return { id, status: 'UNPUBLISHED' };
     } else if (dto.decision === 'APPROVED_EMAGAZINE') {

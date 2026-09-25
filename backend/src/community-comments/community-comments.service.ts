@@ -68,6 +68,7 @@ export class CommunityCommentsService {
         JOIN "user" u ON u.id = c."authorId"
         WHERE c."postId" = $1
           AND c."parentId" IS NULL
+          AND (u."isShadowBanned" IS NOT TRUE)
 
         UNION ALL
 
@@ -87,6 +88,7 @@ export class CommunityCommentsService {
         FROM community_comment c
         JOIN "user" u ON u.id = c."authorId"
         INNER JOIN comment_tree ct ON ct.id = c."parentId"
+        WHERE (u."isShadowBanned" IS NOT TRUE)
       )
       SELECT *
       FROM comment_tree
@@ -219,7 +221,7 @@ export class CommunityCommentsService {
     );
     if (!comment) throw new NotFoundException('Comment not found');
 
-    if (['EDITOR', 'ADMIN'].includes(userRole)) {
+    if (['EDITOR', 'ADMIN', 'MODERATOR'].includes(userRole)) {
       // Editorial soft-delete: preserve thread structure
       await this.prisma.execute(
         `UPDATE community_comment

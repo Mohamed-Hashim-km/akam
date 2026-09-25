@@ -15,6 +15,7 @@ export type UserRow = {
   role: string;
   isFeatured?: boolean;
   sortOrder?: number;
+  isShadowBanned?: boolean;
   createdAt?: string;
 };
 
@@ -49,7 +50,7 @@ export class UsersService {
       `SELECT id, email, name, 
               COALESCE(NULLIF(phone, ''), '+91 98470 12345') AS phone, 
               COALESCE("privacyPolicyAccepted", true) AS "privacyPolicyAccepted", 
-              bio, "avatarUrl", role, "isFeatured", "sortOrder", "createdAt"
+              bio, "avatarUrl", role, "isFeatured", "sortOrder", "isShadowBanned", "createdAt"
        FROM "user"
        ${whereSql}
        ORDER BY "createdAt" DESC
@@ -77,7 +78,7 @@ export class UsersService {
       `SELECT id, email, name, 
               COALESCE(NULLIF(phone, ''), '+91 98470 12345') AS phone, 
               COALESCE("privacyPolicyAccepted", true) AS "privacyPolicyAccepted", 
-              bio, "avatarUrl", role, "isFeatured", "sortOrder", "createdAt"
+              bio, "avatarUrl", role, "isFeatured", "sortOrder", "isShadowBanned", "createdAt"
        FROM "user" WHERE id = $1`,
       [id],
     );
@@ -98,29 +99,52 @@ export class UsersService {
         `SELECT value FROM site_setting WHERE key = 'student_applications' LIMIT 1`,
       );
       if (applicationsRow?.value && Array.isArray(applicationsRow.value)) {
-        const hasApproved = applicationsRow.value.some(
+        const approvedApp = applicationsRow.value.find(
           (app: any) =>
             app.status === 'APPROVED' &&
             app.email &&
             app.email.trim().toLowerCase() === user.email.trim().toLowerCase(),
         );
-        if (hasApproved) {
-          sub = await this.prisma.queryOne<{
-            status: string;
-            endDate: Date;
-            isStudent: boolean;
-          }>(
-            `INSERT INTO subscription (id, "userId", "planType", status, "startDate", "endDate", "isStudent", "createdAt", "updatedAt")
-             VALUES (gen_random_uuid()::text, $1, 'SIX_MONTH', 'ACTIVE', now(), now() + interval '6 months', true, now(), now())
-             ON CONFLICT ("userId") DO UPDATE
-               SET status      = 'ACTIVE',
-                   "startDate" = now(),
-                   "endDate"   = now() + interval '6 months',
-                   "isStudent" = true,
-                   "updatedAt" = now()
-             RETURNING status, "endDate", "isStudent"`,
-            [id],
-          );
+        if (approvedApp) {
+          const endDateVal = approvedApp.endDate ? new Date(approvedApp.endDate) : null;
+          const targetEndDate =
+            endDateVal && !isNaN(endDateVal.getTime()) ? endDateVal.toISOString() : null;
+
+          if (targetEndDate) {
+            sub = await this.prisma.queryOne<{
+              status: string;
+              endDate: Date;
+              isStudent: boolean;
+            }>(
+              `INSERT INTO subscription (id, "userId", "planType", status, "startDate", "endDate", "isStudent", "createdAt", "updatedAt")
+               VALUES (gen_random_uuid()::text, $1, 'SIX_MONTH', 'ACTIVE', now(), $2::timestamp, true, now(), now())
+               ON CONFLICT ("userId") DO UPDATE
+                 SET status      = 'ACTIVE',
+                     "startDate" = now(),
+                     "endDate"   = $2::timestamp,
+                     "isStudent" = true,
+                     "updatedAt" = now()
+               RETURNING status, "endDate", "isStudent"`,
+              [id, targetEndDate],
+            );
+          } else {
+            sub = await this.prisma.queryOne<{
+              status: string;
+              endDate: Date;
+              isStudent: boolean;
+            }>(
+              `INSERT INTO subscription (id, "userId", "planType", status, "startDate", "endDate", "isStudent", "createdAt", "updatedAt")
+               VALUES (gen_random_uuid()::text, $1, 'SIX_MONTH', 'ACTIVE', now(), now() + interval '6 months', true, now(), now())
+               ON CONFLICT ("userId") DO UPDATE
+                 SET status      = 'ACTIVE',
+                     "startDate" = now(),
+                     "endDate"   = now() + interval '6 months',
+                     "isStudent" = true,
+                     "updatedAt" = now()
+               RETURNING status, "endDate", "isStudent"`,
+              [id],
+            );
+          }
         }
       }
     }
@@ -130,8 +154,8 @@ export class UsersService {
     return {
       ...user,
       subscriptionStatus: subIsActive ? 'ACTIVE' : (sub ? 'EXPIRED' : null),
-      subscriptionEndDate: sub ? new Date(sub.endDate).toISOString() : null,
-      isStudent: sub?.isStudent ?? false,
+      subscriptionEndDate: subIsActive && sub ? new Date(sub.endDate).toISOString() : null,
+      isStudent: Boolean(subIsActive && sub?.isStudent),
     };
   }
 
@@ -141,14 +165,14 @@ export class UsersService {
     const offset = (page - 1) * limit;
 
     const countRow = await this.prisma.queryOne<{ count: string }>(
-      `SELECT COUNT(*) AS count FROM "user" WHERE "isFeatured" = true`
+      `SELECT COUNT(*) AS count FROM "user" WHERE "isFeatured" = true AND ("isShadowBanned" IS NOT TRUE)`
     );
     const total = parseInt(countRow?.count ?? '0', 10);
 
     const data = await this.prisma.query<UserRow>(
-      `SELECT id, email, name, bio, "avatarUrl", role, "isFeatured", "sortOrder", "createdAt"
+      `SELECT id, email, name, bio, "avatarUrl", role, "isFeatured", "sortOrder", "isShadowBanned", "createdAt"
        FROM "user"
-       WHERE "isFeatured" = true
+       WHERE "isFeatured" = true AND ("isShadowBanned" IS NOT TRUE)
        ORDER BY CASE WHEN "sortOrder" > 0 THEN 0 ELSE 1 END ASC, "sortOrder" ASC, "updatedAt" DESC
        LIMIT $1 OFFSET $2`,
       [limit, offset],
@@ -175,14 +199,14 @@ export class UsersService {
     const offset = (page - 1) * limit;
 
     const countRow = await this.prisma.queryOne<{ count: string }>(
-      `SELECT COUNT(*) AS count FROM "user" WHERE role = 'AUTHOR'::"Role"`
+      `SELECT COUNT(*) AS count FROM "user" WHERE role = 'AUTHOR'::"Role" AND ("isShadowBanned" IS NOT TRUE)`
     );
     const total = parseInt(countRow?.count ?? '0', 10);
 
     const data = await this.prisma.query<UserRow>(
-      `SELECT id, email, name, bio, "avatarUrl", role, "isFeatured", "sortOrder", "createdAt"
+      `SELECT id, email, name, bio, "avatarUrl", role, "isFeatured", "sortOrder", "isShadowBanned", "createdAt"
        FROM "user"
-       WHERE role = 'AUTHOR'::"Role"
+       WHERE role = 'AUTHOR'::"Role" AND ("isShadowBanned" IS NOT TRUE)
        ORDER BY CASE WHEN "sortOrder" > 0 THEN 0 ELSE 1 END ASC, "sortOrder" ASC, "createdAt" DESC
        LIMIT $1 OFFSET $2`,
       [limit, offset],
@@ -205,6 +229,9 @@ export class UsersService {
 
   async toggleFeatured(id: string): Promise<UserRow> {
     const existing = await this.findById(id);
+    if (existing.role !== 'AUTHOR') {
+      throw new BadRequestException('Featured status can only be set for authors');
+    }
     const newStatus = !existing.isFeatured;
     const user = await this.prisma.queryOne<UserRow>(
       `UPDATE "user" SET "isFeatured" = $1, "updatedAt" = now()
@@ -216,12 +243,75 @@ export class UsersService {
     return user;
   }
 
+  private async shiftAuthorPriorities(targetUserId: string | null, targetPriority: number): Promise<void> {
+    if (targetPriority <= 0) return;
+
+    // Check if any other author already has this priority or higher that needs shifting
+    const conflictingAuthors = await this.prisma.query<{ id: string; sortOrder: number }>(
+      `SELECT id, "sortOrder"
+       FROM "user"
+       WHERE role = 'AUTHOR'::"Role"
+         ${targetUserId ? 'AND id != $1' : ''}
+         AND "sortOrder" >= ${targetUserId ? '$2' : '$1'}
+       ORDER BY "sortOrder" ASC, "updatedAt" DESC`,
+      targetUserId ? [targetUserId, targetPriority] : [targetPriority],
+    );
+
+    if (!conflictingAuthors || conflictingAuthors.length === 0) {
+      return;
+    }
+
+    // Only shift if there is at least one author at targetPriority
+    const hasDirectConflict = conflictingAuthors.some((a) => a.sortOrder === targetPriority);
+    if (!hasDirectConflict) {
+      return;
+    }
+
+    // Cascade shift starting from targetPriority + 1
+    let nextAvailable = targetPriority + 1;
+    for (const author of conflictingAuthors) {
+      if (author.sortOrder < nextAvailable) {
+        await this.prisma.execute(
+          `UPDATE "user" SET "sortOrder" = $1, "updatedAt" = now() WHERE id = $2`,
+          [nextAvailable, author.id],
+        );
+        nextAvailable++;
+      } else {
+        nextAvailable = author.sortOrder + 1;
+      }
+    }
+  }
+
   async updateSortOrder(id: string, sortOrder: number): Promise<UserRow> {
+    const existing = await this.findById(id);
+    if (existing.role !== 'AUTHOR') {
+      throw new BadRequestException('Priority order can only be set for authors');
+    }
+    const val = typeof sortOrder === 'number' ? sortOrder : parseInt(String(sortOrder || '0'), 10);
+    const safeSortOrder = isNaN(val) ? 0 : Math.max(0, val);
+
+    if (safeSortOrder > 0) {
+      await this.shiftAuthorPriorities(id, safeSortOrder);
+    }
+
     const user = await this.prisma.queryOne<UserRow>(
       `UPDATE "user" SET "sortOrder" = $1, "updatedAt" = now()
        WHERE id = $2
-       RETURNING id, email, name, bio, "avatarUrl", role, "isFeatured", "sortOrder", "createdAt"`,
-      [sortOrder, id],
+       RETURNING id, email, name, bio, "avatarUrl", role, "isFeatured", "sortOrder", "isShadowBanned", "createdAt"`,
+      [safeSortOrder, id],
+    );
+    if (!user) throw new NotFoundException('User not found');
+    return user;
+  }
+
+  async toggleShadowBan(id: string): Promise<UserRow> {
+    const existing = await this.findById(id);
+    const newStatus = !existing.isShadowBanned;
+    const user = await this.prisma.queryOne<UserRow>(
+      `UPDATE "user" SET "isShadowBanned" = $1, "updatedAt" = now()
+       WHERE id = $2
+       RETURNING id, email, name, bio, "avatarUrl", role, "isFeatured", "sortOrder", "isShadowBanned", "createdAt"`,
+      [newStatus, id],
     );
     if (!user) throw new NotFoundException('User not found');
     return user;
@@ -282,12 +372,16 @@ export class UsersService {
   }
 
   async updateRole(id: string, newRole: string): Promise<UserRow> {
-    const validRoles = ['READER', 'AUTHOR', 'EDITOR'];
+    const validRoles = ['READER', 'AUTHOR', 'EDITOR', 'MODERATOR'];
     if (!validRoles.includes(newRole)) {
       throw new BadRequestException(`Invalid role: ${newRole}`);
     }
     const user = await this.prisma.queryOne<UserRow>(
-      `UPDATE "user" SET role = $1::"Role", "updatedAt" = now()
+      `UPDATE "user"
+       SET role = $1::"Role",
+           "updatedAt" = now(),
+           "isFeatured" = CASE WHEN $1::"Role" != 'AUTHOR'::"Role" THEN false ELSE "isFeatured" END,
+           "sortOrder" = CASE WHEN $1::"Role" != 'AUTHOR'::"Role" THEN 0 ELSE "sortOrder" END
        WHERE id = $2
        RETURNING id, email, name, bio, "avatarUrl", role, "isFeatured", "sortOrder"`,
       [newRole, id],
@@ -308,6 +402,12 @@ export class UsersService {
         this.uploadsService.deleteFileByUrl(existing.avatarUrl);
       }
 
+      const sortVal = typeof dto.sortOrder === 'number' ? dto.sortOrder : parseInt(String(dto.sortOrder || '0'), 10);
+      const safeSort = isNaN(sortVal) ? 0 : Math.max(0, sortVal);
+      if (safeSort > 0) {
+        await this.shiftAuthorPriorities(existing.id, safeSort);
+      }
+
       const updated = await this.prisma.queryOne<UserRow>(
         `UPDATE "user"
          SET role = 'AUTHOR'::"Role",
@@ -318,8 +418,8 @@ export class UsersService {
              "sortOrder" = COALESCE($5, "sortOrder"),
              "updatedAt" = now()
          WHERE id = $6
-         RETURNING id, email, name, bio, "avatarUrl", role, "isFeatured", "sortOrder", "createdAt"`,
-        [dto.name || null, dto.bio || null, dto.avatarUrl || null, dto.isFeatured ?? null, dto.sortOrder ?? 0, existing.id],
+         RETURNING id, email, name, bio, "avatarUrl", role, "isFeatured", "sortOrder", "isShadowBanned", "createdAt"`,
+        [dto.name || null, dto.bio || null, dto.avatarUrl || null, dto.isFeatured ?? null, safeSort, existing.id],
       );
       return updated!;
     }
@@ -330,12 +430,17 @@ export class UsersService {
     const bioVal = dto.bio?.trim() || null;
     const avatarVal = dto.avatarUrl?.trim() || null;
     const isFeaturedVal = dto.isFeatured ?? false;
-    const sortOrderVal = dto.sortOrder ?? 0;
+    const rawSortOrder = typeof dto.sortOrder === 'number' ? dto.sortOrder : parseInt(String(dto.sortOrder || '0'), 10);
+    const sortOrderVal = isNaN(rawSortOrder) ? 0 : Math.max(0, rawSortOrder);
+
+    if (sortOrderVal > 0) {
+      await this.shiftAuthorPriorities(null, sortOrderVal);
+    }
 
     const user = await this.prisma.queryOne<UserRow>(
-      `INSERT INTO "user" (id, email, name, phone, "privacyPolicyAccepted", bio, "avatarUrl", role, "isFeatured", "sortOrder", "createdAt", "updatedAt")
-       VALUES (gen_random_uuid()::text, $1, $2, $3, $4, $5, $6, 'AUTHOR'::"Role", $7, $8, now(), now())
-       RETURNING id, email, name, phone, "privacyPolicyAccepted", bio, "avatarUrl", role, "isFeatured", "sortOrder", "createdAt"`,
+      `INSERT INTO "user" (id, email, name, phone, "privacyPolicyAccepted", bio, "avatarUrl", role, "isFeatured", "sortOrder", "isShadowBanned", "createdAt", "updatedAt")
+       VALUES (gen_random_uuid()::text, $1, $2, $3, $4, $5, $6, 'AUTHOR'::"Role", $7, $8, false, now(), now())
+       RETURNING id, email, name, phone, "privacyPolicyAccepted", bio, "avatarUrl", role, "isFeatured", "sortOrder", "isShadowBanned", "createdAt"`,
       [emailVal, nameVal, phoneVal, privacyVal, bioVal, avatarVal, isFeaturedVal, sortOrderVal],
     );
 
@@ -393,7 +498,7 @@ export class UsersService {
     }
 
     if (dto.role !== undefined) {
-      const validRoles = ['READER', 'AUTHOR', 'EDITOR'];
+      const validRoles = ['READER', 'AUTHOR', 'EDITOR', 'MODERATOR'];
       if (!validRoles.includes(dto.role)) {
         throw new BadRequestException(`Invalid role: ${dto.role}`);
       }
@@ -401,15 +506,30 @@ export class UsersService {
       updates.push(`role = $${params.length}::"Role"`);
     }
 
-    if (dto.isFeatured !== undefined) {
-      params.push(dto.isFeatured);
-      updates.push(`"isFeatured" = $${params.length}`);
+    const finalRole = dto.role !== undefined ? dto.role : existing.role;
+    if (finalRole !== 'AUTHOR') {
+      updates.push(`"isFeatured" = false`);
+      updates.push(`"sortOrder" = 0`);
+    } else {
+      if (dto.isFeatured !== undefined) {
+        params.push(dto.isFeatured);
+        updates.push(`"isFeatured" = $${params.length}`);
+      }
+
+      if (dto.sortOrder !== undefined) {
+        const sortVal = typeof dto.sortOrder === 'number' ? dto.sortOrder : parseInt(String(dto.sortOrder), 10);
+        const safeSort = isNaN(sortVal) ? 0 : Math.max(0, sortVal);
+        if (safeSort > 0) {
+          await this.shiftAuthorPriorities(id, safeSort);
+        }
+        params.push(safeSort);
+        updates.push(`"sortOrder" = $${params.length}`);
+      }
     }
 
-    if (dto.sortOrder !== undefined) {
-      const sortVal = typeof dto.sortOrder === 'number' ? dto.sortOrder : parseInt(String(dto.sortOrder), 10);
-      params.push(isNaN(sortVal) ? 0 : sortVal);
-      updates.push(`"sortOrder" = $${params.length}`);
+    if (dto.isShadowBanned !== undefined) {
+      params.push(Boolean(dto.isShadowBanned));
+      updates.push(`"isShadowBanned" = $${params.length}`);
     }
 
     params.push(id);
@@ -417,7 +537,7 @@ export class UsersService {
       `UPDATE "user"
        SET ${updates.join(', ')}
        WHERE id = $${params.length}
-       RETURNING id, email, name, phone, "privacyPolicyAccepted", bio, "avatarUrl", role, "isFeatured", "sortOrder", "createdAt"`,
+       RETURNING id, email, name, phone, "privacyPolicyAccepted", bio, "avatarUrl", role, "isFeatured", "sortOrder", "isShadowBanned", "createdAt"`,
       params,
     );
 

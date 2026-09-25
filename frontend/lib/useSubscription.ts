@@ -49,13 +49,12 @@ function readFromLocalStorage(): Omit<SubscriptionState, "isLoading"> {
 
     const isActive =
       status === "ACTIVE" && (endDate == null || new Date(endDate) > new Date());
-    const isStudentUser = Boolean(user?.isStudent);
-    const hasAccess = isActive || masikaPass || isStudentApproved || isStudentUser;
+    const hasAccess = isActive || masikaPass || isStudentApproved;
 
     return {
       isSubscribed: hasAccess,
       subscriptionEndDate: endDate,
-      isStudent: isStudentApproved || isStudentUser,
+      isStudent: isStudentApproved,
     };
   } catch {
     return { isSubscribed: false, subscriptionEndDate: null, isStudent: false };

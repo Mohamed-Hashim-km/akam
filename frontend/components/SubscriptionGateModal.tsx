@@ -32,6 +32,7 @@ const SubscriptionGateModal: React.FC<SubscriptionGateModalProps> = ({
   const [payUOpen, setPayUOpen] = useState(false);
   const [studentModalOpen, setStudentModalOpen] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
+  const [authAction, setAuthAction] = useState<"subscribe" | "student" | null>(null);
   const [user, setUser] = useState<any>(null);
 
   useEffect(() => {
@@ -65,9 +66,19 @@ const SubscriptionGateModal: React.FC<SubscriptionGateModalProps> = ({
 
   const handleCtaClick = () => {
     if (!user) {
+      setAuthAction("subscribe");
       setAuthOpen(true);
     } else {
       setPayUOpen(true);
+    }
+  };
+
+  const handleStudentClick = () => {
+    if (!user) {
+      setAuthAction("student");
+      setAuthOpen(true);
+    } else {
+      setStudentModalOpen(true);
     }
   };
 
@@ -178,10 +189,10 @@ const SubscriptionGateModal: React.FC<SubscriptionGateModalProps> = ({
                 </div>
                 <button
                   type="button"
-                  onClick={() => setStudentModalOpen(true)}
+                  onClick={handleStudentClick}
                   className="px-3 py-1.5 bg-[#0FA975] hover:bg-[#0d8f63] text-white text-xs font-semibold rounded-xl transition shadow-xs cursor-pointer shrink-0 active:scale-95"
                 >
-                  Apply Free
+                  {user ? "Apply Free" : "Sign in to Apply"}
                 </button>
               </div>
             </div>
@@ -220,11 +231,19 @@ const SubscriptionGateModal: React.FC<SubscriptionGateModalProps> = ({
       {authOpen && (
         <AuthModal
           isOpen={authOpen}
-          onClose={() => setAuthOpen(false)}
+          onClose={() => {
+            setAuthOpen(false);
+            setAuthAction(null);
+          }}
           onSuccess={(loggedInUser) => {
             setUser(loggedInUser);
             setAuthOpen(false);
-            setPayUOpen(true);
+            if (authAction === "student") {
+              setStudentModalOpen(true);
+            } else {
+              setPayUOpen(true);
+            }
+            setAuthAction(null);
           }}
         />
       )}

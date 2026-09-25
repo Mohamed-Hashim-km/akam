@@ -27,9 +27,12 @@ import {
   Loader2,
   UploadCloud,
   Image as ImageIcon,
+  CreditCard,
+  Camera,
+  Calendar,
 } from "lucide-react";
 import Button from "@/components/ui/Button";
-import { API_BASE_URL, apiFetch } from "@/lib/config";
+import { API_BASE_URL, apiFetch, formatAssetUrl } from "@/lib/config";
 import { useRouter, useSearchParams } from "next/navigation";
 
 export interface StudentApplication {
@@ -37,17 +40,35 @@ export interface StudentApplication {
   referenceId: string;
   fullName: string;
   institution: string;
-  studentIdNumber: string;
-  course: string;
   email: string;
-  idCardUrl: string;
+  idCardUrl?: string;
   idCardName?: string;
   submittedAt: string;
   status: "PENDING_APPROVAL" | "APPROVED" | "REJECTED";
   reviewedAt?: string;
   reviewedBy?: string;
   reviewNotes?: string;
+  endDate?: string;
 }
+
+export const formatDateForInput = (d: Date) => {
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+};
+
+export const getFutureDateString = (months: number) => {
+  const d = new Date();
+  d.setMonth(d.getMonth() + months);
+  return formatDateForInput(d);
+};
+
+export const getAcademicYearEndString = () => {
+  const now = new Date();
+  const year = now.getMonth() >= 5 ? now.getFullYear() + 1 : now.getFullYear();
+  return `${year}-05-31`;
+};
 
 interface StudentVerificationsPanelProps {
   currentUserEmail?: string;
@@ -116,6 +137,12 @@ export const StudentVerificationsPanel: React.FC<StudentVerificationsPanelProps>
   const [rejectingApp, setRejectingApp] = useState<StudentApplication | null>(null);
   const [rejectReason, setRejectReason] = useState(PRESET_REJECT_REASONS[0]);
 
+  // Approve Application Modal (Allows setting subscription ending date)
+  const [approvingApp, setApprovingApp] = useState<StudentApplication | null>(null);
+  const [approveEndDate, setApproveEndDate] = useState<string>("");
+  const [approveNotes, setApproveNotes] = useState<string>("");
+  const [approveSubmitting, setApproveSubmitting] = useState<boolean>(false);
+
   // Delete In-App Modal
   const [deletingApp, setDeletingApp] = useState<StudentApplication | null>(null);
 
@@ -126,14 +153,15 @@ export const StudentVerificationsPanel: React.FC<StudentVerificationsPanelProps>
   const [showManualModal, setShowManualModal] = useState(false);
   const [manualName, setManualName] = useState("");
   const [manualCollege, setManualCollege] = useState("");
-  const [manualRoll, setManualRoll] = useState("");
-  const [manualCourse, setManualCourse] = useState("");
   const [manualEmail, setManualEmail] = useState("");
+  const [manualEndDate, setManualEndDate] = useState<string>(() => getFutureDateString(6));
   const [manualIdCardFile, setManualIdCardFile] = useState<File | null>(null);
   const [manualIdCardPreview, setManualIdCardPreview] = useState<string>("");
   const [manualIdCardName, setManualIdCardName] = useState<string>("");
+  const [manualIsDragOver, setManualIsDragOver] = useState(false);
   const [manualSubmitting, setManualSubmitting] = useState(false);
   const manualFileInputRef = useRef<HTMLInputElement | null>(null);
+  const manualCameraInputRef = useRef<HTMLInputElement | null>(null);
 
   const handleManualFileChange = (file: File) => {
     if (!file) return;
@@ -149,6 +177,14 @@ export const StudentVerificationsPanel: React.FC<StudentVerificationsPanelProps>
       setManualIdCardPreview(e.target?.result as string);
     };
     reader.readAsDataURL(file);
+  };
+
+  const handleManualDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setManualIsDragOver(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      handleManualFileChange(e.dataTransfer.files[0]);
+    }
   };
 
   const showToast = (msg: string) => {
@@ -270,11 +306,57 @@ export const StudentVerificationsPanel: React.FC<StudentVerificationsPanelProps>
     };
   }, [loading, loadingMore, hasMore, page, fetchApplications]);
 
+  // Open approval modal to configure subscription ending date
+  const openApproveModal = (app: StudentApplication) => {
+    setApprovingApp(app);
+    if (app.endDate) {
+      try {
+        const d = new Date(app.endDate);
+        if (!isNaN(d.getTime())) {
+          setApproveEndDate(formatDateForInput(d));
+        } else {
+          setApproveEndDate(getFutureDateString(6));
+        }
+      } catch {
+        setApproveEndDate(getFutureDateString(6));
+      }
+    } else {
+      setApproveEndDate(getFutureDateString(6));
+    }
+    setApproveNotes(
+      app.reviewNotes || "Approved by Akam Editorial Board. Verified student credentials."
+    );
+  };
+
+  const handleConfirmApprove = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!approvingApp) return;
+
+    if (!approveEndDate) {
+      alert("Please select a subscription ending date.");
+      return;
+    }
+
+    setApproveSubmitting(true);
+    try {
+      await handleUpdateStatus(
+        approvingApp,
+        "APPROVED",
+        approveNotes.trim() || "Approved by Akam Editorial Board",
+        approveEndDate,
+      );
+      setApprovingApp(null);
+    } finally {
+      setApproveSubmitting(false);
+    }
+  };
+
   // Update application decision (Approve, Reject, or Re-evaluate/Pending)
   const handleUpdateStatus = async (
     app: StudentApplication,
     newStatus: "PENDING_APPROVAL" | "APPROVED" | "REJECTED",
-    notes?: string
+    notes?: string,
+    endDate?: string,
   ) => {
     const targetId = app.referenceId || app.id;
 
@@ -289,13 +371,23 @@ export const StudentVerificationsPanel: React.FC<StudentVerificationsPanelProps>
               reviewedAt: new Date().toISOString(),
               reviewedBy: currentUserName,
               reviewNotes: notes !== undefined ? notes : item.reviewNotes,
+              endDate: newStatus === "APPROVED" ? (endDate || item.endDate) : undefined,
             }
           : item
       )
     );
 
     if (newStatus === "APPROVED") {
-      showToast(`Free Scholar Pass approved for ${app.fullName}. Welcome email sent to ${app.email}.`);
+      const formattedEnd = endDate
+        ? new Date(endDate).toLocaleDateString("en-IN", {
+            day: "numeric",
+            month: "short",
+            year: "numeric",
+          })
+        : "6 months";
+      showToast(
+        `Free Scholar Pass approved for ${app.fullName} (Valid until ${formattedEnd}). Welcome email sent to ${app.email}.`
+      );
     } else if (newStatus === "REJECTED") {
       showToast(`Application for ${app.fullName} rejected. Feedback email sent to ${app.email}.`);
     } else {
@@ -304,7 +396,11 @@ export const StudentVerificationsPanel: React.FC<StudentVerificationsPanelProps>
 
     // Close modals
     setRejectingApp(null);
-    if (selectedAppForPreview?.referenceId === targetId) {
+    setApprovingApp(null);
+    if (
+      selectedAppForPreview?.referenceId === targetId ||
+      selectedAppForPreview?.id === targetId
+    ) {
       setSelectedAppForPreview(null);
     }
 
@@ -317,6 +413,7 @@ export const StudentVerificationsPanel: React.FC<StudentVerificationsPanelProps>
           status: newStatus,
           reviewNotes: notes || (newStatus === "APPROVED" ? "Approved by Akam Editorial Board" : "Rejected"),
           reviewedBy: currentUserName,
+          endDate: endDate,
         }),
       });
     } catch (err) {
@@ -333,13 +430,18 @@ export const StudentVerificationsPanel: React.FC<StudentVerificationsPanelProps>
             parsed.status = newStatus;
             parsed.reviewedAt = new Date().toISOString();
             if (notes) parsed.reviewNotes = notes;
+            if (newStatus === "APPROVED" && endDate) parsed.endDate = endDate;
             localStorage.setItem("akam_student_application", JSON.stringify(parsed));
             if (newStatus === "APPROVED") {
               localStorage.setItem("akam_masika_pass", "true");
               localStorage.setItem("akam_pass_type", "Student Special Pass (100% Free)");
+              if (endDate) {
+                localStorage.setItem("akam_subscription_end_date", endDate);
+              }
             } else if (newStatus === "REJECTED") {
               localStorage.removeItem("akam_masika_pass");
               localStorage.removeItem("akam_pass_type");
+              localStorage.removeItem("akam_subscription_end_date");
             }
           }
         }
@@ -412,8 +514,8 @@ export const StudentVerificationsPanel: React.FC<StudentVerificationsPanelProps>
     }
 
     setManualSubmitting(true);
-    let finalIdCardUrl = manualIdCardPreview || "/images/home/aboutDigital.png";
-    let finalIdCardName = manualIdCardName || "Direct_Editorial_Grant.png";
+    let finalIdCardUrl = manualIdCardPreview || "";
+    let finalIdCardName = manualIdCardName || "";
 
     if (manualIdCardFile) {
       try {
@@ -427,10 +529,8 @@ export const StudentVerificationsPanel: React.FC<StudentVerificationsPanelProps>
 
         if (uploadRes.ok) {
           const json = await uploadRes.json();
-          if (json?.url) {
-            finalIdCardUrl = json.url.startsWith("http")
-              ? json.url
-              : `${API_BASE_URL.replace(/\/api$/, "")}${json.url.startsWith("/") ? "" : "/"}${json.url}`;
+          if (json?.url || json?.path) {
+            finalIdCardUrl = json.url || json.path;
           }
         }
       } catch (err) {
@@ -438,14 +538,16 @@ export const StudentVerificationsPanel: React.FC<StudentVerificationsPanelProps>
       }
     }
 
+    const targetEndDate = manualEndDate
+      ? new Date(manualEndDate).toISOString()
+      : new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString();
+
     const refId = `AKAM-STU-${new Date().getFullYear()}-${Math.floor(10000 + Math.random() * 90000)}`;
     const newApp: StudentApplication = {
       id: refId,
       referenceId: refId,
       fullName: manualName.trim(),
       institution: manualCollege.trim(),
-      studentIdNumber: manualRoll.trim() || "MANUAL-VERIFIED",
-      course: manualCourse.trim() || "Degree Student",
       email: manualEmail.trim(),
       idCardUrl: finalIdCardUrl,
       idCardName: finalIdCardName,
@@ -454,6 +556,7 @@ export const StudentVerificationsPanel: React.FC<StudentVerificationsPanelProps>
       reviewedAt: new Date().toISOString(),
       reviewedBy: currentUserName,
       reviewNotes: "Direct scholar pass granted by Akam Editorial Board.",
+      endDate: targetEndDate,
     };
 
     setApplications((prev) => [newApp, ...prev]);
@@ -474,13 +577,12 @@ export const StudentVerificationsPanel: React.FC<StudentVerificationsPanelProps>
           referenceId: refId,
           fullName: newApp.fullName,
           institution: newApp.institution,
-          studentIdNumber: newApp.studentIdNumber,
-          course: newApp.course,
           email: newApp.email,
           idCardUrl: newApp.idCardUrl,
           idCardName: newApp.idCardName,
           reviewNotes: newApp.reviewNotes,
           reviewedBy: currentUserName,
+          endDate: targetEndDate,
         }),
       });
 
@@ -508,9 +610,8 @@ export const StudentVerificationsPanel: React.FC<StudentVerificationsPanelProps>
 
     setManualName("");
     setManualCollege("");
-    setManualRoll("");
-    setManualCourse("");
     setManualEmail("");
+    setManualEndDate(getFutureDateString(6));
     setManualIdCardFile(null);
     setManualIdCardPreview("");
     setManualIdCardName("");
@@ -789,25 +890,44 @@ export const StudentVerificationsPanel: React.FC<StudentVerificationsPanelProps>
                 }`}
               >
                 {/* Student Info & Details */}
-                <div className="flex items-start gap-4 flex-1 min-w-0">
+                <div className="flex items-start gap-4 sm:gap-5 flex-1 min-w-0">
                   {/* ID Card Thumbnail */}
                   <div
                     onClick={() => {
-                      setImageRotation(0);
-                      setSelectedAppForPreview(app);
+                      if (app.idCardUrl) {
+                        setImageRotation(0);
+                        setSelectedAppForPreview(app);
+                      }
                     }}
-                    className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-2xl overflow-hidden bg-gray-100 border border-gray-200/80 shrink-0 cursor-pointer group/thumb shadow-2xs"
-                    title="Click to zoom & inspect ID card"
+                    className={`relative w-28 h-20 sm:w-32 sm:h-22 rounded-2xl overflow-hidden bg-slate-100 border border-gray-200/90 shrink-0 transition-all flex items-center justify-center ${
+                      app.idCardUrl
+                        ? "cursor-pointer group/thumb hover:border-[#040706] hover:shadow-md"
+                        : "cursor-default"
+                    }`}
+                    title={app.idCardUrl ? "Click to inspect Student ID Card" : "No ID Card uploaded"}
                   >
-                    <img
-                      src={app.idCardUrl}
-                      alt={app.fullName}
-                      className="w-full h-full object-cover group-hover/thumb:scale-105 transition-transform duration-300"
-                    />
-                    <div className="absolute inset-0 bg-black/60 backdrop-blur-2xs opacity-0 group-hover/thumb:opacity-100 transition-opacity flex flex-col items-center justify-center text-white text-[10px] font-bold gap-1">
-                      <Eye className="w-4 h-4" />
-                      <span>Inspect</span>
-                    </div>
+                    {app.idCardUrl ? (
+                      <>
+                        <img
+                          src={formatAssetUrl(app.idCardUrl)}
+                          alt={app.fullName}
+                          className="w-full h-full object-cover group-hover/thumb:scale-105 transition-transform duration-300"
+                        />
+                        <div className="absolute top-1.5 left-1.5 bg-black/60 backdrop-blur-xs text-white text-[9px] font-semibold px-2 py-0.5 rounded-md flex items-center gap-1">
+                          <CreditCard className="w-2.5 h-2.5 text-[#E4F953]" />
+                          <span>ID Card</span>
+                        </div>
+                        <div className="absolute inset-0 bg-black/60 backdrop-blur-2xs opacity-0 group-hover/thumb:opacity-100 transition-opacity flex flex-col items-center justify-center text-white text-[10px] font-bold gap-1">
+                          <Eye className="w-4 h-4 text-[#E4F953]" />
+                          <span>Inspect</span>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center p-2 text-center text-gray-400">
+                        <CreditCard className="w-5 h-5 mb-1 text-gray-300" />
+                        <span className="text-[9px] font-medium text-gray-400">No ID Card</span>
+                      </div>
+                    )}
                   </div>
 
                   {/* Text Details */}
@@ -847,29 +967,56 @@ export const StudentVerificationsPanel: React.FC<StudentVerificationsPanelProps>
                       <span className="truncate">{app.institution}</span>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500 pt-0.5">
-                      <span>
-                        <strong className="font-medium text-gray-700">Course:</strong> {app.course}
-                      </span>
-                      <span>
-                        <strong className="font-medium text-gray-700">Roll/Reg:</strong>{" "}
-                        <span className="font-mono text-gray-900 font-bold">{app.studentIdNumber}</span>
-                      </span>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-gray-400 pt-0.5">
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-gray-500 pt-0.5">
                       <a
                         href={`mailto:${app.email}`}
-                        className="text-gray-600 hover:text-emerald-800 flex items-center gap-1 hover:underline font-medium"
+                        className="text-gray-700 hover:text-emerald-800 flex items-center gap-1.5 hover:underline font-medium"
                       >
-                        <Mail className="w-3 h-3 text-gray-400" />
+                        <Mail className="w-3.5 h-3.5 text-gray-400" />
                         <span>{app.email}</span>
                       </a>
-                      <span>
+                      <span className="text-gray-300">•</span>
+                      <span className="text-gray-400">
                         Submitted: {new Date(app.submittedAt).toLocaleDateString()} at{" "}
                         {new Date(app.submittedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                       </span>
                     </div>
+
+                    {/* Subscription End Date Badge for Approved Pass */}
+                    {isApproved && (
+                      <div className="flex flex-wrap items-center gap-2 pt-1.5">
+                        <div className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-emerald-900 bg-emerald-50 border border-emerald-200/90 px-2.5 py-1 rounded-xl shadow-2xs">
+                          <Calendar className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                          <span>Pass Valid Until:</span>
+                          <span className="font-bold text-gray-950">
+                            {app.endDate
+                              ? new Date(app.endDate).toLocaleDateString("en-IN", {
+                                  day: "numeric",
+                                  month: "short",
+                                  year: "numeric",
+                                })
+                              : "Active (Standard 6 Mo)"}
+                          </span>
+                          {app.endDate &&
+                            (new Date(app.endDate).getTime() < Date.now() ? (
+                              <span className="text-[9px] bg-rose-100 text-rose-700 font-bold px-1.5 py-0.5 rounded-md ml-1">
+                                EXPIRED
+                              </span>
+                            ) : (
+                              <span className="text-[10px] text-emerald-700 font-medium ml-1">
+                                ({Math.max(
+                                  0,
+                                  Math.ceil(
+                                    (new Date(app.endDate).getTime() - Date.now()) /
+                                      (1000 * 60 * 60 * 24)
+                                  )
+                                )}{" "}
+                                days left)
+                              </span>
+                            ))}
+                        </div>
+                      </div>
+                    )}
 
                     {/* Review Notes (If any) */}
                     {app.reviewNotes && (
@@ -889,15 +1036,22 @@ export const StudentVerificationsPanel: React.FC<StudentVerificationsPanelProps>
                     {/* Inspect ID button */}
                     <button
                       type="button"
+                      disabled={!app.idCardUrl}
                       onClick={() => {
-                        setImageRotation(0);
-                        setSelectedAppForPreview(app);
+                        if (app.idCardUrl) {
+                          setImageRotation(0);
+                          setSelectedAppForPreview(app);
+                        }
                       }}
-                      className="inline-flex items-center justify-center gap-1.5 py-2 px-3 bg-white hover:bg-gray-100 border border-gray-300 text-gray-900 text-xs font-semibold rounded-xl transition-all cursor-pointer shadow-2xs active:scale-95"
-                      title="View student ID card"
+                      className={`inline-flex items-center justify-center gap-1.5 py-2 px-3 text-xs font-semibold rounded-xl transition-all shadow-2xs ${
+                        app.idCardUrl
+                          ? "bg-white hover:bg-gray-100 border border-gray-300 text-gray-900 cursor-pointer active:scale-95"
+                          : "bg-gray-100 border border-gray-200 text-gray-400 cursor-not-allowed opacity-60"
+                      }`}
+                      title={app.idCardUrl ? "View uploaded student ID card" : "No ID card uploaded"}
                     >
                       <Eye className="w-3.5 h-3.5 text-gray-600 shrink-0" />
-                      <span>View ID</span>
+                      <span>View ID Card</span>
                     </button>
 
                     {/* Pending Actions */}
@@ -905,9 +1059,9 @@ export const StudentVerificationsPanel: React.FC<StudentVerificationsPanelProps>
                       <>
                         <button
                           type="button"
-                          onClick={() => handleUpdateStatus(app, "APPROVED")}
+                          onClick={() => openApproveModal(app)}
                           className="inline-flex items-center justify-center gap-1.5 py-2 px-3 bg-gray-950 hover:bg-black text-white text-xs font-semibold rounded-xl transition-all cursor-pointer shadow-2xs active:scale-95"
-                          title="Approve Free Scholar Pass"
+                          title="Approve Free Scholar Pass (Set End Date)"
                         >
                           <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                           <span>Approve</span>
@@ -930,6 +1084,15 @@ export const StudentVerificationsPanel: React.FC<StudentVerificationsPanelProps>
                     {/* Approved Actions */}
                     {isApproved && (
                       <>
+                        <button
+                          type="button"
+                          onClick={() => openApproveModal(app)}
+                          className="inline-flex items-center justify-center gap-1.5 py-2 px-2.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 text-xs font-semibold rounded-xl transition-all cursor-pointer shadow-2xs active:scale-95"
+                          title="Edit or extend subscription ending date"
+                        >
+                          <Calendar className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                          <span>Edit Expiry</span>
+                        </button>
                         <button
                           type="button"
                           onClick={() => {
@@ -959,9 +1122,9 @@ export const StudentVerificationsPanel: React.FC<StudentVerificationsPanelProps>
                       <>
                         <button
                           type="button"
-                          onClick={() => handleUpdateStatus(app, "APPROVED")}
+                          onClick={() => openApproveModal(app)}
                           className="inline-flex items-center justify-center gap-1.5 py-2 px-3 bg-gray-950 hover:bg-black text-white text-xs font-semibold rounded-xl transition-all cursor-pointer shadow-2xs active:scale-95"
-                          title="Approve pass"
+                          title="Approve pass (Set End Date)"
                         >
                           <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                           <span>Approve</span>
@@ -1019,47 +1182,49 @@ export const StudentVerificationsPanel: React.FC<StudentVerificationsPanelProps>
       {/* ── Lightbox ID Card Preview Modal ──────────────────────── */}
       {selectedAppForPreview && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center p-3 sm:p-6 bg-black/85 backdrop-blur-sm animate-in fade-in">
-          <div className="relative w-full max-w-4xl bg-white rounded-[28px] shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+          <div className="relative w-full max-w-4xl bg-white rounded-2xl sm:rounded-[28px] shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
             {/* Header */}
-            <div className="bg-gray-900 text-white px-6 py-4 flex items-center justify-between shrink-0">
-              <div className="flex items-center gap-2.5">
-                <GraduationCap className="w-5 h-5 text-emerald-400" />
-                <div>
-                  <h3 className="text-sm font-bold text-white tracking-wide">
+            <div className="bg-gray-900 text-white px-4 sm:px-6 py-3.5 sm:py-4 flex items-center justify-between shrink-0 gap-2">
+              <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+                <GraduationCap className="w-5 h-5 text-emerald-400 shrink-0" />
+                <div className="min-w-0">
+                  <h3 className="text-xs sm:text-sm font-bold text-white tracking-wide truncate">
                     Student ID Inspection: {selectedAppForPreview.fullName}
                   </h3>
-                  <p className="text-[11px] text-gray-300">
-                    {selectedAppForPreview.institution} • Roll: {selectedAppForPreview.studentIdNumber}
+                  <p className="text-[10px] sm:text-[11px] text-gray-300 truncate">
+                    {selectedAppForPreview.institution} • {selectedAppForPreview.email}
                   </p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
                 <button
                   type="button"
                   onClick={() => setImageRotation((prev) => (prev + 90) % 360)}
-                  className="p-2 text-gray-300 hover:text-white rounded-xl bg-white/10 hover:bg-white/20 transition cursor-pointer flex items-center gap-1 text-xs"
+                  className="p-1.5 sm:p-2 text-gray-300 hover:text-white rounded-xl bg-white/10 hover:bg-white/20 transition cursor-pointer flex items-center gap-1 text-xs"
                   title="Rotate image"
                 >
                   <RotateCw className="w-4 h-4" />
                   <span className="text-[11px] hidden sm:inline">Rotate</span>
                 </button>
 
-                <a
-                  href={selectedAppForPreview.idCardUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="p-2 text-gray-300 hover:text-white rounded-xl bg-white/10 hover:bg-white/20 transition cursor-pointer flex items-center gap-1 text-xs"
-                  title="Open original in new tab"
-                >
-                  <ExternalLink className="w-4 h-4" />
-                  <span className="text-[11px] hidden sm:inline">Original</span>
-                </a>
+                {selectedAppForPreview.idCardUrl && (
+                  <a
+                    href={formatAssetUrl(selectedAppForPreview.idCardUrl)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="p-1.5 sm:p-2 text-gray-300 hover:text-white rounded-xl bg-white/10 hover:bg-white/20 transition cursor-pointer flex items-center gap-1 text-xs"
+                    title="Open original in new tab"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                    <span className="text-[11px] hidden sm:inline">Original</span>
+                  </a>
+                )}
 
                 <button
                   type="button"
                   onClick={() => setSelectedAppForPreview(null)}
-                  className="p-2 text-gray-300 hover:text-white rounded-xl hover:bg-white/10 transition cursor-pointer"
+                  className="p-1.5 sm:p-2 text-gray-300 hover:text-white rounded-xl hover:bg-white/10 transition cursor-pointer"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -1067,50 +1232,70 @@ export const StudentVerificationsPanel: React.FC<StudentVerificationsPanelProps>
             </div>
 
             {/* Image Canvas Container */}
-            <div className="flex-1 bg-slate-950 p-4 sm:p-8 flex items-center justify-center overflow-auto">
-              <div
-                className="transition-transform duration-300 max-h-[60vh] flex items-center justify-center"
-                style={{ transform: `rotate(${imageRotation}deg)` }}
-              >
-                <img
-                  src={selectedAppForPreview.idCardUrl}
-                  alt={selectedAppForPreview.fullName}
-                  className="max-h-[58vh] max-w-full rounded-xl object-contain shadow-2xl border border-white/20"
-                />
-              </div>
+            <div className="flex-1 bg-slate-950 p-3 sm:p-8 flex items-center justify-center overflow-auto min-h-[200px] sm:min-h-[350px]">
+              {selectedAppForPreview.idCardUrl ? (
+                <div
+                  className="transition-transform duration-300 max-h-[50vh] sm:max-h-[60vh] flex items-center justify-center"
+                  style={{ transform: `rotate(${imageRotation}deg)` }}
+                >
+                  <img
+                    src={formatAssetUrl(selectedAppForPreview.idCardUrl)}
+                    alt={selectedAppForPreview.fullName}
+                    className="max-h-[48vh] sm:max-h-[58vh] max-w-full rounded-xl object-contain shadow-2xl border border-white/20"
+                  />
+                </div>
+              ) : (
+                <div className="text-center p-6 sm:p-8 text-gray-400">
+                  <CreditCard className="w-10 h-10 sm:w-12 sm:h-12 mx-auto mb-3 text-gray-600" />
+                  <p className="text-xs sm:text-sm font-semibold text-gray-300">No Student ID Card Uploaded</p>
+                  <p className="text-[11px] sm:text-xs text-gray-500 mt-1">This record was submitted or granted without an attached ID card image.</p>
+                </div>
+              )}
             </div>
 
             {/* Bottom Decision Footer */}
-            <div className="bg-white p-4 sm:p-5 border-t border-gray-200 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
-              <div className="text-xs text-gray-500">
-                <span>Ref: </span>
-                <span className="font-mono font-bold text-gray-800">{selectedAppForPreview.referenceId}</span>
-                <span className="mx-2">•</span>
-                <span>Status: </span>
-                <strong
-                  className={`font-semibold ${
-                    selectedAppForPreview.status === "APPROVED"
-                      ? "text-emerald-600"
-                      : selectedAppForPreview.status === "REJECTED"
-                      ? "text-rose-600"
-                      : "text-amber-600"
-                  }`}
-                >
-                  {selectedAppForPreview.status}
-                </strong>
+            <div className="bg-white p-3.5 sm:p-5 border-t border-gray-200 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 shrink-0">
+              <div className="text-xs text-gray-500 flex items-center justify-between sm:justify-start">
+                <span>Ref: <span className="font-mono font-bold text-gray-800">{selectedAppForPreview.referenceId}</span></span>
+                <span className="mx-2 hidden sm:inline">•</span>
+                <span>
+                  Status:{" "}
+                  <strong
+                    className={`font-semibold ${
+                      selectedAppForPreview.status === "APPROVED"
+                        ? "text-emerald-600"
+                        : selectedAppForPreview.status === "REJECTED"
+                        ? "text-rose-600"
+                        : "text-amber-600"
+                    }`}
+                  >
+                    {selectedAppForPreview.status}
+                  </strong>
+                </span>
               </div>
 
-              <div className="flex items-center gap-2 w-full sm:w-auto">
-                {selectedAppForPreview.status !== "APPROVED" && (
+              <div className="grid grid-cols-2 sm:flex sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
+                {selectedAppForPreview.status !== "APPROVED" ? (
                   <Button
                     type="button"
                     variant="primary"
                     size="sm"
-                    onClick={() => handleUpdateStatus(selectedAppForPreview, "APPROVED")}
-                    icon={<CheckCircle2 className="w-4 h-4 text-emerald-400" />}
-                    className="flex-1 sm:flex-none bg-gray-950 hover:bg-black text-white text-xs font-semibold px-5 py-2.5 rounded-xl cursor-pointer shadow-xs transition-all active:scale-95"
+                    onClick={() => openApproveModal(selectedAppForPreview)}
+                    icon={<CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />}
+                    className="col-span-2 sm:col-span-1 justify-center bg-gray-950 hover:bg-black text-white text-xs font-semibold px-4 py-2.5 rounded-xl cursor-pointer shadow-xs transition-all active:scale-95"
                   >
                     Approve Free Pass
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    variant="primary"
+                    size="sm"
+                    onClick={() => openApproveModal(selectedAppForPreview)}
+                    icon={<Calendar className="w-4 h-4 text-[#E4F953] shrink-0" />}
+                    className="col-span-2 sm:col-span-1 justify-center bg-emerald-800 hover:bg-emerald-900 text-white text-xs font-semibold px-4 py-2.5 rounded-xl cursor-pointer shadow-xs transition-all active:scale-95"
+                  >
+                    Edit Expiry Date
                   </Button>
                 )}
 
@@ -1123,10 +1308,10 @@ export const StudentVerificationsPanel: React.FC<StudentVerificationsPanelProps>
                       setRejectReason(PRESET_REJECT_REASONS[0]);
                       setRejectingApp(selectedAppForPreview);
                     }}
-                    icon={<XCircle className="w-4 h-4 text-rose-500" />}
-                    className="flex-1 sm:flex-none border border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100 text-xs font-semibold px-4 py-2.5 rounded-xl cursor-pointer transition-all active:scale-95"
+                    icon={<XCircle className="w-4 h-4 text-rose-500 shrink-0" />}
+                    className="justify-center border border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100 text-xs font-semibold px-3 py-2.5 rounded-xl cursor-pointer transition-all active:scale-95"
                   >
-                    Reject Application
+                    Reject
                   </Button>
                 )}
 
@@ -1139,10 +1324,10 @@ export const StudentVerificationsPanel: React.FC<StudentVerificationsPanelProps>
                     setSelectedAppForPreview(null);
                     setDeletingApp(toDel);
                   }}
-                  icon={<Trash2 className="w-4 h-4 text-rose-600" />}
-                  className="flex-1 sm:flex-none border border-rose-200 text-rose-600 hover:bg-rose-50 text-xs font-semibold px-4 py-2.5 rounded-xl cursor-pointer transition-all active:scale-95"
+                  icon={<Trash2 className="w-4 h-4 text-rose-600 shrink-0" />}
+                  className="justify-center border border-rose-200 text-rose-600 hover:bg-rose-50 text-xs font-semibold px-3 py-2.5 rounded-xl cursor-pointer transition-all active:scale-95"
                 >
-                  Delete Record
+                  Delete
                 </Button>
 
                 <Button
@@ -1150,7 +1335,7 @@ export const StudentVerificationsPanel: React.FC<StudentVerificationsPanelProps>
                   variant="secondary"
                   size="sm"
                   onClick={() => setSelectedAppForPreview(null)}
-                  className="flex-1 sm:flex-none border border-gray-300 hover:bg-gray-100 text-gray-900 text-xs font-semibold px-4 py-2.5 rounded-xl cursor-pointer transition-all active:scale-95"
+                  className="col-span-2 sm:col-span-1 justify-center border border-gray-300 hover:bg-gray-100 text-gray-900 text-xs font-semibold px-4 py-2.5 rounded-xl cursor-pointer transition-all active:scale-95"
                 >
                   Close
                 </Button>
@@ -1215,13 +1400,13 @@ export const StudentVerificationsPanel: React.FC<StudentVerificationsPanelProps>
               />
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-100">
+            <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2 pt-2 border-t border-gray-100">
               <Button
                 type="button"
                 variant="secondary"
                 size="sm"
                 onClick={() => setRejectingApp(null)}
-                className="text-xs font-semibold px-4 py-2.5 rounded-xl border border-gray-200 hover:bg-gray-50 cursor-pointer"
+                className="w-full sm:w-auto justify-center text-xs font-semibold px-4 py-2.5 rounded-xl border border-gray-200 hover:bg-gray-50 cursor-pointer"
               >
                 Cancel
               </Button>
@@ -1231,7 +1416,7 @@ export const StudentVerificationsPanel: React.FC<StudentVerificationsPanelProps>
                 size="sm"
                 disabled={!rejectReason.trim()}
                 onClick={() => handleUpdateStatus(rejectingApp, "REJECTED", rejectReason)}
-                className="bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold px-4 py-2.5 rounded-xl cursor-pointer shadow-xs transition-all active:scale-95 disabled:opacity-50"
+                className="w-full sm:w-auto justify-center bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold px-4 py-2.5 rounded-xl cursor-pointer shadow-xs transition-all active:scale-95 disabled:opacity-50"
               >
                 Confirm Rejection
               </Button>
@@ -1280,10 +1465,188 @@ export const StudentVerificationsPanel: React.FC<StudentVerificationsPanelProps>
         </div>
       )}
 
+      {/* ── Approve Application / Set Subscription End Date Modal ─ */}
+      {approvingApp && (
+        <div className="fixed inset-0 z-[85] flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-in fade-in">
+          <div className="relative w-full max-w-lg bg-white rounded-[24px] p-6 shadow-2xl space-y-4 border border-gray-200/80 max-h-[92vh] overflow-y-auto">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2.5 rounded-xl bg-gray-950 text-emerald-400">
+                  <GraduationCap className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm text-gray-950">
+                    {approvingApp.status === "APPROVED" ? "Update Pass Expiry Date" : "Approve Student Scholar Pass"}
+                  </h3>
+                  <p className="text-[11px] text-gray-500">
+                    Configure subscription ending date and confirm student scholarship
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setApprovingApp(null)}
+                className="text-gray-400 hover:text-gray-600 p-1.5 rounded-xl hover:bg-gray-100 transition cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Student Info Card */}
+            <div className="bg-gray-50 border border-gray-200/80 rounded-2xl p-3.5 space-y-2 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-gray-900 text-sm">{approvingApp.fullName}</span>
+                <span className="font-mono text-[10px] font-bold text-gray-600 bg-white border border-gray-200 px-2 py-0.5 rounded-md">
+                  {approvingApp.referenceId || approvingApp.id}
+                </span>
+              </div>
+              <div className="flex flex-col sm:flex-row sm:items-center gap-x-4 gap-y-1 text-gray-600 text-[11px]">
+                <div className="flex items-center gap-1.5 truncate">
+                  <Building className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                  <span className="truncate">{approvingApp.institution}</span>
+                </div>
+                <div className="flex items-center gap-1.5 truncate">
+                  <Mail className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                  <span className="truncate">{approvingApp.email}</span>
+                </div>
+              </div>
+              {approvingApp.idCardUrl && (
+                <div className="pt-1.5 border-t border-gray-200/70 flex items-center justify-between">
+                  <span className="text-[11px] text-gray-500">Attached ID Card:</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setImageRotation(0);
+                      setSelectedAppForPreview(approvingApp);
+                    }}
+                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-800 hover:underline cursor-pointer"
+                  >
+                    <Eye className="w-3.5 h-3.5" />
+                    Inspect ID Document
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <form onSubmit={handleConfirmApprove} className="space-y-4">
+              {/* Subscription Ending Date Field */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-gray-800 flex items-center gap-1.5">
+                    <Calendar className="w-3.5 h-3.5 text-emerald-600" />
+                    Subscription Ending Date (Access Expiry) <span className="text-red-500">*</span>
+                  </label>
+                  {approveEndDate && !isNaN(new Date(approveEndDate).getTime()) && (
+                    <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
+                      {Math.ceil((new Date(approveEndDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)) > 0
+                        ? `~${Math.ceil((new Date(approveEndDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24))} days access`
+                        : "Past date"}
+                    </span>
+                  )}
+                </div>
+
+                {/* Quick Presets */}
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-[10px] uppercase font-bold text-gray-400 mr-0.5">Quick Presets:</span>
+                  {[
+                    { label: "1 Month", val: getFutureDateString(1) },
+                    { label: "3 Months", val: getFutureDateString(3) },
+                    { label: "6 Months (Standard)", val: getFutureDateString(6) },
+                    { label: "1 Year", val: getFutureDateString(12) },
+                    { label: "Academic (31 May)", val: getAcademicYearEndString() },
+                  ].map((preset) => {
+                    const isSelected = approveEndDate === preset.val;
+                    return (
+                      <button
+                        key={preset.label}
+                        type="button"
+                        onClick={() => setApproveEndDate(preset.val)}
+                        className={`text-[11px] px-2.5 py-1 rounded-lg border transition font-medium cursor-pointer ${
+                          isSelected
+                            ? "bg-gray-950 border-gray-950 text-white font-semibold shadow-xs"
+                            : "bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100 hover:text-gray-900"
+                        }`}
+                      >
+                        {preset.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Date Input */}
+                <div>
+                  <input
+                    type="date"
+                    required
+                    min={formatDateForInput(new Date())}
+                    value={approveEndDate}
+                    onChange={(e) => setApproveEndDate(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-2xl text-xs font-semibold text-gray-900 focus:bg-white focus:outline-none focus:border-black shadow-xs transition"
+                  />
+                </div>
+
+                {/* Duration summary banner */}
+                <div className="p-2.5 bg-emerald-50/70 border border-emerald-200/80 rounded-xl text-[11px] text-emerald-950 leading-relaxed flex items-start gap-2">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                  <div>
+                    Student pass will remain <strong>Active & 100% Free</strong> until{" "}
+                    <strong>
+                      {approveEndDate && !isNaN(new Date(approveEndDate).getTime())
+                        ? new Date(approveEndDate).toLocaleDateString("en-IN", {
+                            weekday: "short",
+                            day: "numeric",
+                            month: "short",
+                            year: "numeric",
+                          })
+                        : "selected date"}
+                    </strong>
+                    . An email with this expiry date will be delivered to the student.
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="pt-2 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2 border-t border-gray-100">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setApprovingApp(null)}
+                  className="w-full sm:w-auto justify-center text-xs font-semibold px-4 py-2.5 rounded-xl border border-gray-200 hover:bg-gray-100 text-gray-700 cursor-pointer shadow-xs"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  size="sm"
+                  loading={approveSubmitting}
+                  disabled={!approveEndDate}
+                  className="w-full sm:w-auto justify-center bg-gray-950 hover:bg-black text-white text-xs font-semibold px-5 py-2.5 rounded-xl cursor-pointer shadow-xs transition-all active:scale-95"
+                >
+                  {approvingApp.status === "APPROVED" ? (
+                    <span className="flex items-center gap-1.5">
+                      <Calendar className="w-3.5 h-3.5 text-[#E4F953]" />
+                      Update Expiry Date
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-1.5">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                      Confirm & Approve Pass
+                    </span>
+                  )}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* ── Manual Add Student Pass Modal ───────────────────────── */}
       {showManualModal && (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs animate-in fade-in">
-          <div className="relative w-full max-w-lg max-h-[92vh] overflow-y-auto bg-white rounded-[24px] p-6 shadow-2xl space-y-4 border border-gray-200/80">
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-xs animate-in fade-in">
+          <div className="relative w-full max-w-lg max-h-[92vh] overflow-y-auto bg-white rounded-2xl sm:rounded-[24px] p-4 sm:p-6 shadow-2xl space-y-4 border border-gray-200/80">
             <div className="flex items-center justify-between border-b border-gray-100 pb-3">
               <div className="flex items-center gap-2.5">
                 <div className="p-2.5 rounded-xl bg-gray-950 text-emerald-400">
@@ -1331,46 +1694,72 @@ export const StudentVerificationsPanel: React.FC<StudentVerificationsPanelProps>
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">Course & Year</label>
-                  <input
-                    type="text"
-                    value={manualCourse}
-                    onChange={(e) => setManualCourse(e.target.value)}
-                    placeholder="e.g. BA Malayalam, 2nd Yr"
-                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-2xl text-xs text-gray-900 focus:bg-white focus:outline-none focus:border-black shadow-xs transition"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">Roll / ID Number</label>
-                  <input
-                    type="text"
-                    value={manualRoll}
-                    onChange={(e) => setManualRoll(e.target.value)}
-                    placeholder="e.g. 2024MAL102"
-                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-2xl text-xs font-mono text-gray-900 focus:bg-white focus:outline-none focus:border-black shadow-xs transition"
-                  />
-                </div>
-              </div>
-
               <div>
                 <label className="block text-xs font-bold text-gray-700 mb-1">
-                  Student Email Address <span className="text-red-500">*</span>
+                  Email Address <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="email"
                   required
                   value={manualEmail}
                   onChange={(e) => setManualEmail(e.target.value)}
-                  placeholder="student@college.edu"
+                  placeholder="student@example.com"
+                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-2xl text-xs text-gray-900 focus:bg-white focus:outline-none focus:border-black shadow-xs transition"
+                />
+              </div>
+
+              {/* Subscription Ending Date */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-gray-700 flex items-center gap-1.5">
+                    <Calendar className="w-3.5 h-3.5 text-emerald-600" />
+                    Subscription Ending Date <span className="text-red-500">*</span>
+                  </label>
+                  {manualEndDate && !isNaN(new Date(manualEndDate).getTime()) && (
+                    <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
+                      {Math.ceil((new Date(manualEndDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)) > 0
+                        ? `~${Math.ceil((new Date(manualEndDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24))} days`
+                        : "Past"}
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap items-center gap-1.5 mb-1">
+                  {[
+                    { label: "1 Mo", val: getFutureDateString(1) },
+                    { label: "3 Mo", val: getFutureDateString(3) },
+                    { label: "6 Mo (Default)", val: getFutureDateString(6) },
+                    { label: "1 Yr", val: getFutureDateString(12) },
+                    { label: "Academic (31 May)", val: getAcademicYearEndString() },
+                  ].map((preset) => (
+                    <button
+                      key={preset.label}
+                      type="button"
+                      onClick={() => setManualEndDate(preset.val)}
+                      className={`text-[10px] px-2 py-0.5 rounded-lg border transition font-medium cursor-pointer ${
+                        manualEndDate === preset.val
+                          ? "bg-gray-950 border-gray-950 text-white font-semibold"
+                          : "bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100"
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+
+                <input
+                  type="date"
+                  required
+                  min={formatDateForInput(new Date())}
+                  value={manualEndDate}
+                  onChange={(e) => setManualEndDate(e.target.value)}
                   className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-2xl text-xs text-gray-900 focus:bg-white focus:outline-none focus:border-black shadow-xs transition"
                 />
               </div>
 
               {/* Student ID Card Document / Photo Upload */}
               <div>
-                <div className="flex items-center justify-between mb-1">
+                <div className="flex items-center justify-between mb-1.5">
                   <label className="block text-xs font-bold text-gray-700">
                     Student ID Card Document / Photo
                   </label>
@@ -1379,10 +1768,23 @@ export const StudentVerificationsPanel: React.FC<StudentVerificationsPanelProps>
                   </span>
                 </div>
 
+                {/* Hidden File and Camera Inputs */}
+                <input
+                  type="file"
+                  ref={manualCameraInputRef}
+                  accept="image/*"
+                  capture="environment"
+                  className="hidden"
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files[0]) {
+                      handleManualFileChange(e.target.files[0]);
+                    }
+                  }}
+                />
                 <input
                   type="file"
                   ref={manualFileInputRef}
-                  accept="image/png,image/jpeg,image/webp,image/jpg"
+                  accept="image/png,image/jpeg,image/webp,image/jpg,image/*"
                   className="hidden"
                   onChange={(e) => {
                     if (e.target.files && e.target.files[0]) {
@@ -1392,24 +1794,48 @@ export const StudentVerificationsPanel: React.FC<StudentVerificationsPanelProps>
                 />
 
                 {!manualIdCardPreview ? (
-                  <div
-                    onClick={() => manualFileInputRef.current?.click()}
-                    className="border-2 border-dashed border-gray-200 hover:border-gray-400 bg-gray-50/70 hover:bg-gray-50 rounded-2xl p-4 text-center cursor-pointer transition flex flex-col items-center justify-center gap-2 group"
-                  >
-                    <div className="w-10 h-10 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-gray-500 group-hover:text-emerald-600 group-hover:border-emerald-200 shadow-2xs transition">
-                      <UploadCloud className="w-5 h-5" />
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => manualCameraInputRef.current?.click()}
+                        className="py-2.5 px-3 rounded-xl bg-gray-900 hover:bg-black text-white text-xs font-semibold shadow-2xs transition flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+                      >
+                        <Camera className="w-4 h-4 text-[#E4F953]" />
+                        <span>Take Photo</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => manualFileInputRef.current?.click()}
+                        className="py-2.5 px-3 rounded-xl border border-gray-300 bg-white hover:bg-gray-50 text-gray-800 text-xs font-semibold shadow-2xs transition flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+                      >
+                        <UploadCloud className="w-4 h-4 text-gray-600" />
+                        <span>Upload Photo</span>
+                      </button>
                     </div>
-                    <div>
-                      <p className="text-xs font-semibold text-gray-800">
-                        Attach student identity card photo
-                      </p>
-                      <p className="text-[10px] text-gray-400 mt-0.5">
-                        PNG, JPG, or WEBP up to 10MB
-                      </p>
+
+                    <div
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        setManualIsDragOver(true);
+                      }}
+                      onDragLeave={() => setManualIsDragOver(false)}
+                      onDrop={handleManualDrop}
+                      onClick={() => manualFileInputRef.current?.click()}
+                      className={`border-2 border-dashed rounded-xl p-3 text-center cursor-pointer transition flex items-center justify-center gap-2 ${
+                        manualIsDragOver
+                          ? "border-black bg-gray-100"
+                          : "border-gray-200 hover:border-gray-400 bg-gray-50/70 hover:bg-gray-50"
+                      }`}
+                    >
+                      <UploadCloud className="w-4 h-4 text-gray-400" />
+                      <span className="text-[11px] text-gray-500">
+                        Or drag & drop student ID card photo (PNG, JPG, WebP up to 10MB)
+                      </span>
                     </div>
                   </div>
                 ) : (
-                  <div className="relative border border-gray-200 rounded-2xl p-3 bg-gray-50 flex items-center justify-between gap-3">
+                  <div className="relative border border-emerald-200 rounded-2xl p-3 bg-emerald-50/40 flex items-center justify-between gap-3">
                     <div className="flex items-center gap-3 min-w-0">
                       <div className="w-12 h-12 rounded-xl bg-gray-200 overflow-hidden shrink-0 border border-gray-200">
                         <img
@@ -1452,13 +1878,13 @@ export const StudentVerificationsPanel: React.FC<StudentVerificationsPanelProps>
                 )}
               </div>
 
-              <div className="pt-2 flex items-center justify-end gap-2 border-t border-gray-100">
+              <div className="pt-2 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2 border-t border-gray-100">
                 <Button
                   type="button"
                   variant="secondary"
                   size="sm"
                   onClick={() => setShowManualModal(false)}
-                  className="text-xs font-semibold px-4 py-2.5 rounded-xl border border-gray-300 hover:bg-gray-100 text-gray-900 cursor-pointer shadow-xs"
+                  className="w-full sm:w-auto justify-center text-xs font-semibold px-4 py-2.5 rounded-xl border border-gray-300 hover:bg-gray-100 text-gray-900 cursor-pointer shadow-xs"
                 >
                   Cancel
                 </Button>
@@ -1467,7 +1893,7 @@ export const StudentVerificationsPanel: React.FC<StudentVerificationsPanelProps>
                   variant="primary"
                   size="sm"
                   loading={manualSubmitting}
-                  className="bg-gray-950 hover:bg-black text-white text-xs font-semibold px-5 py-2.5 rounded-xl cursor-pointer shadow-xs transition-all active:scale-95"
+                  className="w-full sm:w-auto justify-center bg-gray-950 hover:bg-black text-white text-xs font-semibold px-5 py-2.5 rounded-xl cursor-pointer shadow-xs transition-all active:scale-95"
                 >
                   Grant Active Scholar Pass
                 </Button>

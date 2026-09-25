@@ -2,7 +2,7 @@ import MediaSection from "@/components/MediaSection";
 import FeaturedVideo from "@/components/FeaturedVideo";
 
 export const metadata = {
-  title: "Akam Media — Interviews, Conversations & Cultural Programmes",
+  title: "Akam Media — Interviews, Discussions & Debates & Cultural Programmes",
   description:
     "Explore Malayalam literature, art, and heritage through candid dialogues, oral histories, and cultural discourse with regional thinkers.",
 };

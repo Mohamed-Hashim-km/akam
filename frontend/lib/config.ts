@@ -90,7 +90,20 @@ export const apiFetch = async (url: string, options: RequestInit = {}) => {
 
 export const formatAssetUrl = (url?: string | null): string => {
   if (!url) return "";
-  if (url.startsWith("http://") || url.startsWith("https://")) {
+  if (
+    url.startsWith("http://") ||
+    url.startsWith("https://") ||
+    url.startsWith("data:") ||
+    url.startsWith("blob:")
+  ) {
+    return url;
+  }
+  if (
+    url.startsWith("/images/") ||
+    url.startsWith("/favicon") ||
+    url.startsWith("/icons/") ||
+    url.startsWith("/_next/")
+  ) {
     return url;
   }
   const baseUrl =

@@ -11,6 +11,7 @@ import {
   ShieldCheck,
   CheckCircle2,
   XCircle,
+  AlertTriangle,
   Eye,
   User,
   Clock,
@@ -68,6 +69,14 @@ import {
   GraduationCap,
   Play,
   CreditCard,
+  PenLine,
+  EyeOff,
+  MapPin,
+  Phone,
+  Images,
+  Download,
+  RotateCcw,
+  SlidersHorizontal,
 } from "lucide-react";
 import Button from "@/components/ui/Button";
 import AuthModal from "@/components/AuthModal";
@@ -102,9 +111,10 @@ interface RosterUser {
   privacyPolicyAccepted?: boolean;
   bio: string | null;
   avatarUrl: string | null;
-  role: "READER" | "AUTHOR" | "EDITOR" | "ADMIN";
+  role: "READER" | "AUTHOR" | "EDITOR" | "ADMIN" | "MODERATOR";
   isFeatured?: boolean;
   sortOrder?: number;
+  isShadowBanned?: boolean;
   createdAt?: string;
 }
 
@@ -120,7 +130,12 @@ interface ReportItem {
   reporterEmail: string;
   reason: string;
   details: string | null;
-  status: "PENDING" | "RESOLVED" | "DISMISSED";
+  status: "PENDING" | "RESOLVED" | "DISMISSED" | "DISPUTED";
+  authorResponse?: string | null;
+  authorRespondedAt?: string | null;
+  disputeExpiresAt?: string | null;
+  disputedAt?: string | null;
+  editorialNote?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -233,6 +248,9 @@ function EditorialDashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
+  // Auth & RBAC State
+  const [user, setUser] = useState<any>(null);
+
   const [activeTab, setActiveTab] = useState<TabType>(() => {
     if (typeof window !== "undefined") {
       const urlTab = searchParams.get("tab") as TabType;
@@ -277,7 +295,13 @@ function EditorialDashboardContent() {
       const savedTab = sessionStorage.getItem("akam_editorial_active_tab") as TabType;
       if (savedTab) currentTab = savedTab;
     }
-    if (!currentTab) currentTab = "queue";
+    if (!currentTab) currentTab = user?.role === "MODERATOR" ? "reports" : "queue";
+
+    // Enforce role access: MODERATOR can only access reports and communities tabs
+    if (user?.role === "MODERATOR" && currentTab !== "reports" && currentTab !== "communities") {
+      router.replace(`/editorial?tab=reports&page=1`);
+      return;
+    }
 
     let pageNum = pageFromUrlStr ? parseInt(pageFromUrlStr, 10) : 0;
     if (!pageNum && typeof window !== "undefined") {
@@ -294,9 +318,19 @@ function EditorialDashboardContent() {
     setActiveTab(currentTab);
     setCurrentPage(pageNum);
     mainRef.current?.scrollTo({ top: 0, behavior: "smooth" });
-  }, [searchParams]);
+  }, [searchParams, user?.role]);
+
+  useEffect(() => {
+    if (user?.role === "MODERATOR" && activeTab !== "reports" && activeTab !== "communities") {
+      setActiveTab("reports");
+      router.replace(`/editorial?tab=reports&page=1`);
+    }
+  }, [user?.role, activeTab]);
 
   const handleTabChange = (tab: TabType) => {
+    if (user?.role === "MODERATOR" && tab !== "reports" && tab !== "communities") {
+      return;
+    }
     let savedPage = 1;
     if (typeof window !== "undefined") {
       sessionStorage.setItem("akam_editorial_active_tab", tab);
@@ -328,13 +362,13 @@ function EditorialDashboardContent() {
   };
 
   // Auth & RBAC State
-  const [user, setUser] = useState<any>(null);
   const [authChecking, setAuthChecking] = useState(true);
   const [authModalOpen, setAuthModalOpen] = useState(false);
 
   // Data & Metadata State (Server-Side Paginated & Searched)
   const [pendingStories, setPendingStories] = useState<PendingStory[]>([]);
   const [queueMeta, setQueueMeta] = useState({ total: 0, page: 1, limit: 10, totalPages: 1 });
+  const [queueTypeFilter, setQueueTypeFilter] = useState<"ALL" | "STORY" | "PAINTING" | "VIDEO">("ALL");
 
   const [emagazineStories, setEmagazineStories] = useState<PendingStory[]>([]);
   const [emagazineMeta, setEmagazineMeta] = useState({ total: 0, page: 1, limit: 10, totalPages: 1 });
@@ -358,8 +392,24 @@ function EditorialDashboardContent() {
   };
 
   const [allStories, setAllStories] = useState<PendingStory[]>([]);
-  const [catalogMeta, setCatalogMeta] = useState({ total: 0, page: 1, limit: 10, totalPages: 1 });
+  const [catalogMeta, setCatalogMeta] = useState({ total: 0, page: 1, limit: 12, totalPages: 1 });
   const [catalogStatusFilter, setCatalogStatusFilter] = useState<"ALL" | "APPROVED" | "UNPUBLISHED">("ALL");
+  const [catalogTypeFilter, setCatalogTypeFilter] = useState<"ALL" | "STORY" | "PAINTING" | "VIDEO">("ALL");
+  const [catalogCategoryFilter, setCatalogCategoryFilter] = useState<string>("ALL");
+  const [catalogSortBy, setCatalogSortBy] = useState<"newest" | "oldest">("newest");
+  const [catalogCounts, setCatalogCounts] = useState<{ all: number; published: number; unpublished: number }>({
+    all: 0,
+    published: 0,
+    unpublished: 0,
+  });
+  const [catalogLoadingMore, setCatalogLoadingMore] = useState(false);
+  const catalogSentinelRef = React.useRef<HTMLDivElement | null>(null);
+
+  // Unpublish reason modal
+  const [unpublishTarget, setUnpublishTarget] = useState<{ id: string; title: string } | null>(null);
+  const [unpublishReason, setUnpublishReason] = useState("");
+  const [unpublishSaving, setUnpublishSaving] = useState(false);
+  const [unpublishError, setUnpublishError] = useState<string | null>(null);
 
   const [allUsers, setAllUsers] = useState<RosterUser[]>([]);
   const [authorsMeta, setAuthorsMeta] = useState({ total: 0, page: 1, limit: 10, totalPages: 1 });
@@ -373,6 +423,12 @@ function EditorialDashboardContent() {
   const [reportStatusFilter, setReportStatusFilter] = useState("ALL");
   const [reportTypeFilter, setReportTypeFilter] = useState("ALL");
   const [pendingReportsCount, setPendingReportsCount] = useState<number>(0);
+
+  // Dispute Work Action Modal
+  const [disputeModalReport, setDisputeModalReport] = useState<ReportItem | null>(null);
+  const [disputeEditorialReason, setDisputeEditorialReason] = useState("");
+  const [disputeActionSaving, setDisputeActionSaving] = useState(false);
+  const [disputeActionError, setDisputeActionError] = useState<string | null>(null);
 
   const [inquiriesList, setInquiriesList] = useState<ContactInquiryItem[]>([]);
   const [inquiriesMeta, setInquiriesMeta] = useState({ total: 0, page: 1, limit: 10, totalPages: 1 });
@@ -417,6 +473,11 @@ function EditorialDashboardContent() {
   const [authorFormSortOrder, setAuthorFormSortOrder] = useState(0);
   const [savingAuthor, setSavingAuthor] = useState(false);
 
+  // Author Details Modal State
+  const [authorDetailsModalOpen, setAuthorDetailsModalOpen] = useState(false);
+  const [viewingAuthorDetails, setViewingAuthorDetails] = useState<RosterUser | null>(null);
+  const [modalPriorityInput, setModalPriorityInput] = useState<number>(0);
+
   // Edit Author / User Modal State
   const [editAuthorModalOpen, setEditAuthorModalOpen] = useState(false);
   const [editingAuthorTarget, setEditingAuthorTarget] = useState<RosterUser | null>(null);
@@ -424,11 +485,12 @@ function EditorialDashboardContent() {
   const [authorEditEmail, setAuthorEditEmail] = useState("");
   const [authorEditPhone, setAuthorEditPhone] = useState("");
   const [authorEditBio, setAuthorEditBio] = useState("");
-  const [authorEditRole, setAuthorEditRole] = useState<"READER" | "AUTHOR" | "EDITOR">("AUTHOR");
+  const [authorEditRole, setAuthorEditRole] = useState<"READER" | "AUTHOR" | "EDITOR" | "MODERATOR">("AUTHOR");
   const [authorEditAvatarFile, setAuthorEditAvatarFile] = useState<File | null>(null);
   const [authorEditAvatarPreview, setAuthorEditAvatarPreview] = useState<string | null>(null);
   const [authorEditIsFeatured, setAuthorEditIsFeatured] = useState(false);
   const [authorEditSortOrder, setAuthorEditSortOrder] = useState(0);
+  const [authorEditIsShadowBanned, setAuthorEditIsShadowBanned] = useState(false);
   const [savingEditAuthor, setSavingEditAuthor] = useState(false);
   const editAuthorAvatarInputRef = React.useRef<HTMLInputElement>(null);
 
@@ -452,7 +514,7 @@ function EditorialDashboardContent() {
   // Add Submission (Painting / Video) Modal for an Author
   const [addSubmissionModalOpen, setAddSubmissionModalOpen] = useState(false);
   const [addSubmissionAuthorTarget, setAddSubmissionAuthorTarget] = useState<RosterUser | null>(null);
-  const [addSubmissionType, setAddSubmissionType] = useState<"PAINTING" | "VIDEO">("PAINTING");
+  const [addSubmissionType, setAddSubmissionType] = useState<"STORY" | "PAINTING" | "VIDEO">("STORY");
   const [addSubmissionTitle, setAddSubmissionTitle] = useState("");
   const [addSubmissionDescription, setAddSubmissionDescription] = useState("");
   const [addSubmissionCategory, setAddSubmissionCategory] = useState("Art");
@@ -582,7 +644,9 @@ function EditorialDashboardContent() {
   const [registrationsList, setRegistrationsList] = useState<any[]>([]);
   const [loadingRegistrations, setLoadingRegistrations] = useState(false);
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
-  const [eventFormType, setEventFormType] = useState<"READING_SESSION" | "DISCUSSION" | "WORKSHOP" | "EXHIBITION" | "FILM_SCREENING" | "PAST_ARCHIVE">("READING_SESSION");
+  const [eventFormType, setEventFormType] = useState<"READING_SESSION" | "DISCUSSION" | "WORKSHOP" | "EXHIBITION" | "FILM_SCREENING" | "OTHER" | "PAST_ARCHIVE">("READING_SESSION");
+  const [eventStartDate, setEventStartDate] = useState("");
+  const [eventEndDate, setEventEndDate] = useState("");
   const [eventFormTitle, setEventFormTitle] = useState("");
   const [eventFormDesc, setEventFormDesc] = useState("");
   const [eventFormLoc, setEventFormLoc] = useState("");
@@ -858,6 +922,7 @@ function EditorialDashboardContent() {
   // Media Showcase State
   const [mediaList, setMediaList] = useState<any[]>([]);
   const [mediaMeta, setMediaMeta] = useState({ total: 0, page: 1, limit: 10, totalPages: 1 });
+  const [mediaCategoryFilter, setMediaCategoryFilter] = useState("ALL");
   const [showAddMediaModal, setShowAddMediaModal] = useState(false);
   const [editingMediaId, setEditingMediaId] = useState<string | null>(null);
   const [mediaFormTitle, setMediaFormTitle] = useState("");
@@ -969,7 +1034,6 @@ function EditorialDashboardContent() {
   };
 
   const [newCatName, setNewCatName] = useState("");
-  const [newCatMalName, setNewCatMalName] = useState("");
   const [newCatDesc, setNewCatDesc] = useState("");
 
   const [editorsNoteTitle, setEditorsNoteTitle] = useState("Editor's Note");
@@ -993,10 +1057,16 @@ function EditorialDashboardContent() {
         localStorage.setItem("akam_user", JSON.stringify(uData));
         window.dispatchEvent(new Event("akam_user_updated"));
 
-        if (["EDITOR", "ADMIN"].includes(uData.role)) {
+        if (["EDITOR", "ADMIN", "MODERATOR"].includes(uData.role)) {
           fetchAllPlatformCategories();
           fetchPendingReportsCount();
-          await fetchDashboardData(activeTab, currentPage, searchQuery);
+          let effectiveTab = activeTab;
+          if (uData.role === "MODERATOR" && !["reports", "communities"].includes(effectiveTab)) {
+            effectiveTab = "reports";
+            setActiveTab("reports");
+            router.replace("/editorial?tab=reports&page=1");
+          }
+          await fetchDashboardData(effectiveTab, currentPage, searchQuery);
         }
       } else {
         setUser(null);
@@ -1058,6 +1128,7 @@ function EditorialDashboardContent() {
     page: number = currentPage,
     query: string = searchQuery,
     emSubTab: "PENDING" | "PUBLISHED" = emagazineSubTab,
+    mediaCat: string = mediaCategoryFilter,
   ) => {
     setLoading(true);
     try {
@@ -1131,17 +1202,22 @@ function EditorialDashboardContent() {
           }
         }
       } else if (tab === "catalog") {
+        const cStatus = catalogStatusFilter === "APPROVED" ? "APPROVED" : catalogStatusFilter === "UNPUBLISHED" ? "UNPUBLISHED" : "CATALOG";
+        const cType = catalogTypeFilter !== "ALL" ? `&submissionType=${catalogTypeFilter}` : "";
+        const cCat = catalogCategoryFilter !== "ALL" ? `&category=${encodeURIComponent(catalogCategoryFilter)}` : "";
+        const cSort = catalogSortBy !== "newest" ? `&sortBy=${catalogSortBy}` : "";
         const cSearch = query ? `&search=${encodeURIComponent(query)}` : "";
-        const cRes = await apiFetch(`${API_BASE_URL}/stories?status=CATALOG&page=${page}&limit=10${cSearch}`);
+        const cRes = await apiFetch(`${API_BASE_URL}/stories?status=${cStatus}&page=${page}&limit=12${cType}${cCat}${cSort}${cSearch}`);
         if (cRes.ok) {
           const json = await cRes.json();
           if (json.data) {
             setAllStories(json.data);
-            setCatalogMeta(json.meta);
+            setCatalogMeta(json.meta || { total: json.data.length, page: 1, limit: 12, totalPages: 1 });
           } else {
-            setAllStories(json);
+            setAllStories(Array.isArray(json) ? json : []);
           }
         }
+        fetchCatalogCounts();
       } else if (tab === "authors") {
         const aSearch = query ? `&search=${encodeURIComponent(query)}` : "";
         const uRes = await apiFetch(`${API_BASE_URL}/users?page=${page}&limit=10${aSearch}`);
@@ -1237,7 +1313,8 @@ function EditorialDashboardContent() {
         }
       } else if (tab === "media") {
         const mSearch = query ? `&search=${encodeURIComponent(query)}` : "";
-        const mRes = await apiFetch(`${API_BASE_URL}/editorial/media?page=${page}&limit=9${mSearch}`);
+        const mCat = mediaCat && mediaCat !== "ALL" ? `&category=${encodeURIComponent(mediaCat)}` : "";
+        const mRes = await apiFetch(`${API_BASE_URL}/editorial/media?page=${page}&limit=9${mSearch}${mCat}`);
         if (mRes.ok) {
           const json = await mRes.json();
           if (json.data) {
@@ -1376,10 +1453,60 @@ function EditorialDashboardContent() {
     }
   };
 
+  const computeEventDateStrings = (startDateStr: string, endDateStr: string) => {
+    if (!startDateStr) {
+      setEventFormDay("");
+      setEventFormMonthYear("");
+      return;
+    }
+    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const [sy, sm, sd] = startDateStr.split("-").map(Number);
+    const startObj = new Date(sy, sm - 1, sd);
+    if (isNaN(startObj.getTime())) return;
+
+    const sDay = String(startObj.getDate()).padStart(2, "0");
+    const sMonth = monthNames[startObj.getMonth()];
+    const sYear = startObj.getFullYear();
+
+    if (!endDateStr || endDateStr === startDateStr) {
+      setEventFormDay(sDay);
+      setEventFormMonthYear(`${sMonth} ${sYear}`);
+      return;
+    }
+
+    const [ey, em, ed] = endDateStr.split("-").map(Number);
+    const endObj = new Date(ey, em - 1, ed);
+    if (isNaN(endObj.getTime()) || endObj < startObj) {
+      setEventFormDay(sDay);
+      setEventFormMonthYear(`${sMonth} ${sYear}`);
+      return;
+    }
+
+    const eDay = String(endObj.getDate()).padStart(2, "0");
+    const eMonth = monthNames[endObj.getMonth()];
+    const eYear = endObj.getFullYear();
+
+    if (sm === em && sy === ey) {
+      setEventFormDay(`${sDay} – ${eDay}`);
+      setEventFormMonthYear(`${sMonth} ${sYear}`);
+    } else if (sy === ey) {
+      setEventFormDay(`${sDay} ${sMonth} – ${eDay} ${eMonth}`);
+      setEventFormMonthYear(`${sYear}`);
+    } else {
+      setEventFormDay(`${sDay} ${sMonth} ${sYear} – ${eDay} ${eMonth} ${eYear}`);
+      setEventFormMonthYear("");
+    }
+  };
+
   // Event Handlers
   const handleSaveEvent = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!eventFormTitle.trim() || !eventFormDesc.trim()) return;
+
+    if (!eventStartDate && !eventFormDay.trim()) {
+      alert("Start Date is required for the event.");
+      return;
+    }
 
     if (eventFormType === "PAST_ARCHIVE") {
       if (pastArchiveMediaType === "VIDEO") {
@@ -1400,6 +1527,46 @@ function EditorialDashboardContent() {
 
     setSubmittingEvent(true);
     try {
+      let finalDay = eventFormDay.trim();
+      let finalMonthYear = eventFormMonthYear.trim();
+
+      if (eventStartDate) {
+        const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        const [sy, sm, sd] = eventStartDate.split("-").map(Number);
+        const startObj = new Date(sy, sm - 1, sd);
+        if (!isNaN(startObj.getTime())) {
+          const sDay = String(startObj.getDate()).padStart(2, "0");
+          const sMonth = monthNames[startObj.getMonth()];
+          const sYear = startObj.getFullYear();
+
+          if (!eventEndDate || eventEndDate === eventStartDate) {
+            finalDay = sDay;
+            finalMonthYear = `${sMonth} ${sYear}`;
+          } else {
+            const [ey, em, ed] = eventEndDate.split("-").map(Number);
+            const endObj = new Date(ey, em - 1, ed);
+            if (!isNaN(endObj.getTime()) && endObj >= startObj) {
+              const eDay = String(endObj.getDate()).padStart(2, "0");
+              const eMonth = monthNames[endObj.getMonth()];
+              const eYear = endObj.getFullYear();
+              if (sm === em && sy === ey) {
+                finalDay = `${sDay} – ${eDay}`;
+                finalMonthYear = `${sMonth} ${sYear}`;
+              } else if (sy === ey) {
+                finalDay = `${sDay} ${sMonth} – ${eDay} ${eMonth}`;
+                finalMonthYear = `${sYear}`;
+              } else {
+                finalDay = `${sDay} ${sMonth} ${sYear} – ${eDay} ${eMonth} ${eYear}`;
+                finalMonthYear = "";
+              }
+            } else {
+              finalDay = sDay;
+              finalMonthYear = `${sMonth} ${sYear}`;
+            }
+          }
+        }
+      }
+
       const isPastArchiveVideo = eventFormType === "PAST_ARCHIVE" && pastArchiveMediaType === "VIDEO";
       const imagesList = eventFormType === "PAST_ARCHIVE"
         ? (isPastArchiveVideo ? [] : (eventFormImages.length > 0 ? eventFormImages : (eventFormImage.trim() ? [eventFormImage.trim()] : [])))
@@ -1410,8 +1577,9 @@ function EditorialDashboardContent() {
         description: eventFormDesc.trim(),
         location: eventFormLoc.trim(),
         time: eventFormTime.trim() || undefined,
-        day: eventFormDay.trim() || undefined,
-        monthYear: eventFormMonthYear.trim() || undefined,
+        day: finalDay || undefined,
+        monthYear: finalMonthYear || undefined,
+        eventDate: eventStartDate ? new Date(eventStartDate).toISOString() : undefined,
         imageSrc: isPastArchiveVideo
           ? (eventFormImage.trim() || undefined)
           : (eventFormImage.trim() || imagesList[0] || undefined),
@@ -1651,6 +1819,8 @@ function EditorialDashboardContent() {
     setEventFormTime("");
     setEventFormDay("");
     setEventFormMonthYear("");
+    setEventStartDate("");
+    setEventEndDate("");
     setEventFormImage("");
     setEventFormImages([]);
     setEventFormRegisterHref("");
@@ -1952,7 +2122,7 @@ function EditorialDashboardContent() {
 
       if (!res.ok) {
         const errData = await res.json();
-        throw new Error(errData.message || "Failed to create article / story");
+        throw new Error(errData.message || "Failed to create article");
       }
 
       const story = await res.json();
@@ -1967,10 +2137,10 @@ function EditorialDashboardContent() {
       }
 
       if (publishDirectly) {
-        setFeedbackMessage(`Article / Story '${storyStudioTitle}' created & published for ${storyAuthorTarget.name || storyAuthorTarget.email}!`);
+        setFeedbackMessage(`Article '${storyStudioTitle}' created & published for ${storyAuthorTarget.name || storyAuthorTarget.email}!`);
         fetch("/api/revalidate?path=/").catch(() => {});
       } else {
-        setFeedbackMessage(`Article / Story draft created for ${storyAuthorTarget.name || storyAuthorTarget.email}!`);
+        setFeedbackMessage(`Article draft created for ${storyAuthorTarget.name || storyAuthorTarget.email}!`);
       }
 
       setAuthorStoryStudioOpen(false);
@@ -1982,17 +2152,25 @@ function EditorialDashboardContent() {
       setTimeout(() => setFeedbackMessage(null), 3500);
     } catch (err: any) {
       console.error(err);
-      alert(err.message || "Error creating article / story for author");
+      alert(err.message || "Error creating article for author");
     } finally {
       setSavingAuthorStory(false);
     }
   };
 
   const getAddSubmissionVideoEmbed = (url: string) => {
-    const ytMatch = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
-    if (ytMatch) return { type: "youtube" as const, id: ytMatch[1] };
-    const vimeoMatch = url.match(/vimeo\.com\/(?:video\/)?(\d+)/);
-    if (vimeoMatch) return { type: "vimeo" as const, id: vimeoMatch[1] };
+    const clean = url.trim();
+    const ytMatch = clean.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/|live\/))([\w-]{11})/);
+    if (ytMatch) return { type: "youtube" as const, id: ytMatch[1], embedUrl: `https://www.youtube-nocookie.com/embed/${ytMatch[1]}` };
+    const vimeoMatch = clean.match(/vimeo\.com\/(?:video\/)?(\d+)/);
+    if (vimeoMatch) return { type: "vimeo" as const, id: vimeoMatch[1], embedUrl: `https://player.vimeo.com/video/${vimeoMatch[1]}` };
+    const dmMatch = clean.match(/(?:dailymotion\.com\/(?:video|embed\/video)\/|dai\.ly\/)([a-zA-Z0-9]+)/);
+    if (dmMatch) return { type: "dailymotion" as const, id: dmMatch[1], embedUrl: `https://www.dailymotion.com/embed/video/${dmMatch[1]}` };
+    const gdMatch = clean.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/);
+    if (gdMatch) return { type: "googledrive" as const, id: gdMatch[1], embedUrl: `https://drive.google.com/file/d/${gdMatch[1]}/preview` };
+    if (/\.(mp4|webm|ogg|mov)(\?.*)?$/i.test(clean) || clean.startsWith("blob:") || /^https?:\/\/.*\/uploads\/.*video/i.test(clean)) {
+      return { type: "direct" as const, directUrl: clean };
+    }
     return null;
   };
 
@@ -2009,7 +2187,7 @@ function EditorialDashboardContent() {
     }
 
     if (addSubmissionType === "PAINTING" && !addSubmissionPaintingFile && !addSubmissionPaintingPreview) {
-      setAddSubmissionError("Please upload a painting artwork image.");
+      setAddSubmissionError("Please upload a visual arts image.");
       return;
     }
 
@@ -2035,7 +2213,7 @@ function EditorialDashboardContent() {
           title: addSubmissionTitle.trim(),
           description: addSubmissionDescription.trim(),
           content: addSubmissionDescription.trim(),
-          category: addSubmissionCategory || (addSubmissionType === "PAINTING" ? "Art" : "Cinema"),
+          category: addSubmissionType === "STORY" ? (addSubmissionCategory || "General") : undefined,
           authorId: addSubmissionAuthorTarget.id,
           submissionType: addSubmissionType,
           mediaUrl: addSubmissionType === "VIDEO" ? addSubmissionVideoUrl.trim() : undefined,
@@ -2059,7 +2237,7 @@ function EditorialDashboardContent() {
         });
       }
 
-      const typeName = addSubmissionType === "PAINTING" ? "Painting" : "Video";
+      const typeName = addSubmissionType === "PAINTING" ? "Visual Arts" : "Video";
       const targetName = addSubmissionAuthorTarget.name || addSubmissionAuthorTarget.email;
       if (publishDirectly) {
         setFeedbackMessage(`${typeName} '${addSubmissionTitle}' created & published for ${targetName}!`);
@@ -2113,20 +2291,108 @@ function EditorialDashboardContent() {
     }
   };
 
+  const fetchCatalogCounts = async () => {
+    try {
+      const [allRes, pubRes, unpubRes] = await Promise.all([
+        apiFetch(`${API_BASE_URL}/stories?status=CATALOG&limit=1`),
+        apiFetch(`${API_BASE_URL}/stories?status=APPROVED&limit=1`),
+        apiFetch(`${API_BASE_URL}/stories?status=UNPUBLISHED&limit=1`),
+      ]);
+      const allJson = allRes.ok ? await allRes.json() : null;
+      const pubJson = pubRes.ok ? await pubRes.json() : null;
+      const unpubJson = unpubRes.ok ? await unpubRes.json() : null;
+      setCatalogCounts({
+        all: allJson?.meta?.total ?? 0,
+        published: pubJson?.meta?.total ?? 0,
+        unpublished: unpubJson?.meta?.total ?? 0,
+      });
+    } catch (err) {
+      console.error("Failed to fetch catalog counts", err);
+    }
+  };
+
+  const loadMoreCatalogStories = React.useCallback(async () => {
+    if (catalogLoadingMore || catalogMeta.page >= catalogMeta.totalPages || activeTab !== "catalog") return;
+    setCatalogLoadingMore(true);
+    const nextPage = catalogMeta.page + 1;
+    try {
+      const cStatus = catalogStatusFilter === "APPROVED" ? "APPROVED" : catalogStatusFilter === "UNPUBLISHED" ? "UNPUBLISHED" : "CATALOG";
+      const cType = catalogTypeFilter !== "ALL" ? `&submissionType=${catalogTypeFilter}` : "";
+      const cCat = catalogCategoryFilter !== "ALL" ? `&category=${encodeURIComponent(catalogCategoryFilter)}` : "";
+      const cSort = catalogSortBy !== "newest" ? `&sortBy=${catalogSortBy}` : "";
+      const cSearch = searchQuery ? `&search=${encodeURIComponent(searchQuery)}` : "";
+      const cRes = await apiFetch(`${API_BASE_URL}/stories?status=${cStatus}&page=${nextPage}&limit=12${cType}${cCat}${cSort}${cSearch}`);
+      if (cRes.ok) {
+        const json = await cRes.json();
+        const newItems = json.data || (Array.isArray(json) ? json : []);
+        setAllStories((prev) => {
+          const existingIds = new Set(prev.map((s) => s.id));
+          const filtered = newItems.filter((s: PendingStory) => !existingIds.has(s.id));
+          return [...prev, ...filtered];
+        });
+        setCatalogMeta((prev) => ({
+          ...prev,
+          page: nextPage,
+          total: json.meta?.total ?? prev.total,
+          totalPages: json.meta?.totalPages ?? prev.totalPages,
+        }));
+      }
+    } catch (err) {
+      console.error("Failed to load more catalog stories", err);
+    } finally {
+      setCatalogLoadingMore(false);
+    }
+  }, [catalogLoadingMore, catalogMeta, activeTab, catalogStatusFilter, catalogTypeFilter, catalogCategoryFilter, catalogSortBy, searchQuery]);
+
+  // IntersectionObserver for Infinite Scroll in Catalog Tab
+  useEffect(() => {
+    if (activeTab !== "catalog" || loading || catalogLoadingMore || catalogMeta.page >= catalogMeta.totalPages) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && catalogMeta.page < catalogMeta.totalPages) {
+          loadMoreCatalogStories();
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    if (catalogSentinelRef.current) {
+      observer.observe(catalogSentinelRef.current);
+    }
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [activeTab, loading, catalogLoadingMore, catalogMeta, loadMoreCatalogStories]);
+
   useEffect(() => {
     checkAuthAndFetchData();
   }, []);
 
   useEffect(() => {
-    if (user && ["EDITOR", "ADMIN"].includes(user.role)) {
-      fetchDashboardData(activeTab, currentPage, searchQuery, emagazineSubTab);
+    if (user && ["EDITOR", "ADMIN", "MODERATOR"].includes(user.role)) {
+      fetchDashboardData(activeTab, currentPage, searchQuery, emagazineSubTab, mediaCategoryFilter);
     }
-  }, [activeTab, currentPage, reportStatusFilter, reportTypeFilter, inquiryStatusFilter, eventFilterType, emagazineSubTab]);
+  }, [
+    activeTab,
+    currentPage,
+    reportStatusFilter,
+    reportTypeFilter,
+    inquiryStatusFilter,
+    eventFilterType,
+    emagazineSubTab,
+    mediaCategoryFilter,
+    catalogStatusFilter,
+    catalogTypeFilter,
+    catalogCategoryFilter,
+    catalogSortBy,
+  ]);
 
   // Server-side debounced search handler
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (user && ["EDITOR", "ADMIN"].includes(user.role)) {
+      if (user && ["EDITOR", "ADMIN", "MODERATOR"].includes(user.role)) {
         fetchDashboardData(activeTab, 1, searchQuery, emagazineSubTab);
       }
     }, 350);
@@ -2178,24 +2444,58 @@ function EditorialDashboardContent() {
     }
   };
 
-  const handleUpdateReportStatus = async (reportId: string, status: "RESOLVED" | "DISMISSED") => {
+  const handleUpdateReportStatus = async (
+    reportId: string,
+    status: "RESOLVED" | "DISMISSED" | "DISPUTED",
+    action?: "RESTORE" | "UNPUBLISH" | "DISMISS",
+    editorialNote?: string,
+  ) => {
     try {
       const res = await apiFetch(`${API_BASE_URL}/editorial/reports/${reportId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status }),
+        body: JSON.stringify({ status, action, editorialNote }),
       });
       if (res.ok) {
-        setFeedbackMessage(`Report marked as ${status.toLowerCase()}.`);
+        if (status === "DISPUTED") {
+          setFeedbackMessage("Work placed under dispute review. Content is now hidden from public catalog.");
+        } else if (action === "RESTORE") {
+          setFeedbackMessage("Dispute resolved! Work has been restored and published.");
+        } else if (action === "UNPUBLISH") {
+          setFeedbackMessage("Dispute resolved! Work has been unpublished.");
+        } else {
+          setFeedbackMessage(`Report marked as ${status.toLowerCase()}.`);
+        }
         fetchDashboardData("reports", currentPage, searchQuery);
         fetchPendingReportsCount();
-        setTimeout(() => setFeedbackMessage(null), 3000);
+        setTimeout(() => setFeedbackMessage(null), 3500);
       } else {
-        alert("Failed to update report status");
+        const err = await res.json().catch(() => ({}));
+        alert(err.message || "Failed to update report status");
       }
     } catch (e) {
       console.error(e);
       alert("Error updating report status");
+    }
+  };
+
+  const handleConfirmDisputeAction = async () => {
+    if (!disputeModalReport) return;
+    setDisputeActionSaving(true);
+    setDisputeActionError(null);
+    try {
+      await handleUpdateReportStatus(
+        disputeModalReport.id,
+        "DISPUTED",
+        undefined,
+        disputeEditorialReason.trim() || undefined,
+      );
+      setDisputeModalReport(null);
+      setDisputeEditorialReason("");
+    } catch (err: any) {
+      setDisputeActionError(err?.message || "Failed to place work under dispute.");
+    } finally {
+      setDisputeActionSaving(false);
     }
   };
 
@@ -2263,6 +2563,9 @@ function EditorialDashboardContent() {
           localStorage.setItem("akam_user", JSON.stringify(updated));
           window.dispatchEvent(new Event("akam_user_updated"));
         }
+        if (viewingAuthorDetails && viewingAuthorDetails.id === userId) {
+          setViewingAuthorDetails((prev) => (prev ? { ...prev, role: newRole as any } : null));
+        }
         fetchDashboardData();
         setTimeout(() => setFeedbackMessage(null), 3000);
       } else {
@@ -2281,6 +2584,9 @@ function EditorialDashboardContent() {
       });
       if (res.ok) {
         setFeedbackMessage("Masika featured author status updated!");
+        if (viewingAuthorDetails && viewingAuthorDetails.id === userId) {
+          setViewingAuthorDetails((prev) => (prev ? { ...prev, isFeatured: !prev.isFeatured } : null));
+        }
         fetchDashboardData("authors", currentPage, searchQuery);
         setTimeout(() => setFeedbackMessage(null), 3000);
       } else {
@@ -2302,6 +2608,9 @@ function EditorialDashboardContent() {
       });
       if (res.ok) {
         setFeedbackMessage("Author priority order updated!");
+        if (viewingAuthorDetails && viewingAuthorDetails.id === userId) {
+          setViewingAuthorDetails((prev) => (prev ? { ...prev, sortOrder } : null));
+        }
         fetchDashboardData("authors", currentPage, searchQuery);
         setTimeout(() => setFeedbackMessage(null), 3000);
       } else {
@@ -2311,6 +2620,29 @@ function EditorialDashboardContent() {
     } catch (e) {
       console.error(e);
       alert("Error updating author priority order");
+    }
+  };
+
+  const handleToggleShadowBan = async (userId: string) => {
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/users/${userId}/toggle-shadow-ban`, {
+        method: "PATCH",
+      });
+      if (res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setFeedbackMessage(data.isShadowBanned ? "Author shadow banned (all works and public profile hidden)!" : "Author restored from shadow ban!");
+        if (viewingAuthorDetails && viewingAuthorDetails.id === userId) {
+          setViewingAuthorDetails((prev) => (prev ? { ...prev, isShadowBanned: Boolean(data.isShadowBanned) } : null));
+        }
+        fetchDashboardData("authors", currentPage, searchQuery);
+        setTimeout(() => setFeedbackMessage(null), 3000);
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        alert(errData.message || "Failed to update author shadow ban status");
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Error toggling author shadow ban status");
     }
   };
 
@@ -2388,6 +2720,7 @@ function EditorialDashboardContent() {
     setAuthorEditAvatarPreview(user.avatarUrl ? formatAssetUrl(user.avatarUrl) : null);
     setAuthorEditIsFeatured(Boolean(user.isFeatured));
     setAuthorEditSortOrder(user.sortOrder ?? 0);
+    setAuthorEditIsShadowBanned(Boolean(user.isShadowBanned));
     setEditAuthorModalOpen(true);
   };
 
@@ -2431,8 +2764,9 @@ function EditorialDashboardContent() {
           bio: authorEditBio.trim(),
           role: authorEditRole,
           avatarUrl: avatarUrl || null,
-          isFeatured: authorEditIsFeatured,
-          sortOrder: authorEditSortOrder,
+          isFeatured: authorEditRole === "AUTHOR" ? authorEditIsFeatured : false,
+          sortOrder: authorEditRole === "AUTHOR" ? authorEditSortOrder : 0,
+          isShadowBanned: authorEditRole === "AUTHOR" ? authorEditIsShadowBanned : false,
         }),
       });
 
@@ -2502,31 +2836,47 @@ function EditorialDashboardContent() {
     }
   };
 
-  const handleUnpublishStory = async (storyId: string) => {
-    if (!confirm("Are you sure you want to unpublish this content? It will be hidden from the public catalog.")) return;
+  const handleUnpublishStory = (storyId: string, storyTitle: string) => {
+    setUnpublishTarget({ id: storyId, title: storyTitle });
+    setUnpublishReason("");
+    setUnpublishError(null);
+  };
+
+  const handleConfirmUnpublish = async () => {
+    if (!unpublishTarget) return;
+    if (!unpublishReason.trim()) {
+      setUnpublishError("Please provide a reason for unpublishing.");
+      return;
+    }
+    setUnpublishSaving(true);
+    setUnpublishError(null);
     try {
-      const res = await apiFetch(`${API_BASE_URL}/stories/${storyId}/review`, {
+      const res = await apiFetch(`${API_BASE_URL}/stories/${unpublishTarget.id}/review`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ decision: "UNPUBLISHED" }),
+        body: JSON.stringify({ decision: "UNPUBLISHED", rejectionNote: unpublishReason.trim() }),
       });
       if (res.ok) {
-        setFeedbackMessage("Content unpublished successfully.");
+        setFeedbackMessage("Content unpublished successfully. The author has been notified.");
         setAllStories((prev) =>
-          prev.map((s) => (s.id === storyId ? { ...s, status: "UNPUBLISHED" as const } : s))
+          prev.map((s) => (s.id === unpublishTarget.id ? { ...s, status: "UNPUBLISHED" as const } : s))
         );
         fetch("/api/revalidate?path=/&tag=stories").catch(() => {});
         fetchDashboardData(activeTab, currentPage, searchQuery);
-        setTimeout(() => setFeedbackMessage(null), 3000);
+        setUnpublishTarget(null);
+        setTimeout(() => setFeedbackMessage(null), 4000);
       } else {
         const err = await res.json();
-        alert(err.message || "Failed to unpublish content");
+        setUnpublishError(err.message || "Failed to unpublish content.");
       }
     } catch (err) {
       console.error(err);
-      alert("Error unpublishing content");
+      setUnpublishError("Network error. Please try again.");
+    } finally {
+      setUnpublishSaving(false);
     }
   };
+
 
   const handlePublishStory = async (storyId: string) => {
     if (!confirm("Publish this content to the live public catalog?")) return;
@@ -2601,13 +2951,11 @@ function EditorialDashboardContent() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: newCatName.trim(),
-          malName: newCatMalName.trim() || undefined,
           description: newCatDesc.trim() || undefined,
         }),
       });
       if (res.ok) {
         setNewCatName("");
-        setNewCatMalName("");
         setNewCatDesc("");
         setFeedbackMessage(`Category "${newCatName.trim()}" created successfully!`);
         fetchAllPlatformCategories();
@@ -2643,47 +2991,51 @@ function EditorialDashboardContent() {
     }
   };
 
+  // ─── Markdown / HTML helpers (matching submit/page.tsx Live Reader View) ───
+  const convertMarkdownToHtml = (mdStr: string): string => {
+    if (!mdStr) return "";
+    let html = mdStr.replace(/\r\n/g, "\n");
+    html = html.replace(/&nbsp;/gi, " ").replace(/&#160;/gi, " ");
+    html = html.replace(/!\[(.*?)\]\((.*?)\)/g, '<div contenteditable="false" class="my-6 text-center select-none"><img src="$2" alt="$1" class="max-h-[420px] w-auto mx-auto rounded-2xl border border-gray-200 shadow-md object-cover inline-block" /></div><p><br></p>');
+    html = html.replace(/^###\s+(.*)$/gm, '<h3 class="text-xl font-bold my-3 text-gray-900">$1</h3>');
+    html = html.replace(/^##\s+(.*)$/gm, '<h2 class="text-2xl font-bold my-4 text-gray-950">$1</h2>');
+    html = html.replace(/\*\*(.*?)\*\*/g, "<b>$1</b>").replace(/__(.*?)__/g, "<b>$1</b>");
+    html = html.replace(/\*(.*?)\*/g, "<i>$1</i>");
+    html = html.replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-emerald-700 underline font-medium hover:text-emerald-900">$1</a>');
+    html = html.replace(/^>\s+(.*)$/gm, '<blockquote class="border-l-4 border-emerald-500 pl-4 py-2 italic my-4 text-gray-800 bg-gray-50/70 rounded-r-xl">$1</blockquote>');
+    html = html.replace(/^[\*\-]\s+(.*)$/gm, '<ul class="my-2"><li class="ml-4 list-disc mb-1 text-gray-900">$1</li></ul>');
+    html = html.replace(/^\d+\.\s+(.*)$/gm, '<ol class="my-2"><li class="ml-4 list-decimal mb-1 text-gray-900">$1</li></ol>');
+    html = html.replace(/\*\*/g, "");
+    const lines = html.split("\n");
+    const resultBlocks: string[] = [];
+    let currentParagraphLines: string[] = [];
+    const flushParagraph = () => {
+      if (currentParagraphLines.length > 0) {
+        const text = currentParagraphLines.join("<br>");
+        if (text.trim()) resultBlocks.push(`<p class="mb-6 leading-[1.9] text-gray-900 whitespace-pre-wrap">${text}</p>`);
+        currentParagraphLines = [];
+      }
+    };
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) { flushParagraph(); continue; }
+      if (trimmed.startsWith('<div contenteditable="false"') || trimmed.startsWith("<h2") || trimmed.startsWith("<h3") || trimmed.startsWith("<blockquote") || trimmed.startsWith("<ul") || trimmed.startsWith("<ol") || trimmed.startsWith("<p")) {
+        flushParagraph(); resultBlocks.push(trimmed); continue;
+      }
+      currentParagraphLines.push(trimmed);
+    }
+    flushParagraph();
+    return resultBlocks.join("");
+  };
+
   const renderStoryContent = (contentStr?: string | null) => {
     if (!contentStr || typeof contentStr !== "string" || !contentStr.trim()) {
       return (
-        <div className="py-8 text-center text-gray-400 text-sm italic">
-          No written story text available for this submission.
-        </div>
+      null
       );
     }
 
-    // ── Markdown-to-HTML inline converter (same logic as submit page) ──────
-    const mdToHtml = (md: string): string => {
-      let h = md;
-      h = h.replace(/&nbsp;/gi, " ");
-      // Images
-      h = h.replace(/!\[(.*?)\]\((.*?)\)/g, (_m, alt, src) => {
-        return `<img src="${formatAssetUrl(src)}" alt="${alt}" class="my-6 w-full max-w-3xl mx-auto max-h-[500px] object-cover rounded-2xl shadow-xs" />`;
-      });
-      // Headings
-      h = h.replace(/^###\s+(.*)$/gm, '<h3 class="text-xl font-bold my-4 text-gray-900">$1</h3>');
-      h = h.replace(/^##\s+(.*)$/gm, '<h2 class="text-2xl font-bold my-5 text-gray-950">$1</h2>');
-      // Bold / Italic
-      h = h.replace(/\*\*(.*?)\*\*/g, "<b>$1</b>");
-      h = h.replace(/__(.*?)__/g, "<b>$1</b>");
-      h = h.replace(/\*(.*?)\*/g, "<i>$1</i>");
-      // Blockquote
-      h = h.replace(
-        /^>\s+(.*)$/gm,
-        '<blockquote class="border-l-4 border-emerald-500 pl-4 py-2 italic my-4 text-gray-800 bg-gray-50/70 rounded-r-xl">$1</blockquote>',
-      );
-      // Links
-      h = h.replace(
-        /\[(.*?)\]\((.*?)\)/g,
-        '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-emerald-700 underline font-medium hover:text-emerald-900">$1</a>',
-      );
-      // Lists
-      h = h.replace(/^[\*\-]\s+(.*)$/gm, '<li class="ml-5 list-disc mb-1 text-gray-900">$1</li>');
-      h = h.replace(/^(\d+)\.\s+(.*)$/gm, '<li class="ml-5 list-decimal mb-1 text-gray-900">$2</li>');
-      return h;
-    };
-
-    // ── Split content at image boundaries ────────────────────────────────────
+    // Split content at image boundaries
     const withHtmlImgs = contentStr.replace(/!\[(.*?)\]\((.*?)\)/g, (_m, alt, src) => `<img src="${formatAssetUrl(src)}" alt="${alt}" />`);
     const imgRegex = /<img\s+[^>]*src=["']([^"']+)["'][^>]*>/gi;
     const parts: Array<{ type: "text"; value: string } | { type: "image"; src: string; alt: string }> = [];
@@ -2705,18 +3057,17 @@ function EditorialDashboardContent() {
     }
     if (parts.length === 0) parts.push({ type: "text", value: contentStr });
 
-    // ── Render ────────────────────────────────────────────────────────────────
     return (
-      <div className="space-y-0">
+      <div className="space-y-4 pt-2 text-gray-900 font-normal text-base sm:text-lg max-w-3xl mx-auto">
         {parts.map((part, idx) => {
           if (part.type === "image") {
             return (
-              <div key={idx} className="my-8 flex justify-center">
+              <div key={idx} className="my-6 sm:my-8 flex justify-center">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={formatAssetUrl(part.src)}
                   alt={part.alt}
-                  className="w-full max-w-3xl h-auto max-h-[520px] object-cover rounded-2xl shadow-xs border border-gray-100"
+                  className="w-full max-w-3xl h-auto max-h-[500px] object-cover rounded-2xl shadow-xs border border-gray-100"
                   onError={(e) => {
                     (e.currentTarget as HTMLElement).style.display = "none";
                   }}
@@ -2725,44 +3076,14 @@ function EditorialDashboardContent() {
             );
           }
 
-          // Text part — split by newlines and render paragraphs + spacers
-          const rawText = part.value.replace(/\r\n/g, "\n");
-          const lines = rawText.split("\n");
-          const blocks: React.ReactNode[] = [];
-          let paraLines: string[] = [];
-
-          const flushPara = (key: string) => {
-            if (paraLines.length > 0) {
-              const combined = paraLines.join("<br />");
-              if (combined.trim()) {
-                blocks.push(
-                  <div
-                    key={key}
-                    className="text-[#1A1A1A] text-base sm:text-lg leading-[1.9] mb-6 font-normal [&_b]:font-bold [&_i]:italic [&_a]:text-emerald-700 [&_a]:underline [&_h2]:text-2xl [&_h2]:font-bold [&_h2]:my-4 [&_h3]:text-xl [&_h3]:font-bold [&_h3]:my-3 [&_blockquote]:border-l-4 [&_blockquote]:border-emerald-500 [&_blockquote]:pl-4 [&_blockquote]:italic [&_blockquote]:my-3 [&_li]:ml-5 [&_li]:list-disc"
-                    dangerouslySetInnerHTML={{ __html: mdToHtml(combined) }}
-                  />,
-                );
-              }
-              paraLines = [];
-            }
-          };
-
-          lines.forEach((line, li) => {
-            if (line.trim() === "") {
-              if (paraLines.length > 0) {
-                // First blank line after text → flush paragraph
-                flushPara(`${idx}-p-${li}`);
-              } else {
-                // Consecutive blank line → section gap spacer
-                blocks.push(<div key={`${idx}-gap-${li}`} className="mb-10 select-none" aria-hidden="true" />);
-              }
-            } else {
-              paraLines.push(line);
-            }
-          });
-          flushPara(`${idx}-p-end`);
-
-          return <div key={idx}>{blocks}</div>;
+          const renderedChunkHtml = convertMarkdownToHtml(part.value);
+          return (
+            <div
+              key={idx}
+              className="prose prose-lg max-w-none text-gray-900 leading-[1.9] font-normal [&_p]:mb-6 [&_p]:mt-0 [&_p]:leading-[1.9] [&_p]:text-[#1A1A1A] [&_b]:font-bold [&_strong]:font-bold [&_i]:italic [&_em]:italic [&_a]:text-emerald-700 [&_a]:underline [&_a]:font-medium [&_ul]:list-disc [&_ul]:pl-6 [&_ul]:mb-4 [&_ol]:list-decimal [&_ol]:pl-6 [&_ol]:mb-4 [&_h2]:text-2xl [&_h2]:font-bold [&_h2]:mt-6 [&_h2]:mb-3 [&_h2]:text-gray-950 [&_h3]:text-xl [&_h3]:font-bold [&_h3]:mt-5 [&_h3]:mb-2 [&_h3]:text-gray-900 [&_blockquote]:border-l-4 [&_blockquote]:border-emerald-500 [&_blockquote]:pl-4 [&_blockquote]:py-2 [&_blockquote]:italic [&_blockquote]:my-4 [&_blockquote]:bg-gray-50/70 [&_blockquote]:rounded-r-xl"
+              dangerouslySetInnerHTML={{ __html: renderedChunkHtml }}
+            />
+          );
         })}
       </div>
     );
@@ -2797,7 +3118,7 @@ function EditorialDashboardContent() {
     );
   }
 
-  if (!["EDITOR", "ADMIN"].includes(user.role)) {
+  if (!["EDITOR", "ADMIN", "MODERATOR"].includes(user.role)) {
     return (
       <div className="min-h-screen bg-white font-poppins flex flex-col items-center justify-center p-6 text-center">
         <div className="w-16 h-16 bg-amber-100 text-amber-800 rounded-full flex items-center justify-center mb-4">
@@ -2873,167 +3194,197 @@ function EditorialDashboardContent() {
 
           {/* Page Navigation Links */}
           <nav className="space-y-2">
-            <button
-              onClick={() => handleTabChange("queue")}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
-                activeTab === "queue" ? "bg-[#040706] text-white shadow-xs" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
-              }`}
-            >
-              <Layers className="w-4 h-4 text-amber-400 shrink-0" />
-              <span>Pending Review Queue</span>
-            </button>
+            {user?.role === "MODERATOR" ? (
+              <>
+                <div className="px-4 py-2 border-b border-gray-100 mb-2">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-gray-400">Moderation Portal</span>
+                </div>
 
-            <button
-              onClick={() => handleTabChange("subscriptions")}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
-                activeTab === "subscriptions" ? "bg-[#040706] text-white shadow-xs" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
-              }`}
-            >
-              <CreditCard className="w-4 h-4 text-emerald-400 shrink-0" />
-              <span>Subscriptions & Passes</span>
-            </button>
+                <button
+                  onClick={() => handleTabChange("reports")}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
+                    activeTab === "reports" ? "bg-[#040706] text-white shadow-xs" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                  }`}
+                >
+                  <Flag className={`w-4 h-4 shrink-0 ${activeTab === "reports" ? "text-emerald-400" : "text-gray-400"}`} />
+                  <span>Reported Content</span>
+                </button>
 
-            <button
-              onClick={() => handleTabChange("emagazine")}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
-                activeTab === "emagazine" ? "bg-[#040706] text-white shadow-xs" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
-              }`}
-            >
-              <BookOpen className="w-4 h-4 text-purple-400 shrink-0" />
-              <span>E-Magazine Collection</span>
-            </button>
+                <button
+                  onClick={() => handleTabChange("communities")}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
+                    activeTab === "communities" ? "bg-[#040706] text-white shadow-xs" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                  }`}
+                >
+                  <Users className={`w-4 h-4 shrink-0 ${activeTab === "communities" ? "text-emerald-400" : "text-gray-400"}`} />
+                  <span>Community Moderation</span>
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={() => handleTabChange("queue")}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
+                    activeTab === "queue" ? "bg-[#040706] text-white shadow-xs" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                  }`}
+                >
+                  <Layers className={`w-4 h-4 shrink-0 ${activeTab === "queue" ? "text-emerald-400" : "text-gray-400"}`} />
+                  <span>Pending Review Queue</span>
+                </button>
 
-            <button
-              onClick={() => handleTabChange("authors")}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
-                activeTab === "authors" ? "bg-[#040706] text-white shadow-xs" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
-              }`}
-            >
-              <Users className="w-4 h-4 text-blue-500 shrink-0" />
-              <span>Author Roster</span>
-            </button>
+                <button
+                  onClick={() => handleTabChange("subscriptions")}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
+                    activeTab === "subscriptions" ? "bg-[#040706] text-white shadow-xs" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                  }`}
+                >
+                  <CreditCard className={`w-4 h-4 shrink-0 ${activeTab === "subscriptions" ? "text-emerald-400" : "text-gray-400"}`} />
+                  <span>Subscriptions & Passes</span>
+                </button>
 
-            <button
-              onClick={() => handleTabChange("catalog")}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
-                activeTab === "catalog" ? "bg-[#040706] text-white shadow-xs" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
-              }`}
-            >
-              <BookOpen className="w-4 h-4 text-emerald-500 shrink-0" />
-              <span>Published Catalog</span>
-            </button>
+                <button
+                  onClick={() => handleTabChange("emagazine")}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
+                    activeTab === "emagazine" ? "bg-[#040706] text-white shadow-xs" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                  }`}
+                >
+                  <BookOpen className={`w-4 h-4 shrink-0 ${activeTab === "emagazine" ? "text-emerald-400" : "text-gray-400"}`} />
+                  <span>E-Magazine Collection</span>
+                </button>
 
-            <button
-              onClick={() => handleTabChange("categories")}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
-                activeTab === "categories" ? "bg-[#040706] text-white shadow-xs" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
-              }`}
-            >
-              <Tag className="w-4 h-4 text-purple-500 shrink-0" />
-              <span>Categories & Taxonomy</span>
-            </button>
+                <button
+                  onClick={() => handleTabChange("authors")}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
+                    activeTab === "authors" ? "bg-[#040706] text-white shadow-xs" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                  }`}
+                >
+                  <Users className={`w-4 h-4 shrink-0 ${activeTab === "authors" ? "text-emerald-400" : "text-gray-400"}`} />
+                  <span>Author Roster</span>
+                </button>
 
-            <button
-              onClick={() => handleTabChange("editors-note")}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
-                activeTab === "settings" || activeTab === "editors-note"
-                  ? "bg-[#040706] text-white shadow-xs"
-                  : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
-              }`}
-            >
-              <FileText className="w-4 h-4 text-emerald-400 shrink-0" />
-              <span>Home Page Editor's Note</span>
-            </button>
+                <button
+                  onClick={() => handleTabChange("catalog")}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
+                    activeTab === "catalog" ? "bg-[#040706] text-white shadow-xs" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                  }`}
+                >
+                  <BookOpen className={`w-4 h-4 shrink-0 ${activeTab === "catalog" ? "text-emerald-400" : "text-gray-400"}`} />
+                  <span>Published Catalog</span>
+                </button>
 
-            <button
-              onClick={() => handleTabChange("notifications")}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
-                activeTab === "notifications" ? "bg-[#040706] text-white shadow-xs" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
-              }`}
-            >
-              <Bell className="w-4 h-4 text-indigo-500 shrink-0" />
-              <span>Editorial Alerts</span>
-            </button>
+                <button
+                  onClick={() => handleTabChange("categories")}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
+                    activeTab === "categories" ? "bg-[#040706] text-white shadow-xs" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                  }`}
+                >
+                  <Tag className={`w-4 h-4 shrink-0 ${activeTab === "categories" ? "text-emerald-400" : "text-gray-400"}`} />
+                  <span>Categories & Taxonomy</span>
+                </button>
 
-            <button
-              onClick={() => handleTabChange("reports")}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
-                activeTab === "reports" ? "bg-[#040706] text-white shadow-xs" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
-              }`}
-            >
-              <Flag className="w-4 h-4 text-rose-500 shrink-0" />
-              <span>Reported Content</span>
-            </button>
+                <button
+                  onClick={() => handleTabChange("editors-note")}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
+                    activeTab === "settings" || activeTab === "editors-note"
+                      ? "bg-[#040706] text-white shadow-xs"
+                      : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                  }`}
+                >
+                  <FileText className={`w-4 h-4 shrink-0 ${activeTab === "settings" || activeTab === "editors-note" ? "text-emerald-400" : "text-gray-400"}`} />
+                  <span>Home Page Editor's Note</span>
+                </button>
 
-            <button
-              onClick={() => handleTabChange("inquiries")}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
-                activeTab === "inquiries" ? "bg-[#040706] text-white shadow-xs" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
-              }`}
-            >
-              <Mail className="w-4 h-4 text-emerald-400 shrink-0" />
-              <span>Contact Inquiries</span>
-            </button>
+                <button
+                  onClick={() => handleTabChange("notifications")}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
+                    activeTab === "notifications" ? "bg-[#040706] text-white shadow-xs" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                  }`}
+                >
+                  <Bell className={`w-4 h-4 shrink-0 ${activeTab === "notifications" ? "text-emerald-400" : "text-gray-400"}`} />
+                  <span>Editorial Alerts</span>
+                </button>
 
-            <button
-              onClick={() => handleTabChange("communities")}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
-                activeTab === "communities" ? "bg-[#040706] text-white shadow-xs" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
-              }`}
-            >
-              <Users className="w-4 h-4 text-sky-500 shrink-0" />
-              <span>Community Moderation</span>
-            </button>
+                <button
+                  onClick={() => handleTabChange("reports")}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
+                    activeTab === "reports" ? "bg-[#040706] text-white shadow-xs" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                  }`}
+                >
+                  <Flag className={`w-4 h-4 shrink-0 ${activeTab === "reports" ? "text-emerald-400" : "text-gray-400"}`} />
+                  <span>Reported Content</span>
+                </button>
 
-            <button
-              onClick={() => handleTabChange("events")}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
-                activeTab === "events" ? "bg-[#040706] text-white shadow-xs" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
-              }`}
-            >
-              <Calendar className="w-4 h-4 text-violet-500 shrink-0" />
-              <span>Events & Workshops</span>
-            </button>
+                <button
+                  onClick={() => handleTabChange("inquiries")}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
+                    activeTab === "inquiries" ? "bg-[#040706] text-white shadow-xs" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                  }`}
+                >
+                  <Mail className={`w-4 h-4 shrink-0 ${activeTab === "inquiries" ? "text-emerald-400" : "text-gray-400"}`} />
+                  <span>Contact Inquiries</span>
+                </button>
 
-            <button
-              onClick={() => handleTabChange("books")}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
-                activeTab === "books" ? "bg-[#040706] text-white shadow-xs" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
-              }`}
-            >
-              <BookOpen className="w-4 h-4 text-[#8122DB] shrink-0" />
-              <span>Upcoming Book Releases</span>
-            </button>
+                <button
+                  onClick={() => handleTabChange("communities")}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
+                    activeTab === "communities" ? "bg-[#040706] text-white shadow-xs" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                  }`}
+                >
+                  <Users className={`w-4 h-4 shrink-0 ${activeTab === "communities" ? "text-emerald-400" : "text-gray-400"}`} />
+                  <span>Community Moderation</span>
+                </button>
 
-            <button
-              onClick={() => handleTabChange("media")}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
-                activeTab === "media" ? "bg-[#040706] text-white shadow-xs" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
-              }`}
-            >
-              <Video className="w-4 h-4 text-emerald-500 shrink-0" />
-              <span>Media Showcase</span>
-            </button>
+                <button
+                  onClick={() => handleTabChange("events")}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
+                    activeTab === "events" ? "bg-[#040706] text-white shadow-xs" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                  }`}
+                >
+                  <Calendar className={`w-4 h-4 shrink-0 ${activeTab === "events" ? "text-emerald-400" : "text-gray-400"}`} />
+                  <span>Events & Workshops</span>
+                </button>
 
-            <button
-              onClick={() => handleTabChange("editions")}
-              className={`w-full flex items-center text-left gap-3 px-4 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
-                activeTab === "editions" ? "bg-[#040706] text-white shadow-xs" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
-              }`}
-            >
-              <Archive className="w-4 h-4 text-violet-500 shrink-0" />
-              <span>E-Magazine (Digital Editions)</span>
-            </button>
+                <button
+                  onClick={() => handleTabChange("books")}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
+                    activeTab === "books" ? "bg-[#040706] text-white shadow-xs" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                  }`}
+                >
+                  <BookOpen className={`w-4 h-4 shrink-0 ${activeTab === "books" ? "text-emerald-400" : "text-gray-400"}`} />
+                  <span>Upcoming Book Releases</span>
+                </button>
 
-            <button
-              onClick={() => handleTabChange("reviews")}
-              className={`w-full flex items-center text-left gap-3 px-4 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
-                activeTab === "reviews" ? "bg-[#040706] text-white shadow-xs" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
-              }`}
-            >
-              <MessageSquare className="w-4 h-4 text-emerald-500 shrink-0" />
-              <span>Reader Reviews (Homepage)</span>
-            </button>
+                <button
+                  onClick={() => handleTabChange("media")}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
+                    activeTab === "media" ? "bg-[#040706] text-white shadow-xs" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                  }`}
+                >
+                  <Video className={`w-4 h-4 shrink-0 ${activeTab === "media" ? "text-emerald-400" : "text-gray-400"}`} />
+                  <span>Media Showcase</span>
+                </button>
+
+                <button
+                  onClick={() => handleTabChange("editions")}
+                  className={`w-full flex items-center text-left gap-3 px-4 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
+                    activeTab === "editions" ? "bg-[#040706] text-white shadow-xs" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                  }`}
+                >
+                  <Archive className={`w-4 h-4 shrink-0 ${activeTab === "editions" ? "text-emerald-400" : "text-gray-400"}`} />
+                  <span>E-Magazine (Digital Editions)</span>
+                </button>
+
+                <button
+                  onClick={() => handleTabChange("reviews")}
+                  className={`w-full flex items-center text-left gap-3 px-4 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
+                    activeTab === "reviews" ? "bg-[#040706] text-white shadow-xs" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                  }`}
+                >
+                  <MessageSquare className={`w-4 h-4 shrink-0 ${activeTab === "reviews" ? "text-emerald-400" : "text-gray-400"}`} />
+                  <span>Reader Reviews (Homepage)</span>
+                </button>
+              </>
+            )}
           </nav>
         </div>
 
@@ -3131,9 +3482,9 @@ function EditorialDashboardContent() {
               {activeTab === "subscriptions" && "Monitor active digital subscribers, student scholarship passes, revenue metrics, and grant or revoke access."}
               {activeTab === "emagazine" && "Curated submissions for AKAM E-Magazine editions. Filter between Magazine Pending and Magazine Published, with automatic author email notifications upon publication."}
               {activeTab === "reports" && "Investigate reader flag reports submitted against published content and comments."}
-              {activeTab === "catalog" && "Browse all active works (articles, paintings, videos) currently published on AKAM Digital."}
+              {activeTab === "catalog" && "Browse all active works (articles, Visual Art, videos) currently published on AKAM Digital."}
               {activeTab === "authors" && "Manage all registered platform users, writers, and role permissions."}
-              {activeTab === "categories" && "Manage category labels, Malayalam translations, and genre classifications."}
+              {activeTab === "categories" && "Manage platform category taxonomy and genre classifications."}
               {activeTab === "notifications" && "Event logs for content submissions, approvals, and rejections."}
               {activeTab === "settings" && "Update the featured Editor's Note title and message displayed on the main homepage."}
               {activeTab === "communities" && "Moderate community posts and comments, lock threads, pin posts, and inspect community rosters."}
@@ -3145,148 +3496,293 @@ function EditorialDashboardContent() {
             </p>
           </div>
 
-          {/* TAB 1: PENDING QUEUE */}
-          {activeTab === "queue" && (
-            <div className="space-y-6">
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-white p-5 rounded-[24px] border border-gray-200/80 shadow-xs">
-                <div className="relative max-w-md w-full">
-                  <Search className="absolute left-3.5 top-3 w-4 h-4 text-gray-400" />
-                  <input
-                    type="text"
-                    placeholder="Search pending queue by title, category or author..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-2xl text-xs font-medium outline-none focus:border-black shadow-xs"
-                  />
-                </div>
+          {/* Moderator Restricted Section */}
+          {user?.role === "MODERATOR" && !["reports", "communities"].includes(activeTab) && (
+            <div className="bg-white rounded-3xl p-8 border border-gray-200 shadow-xs text-center max-w-lg mx-auto my-12">
+              <div className="w-12 h-12 bg-amber-100 text-amber-800 rounded-full flex items-center justify-center mx-auto mb-4">
+                <ShieldCheck className="w-6 h-6" />
               </div>
-
-              {loading ? (
-                <div className="py-20 flex justify-center items-center">
-                  <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-black"></div>
-                </div>
-              ) : pendingStories.length === 0 ? (
-                <div className="text-center py-20 bg-white rounded-[28px] border border-gray-200 p-8 shadow-xs">
-                  <ShieldCheck className="w-12 h-12 mx-auto text-emerald-500 mb-3" />
-                  <h3 className="text-xl font-bold text-gray-900 mb-1">Queue Clean & Up to Date!</h3>
-                  <p className="text-sm text-gray-500">There are no pending submissions matching your search criteria.</p>
-                </div>
-              ) : (
-                <>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {pendingStories.map((story) => (
-                      <div
-                        key={story.id}
-                        className="flex flex-col bg-white border border-gray-200/80 rounded-[24px] p-5 hover:shadow-lg transition-all duration-300 group/card shadow-xs"
-                      >
-                        {/* Story Cover */}
-                        <div className="relative w-full aspect-[16/9] rounded-2xl overflow-hidden bg-gray-100 mb-4 shadow-xs">
-                          {story.coverImageUrl ? (
-                            <Image
-                              src={story.coverImageUrl}
-                              alt={story.title || "Story Cover"}
-                              fill
-                              unoptimized
-                              className="object-cover group-hover/card:scale-105 transition-transform duration-500"
-                            />
-                          ) : (
-                            <div className="w-full h-full flex flex-col items-center justify-center gap-2 bg-gradient-to-br from-gray-50 via-gray-100 to-emerald-50/40 p-4 text-center">
-                              <FileText className="w-8 h-8 text-gray-400/60" />
-                              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">No Cover Image</span>
-                            </div>
-                          )}
-                          <div className="absolute top-2.5 left-2.5 z-10 flex gap-1.5 flex-wrap">
-                            <span className="bg-[#E4F953] text-[#040706] font-bold text-[9px] uppercase tracking-wider px-2.5 py-1 rounded-xl shadow-xs">
-                              PENDING
-                            </span>
-                            {story.category && (
-                              <span className="bg-black/80 backdrop-blur-xs text-white font-bold text-[9px] uppercase tracking-wider px-2.5 py-1 rounded-xl shadow-xs">
-                                {story.category}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="flex-1 flex flex-col justify-between space-y-4">
-                          <div>
-                            <h3 className="text-base font-bold text-gray-950 tracking-tight leading-snug line-clamp-2 group-hover/card:text-emerald-700 transition-colors">
-                              {story.title}
-                            </h3>
-                            <p className="text-xs text-gray-500 mt-1.5 flex items-center gap-1.5">
-                              <User className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                              <span className="truncate">By {story.authorName || story.authorEmail}</span>
-                            </p>
-                          </div>
-
-                          {/* Action Bar */}
-                          <div className="pt-3.5 border-t border-gray-100 flex items-center gap-1.5 flex-wrap">
-                            <button
-                              type="button"
-                              onClick={() => setSelectedStory(story)}
-                              className="flex-1 inline-flex items-center justify-center gap-1 py-2 px-2 bg-white hover:bg-gray-100 border border-gray-300 text-gray-900 text-xs font-semibold rounded-xl transition-all cursor-pointer shadow-2xs active:scale-95"
-                              title="Review submission"
-                            >
-                              <Eye className="w-3.5 h-3.5 text-gray-600 shrink-0" />
-                              <span>View</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleReview(story.id, "APPROVED_EMAGAZINE")}
-                              className="flex-1 inline-flex items-center justify-center gap-1 py-2 px-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold rounded-xl transition-all cursor-pointer shadow-2xs active:scale-95"
-                              title="Approve for E-Magazine (stores offline for digital edition)"
-                            >
-                              <BookOpen className="w-3.5 h-3.5 text-purple-200 shrink-0" />
-                              <span className="truncate">E-Magazine</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleReview(story.id, "APPROVED")}
-                              className="flex-1 inline-flex items-center justify-center gap-1 py-2 px-2 bg-gray-950 hover:bg-black text-white text-xs font-semibold rounded-xl transition-all cursor-pointer shadow-2xs active:scale-95"
-                              title="Approve & Publish to Public Web Catalog"
-                            >
-                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                              <span>Publish</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setRejectingStory(story)}
-                              className="inline-flex items-center justify-center gap-1 py-2 px-2.5 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-600 text-xs font-semibold rounded-xl transition-all cursor-pointer shadow-2xs active:scale-95"
-                              title="Reject submission"
-                            >
-                              <XCircle className="w-3.5 h-3.5 text-rose-500 shrink-0" />
-                              <span>Reject</span>
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  <PaginationFooter meta={queueMeta} onPageChange={handlePageChange} />
-                </>
-              )}
+              <h3 className="text-lg font-bold text-gray-900 mb-2">Moderation Access Only</h3>
+              <p className="text-xs text-gray-500 mb-6">
+                Your role provides access to Reported Content and Community Moderation.
+              </p>
+              <div className="flex justify-center gap-3">
+                <Button variant="primary" size="sm" onClick={() => handleTabChange("reports")}>
+                  Reported Content
+                </Button>
+                <Button variant="secondary" size="sm" onClick={() => handleTabChange("communities")}>
+                  Community Moderation
+                </Button>
+              </div>
             </div>
           )}
+
+          {/* TAB 1: PENDING QUEUE */}
+          {activeTab === "queue" && user?.role !== "MODERATOR" && (() => {
+            const filteredPendingStories = pendingStories.filter((s) => {
+              if (queueTypeFilter === "ALL") return true;
+              if (queueTypeFilter === "STORY") return !s.submissionType || s.submissionType === "STORY";
+              return s.submissionType === queueTypeFilter;
+            });
+
+            const articlesCount = pendingStories.filter((s) => !s.submissionType || s.submissionType === "STORY").length;
+            const paintingsCount = pendingStories.filter((s) => s.submissionType === "PAINTING").length;
+            const videosCount = pendingStories.filter((s) => s.submissionType === "VIDEO").length;
+
+            return (
+              <div className="space-y-6">
+                <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4 bg-white p-4 sm:p-5 rounded-[24px] border border-gray-200/80 shadow-xs">
+                  <div className="relative max-w-md w-full">
+                    <Search className="absolute left-3.5 top-3 w-4 h-4 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="Search pending queue by title, category or author..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-2xl text-xs font-medium outline-none focus:border-black shadow-xs"
+                    />
+                  </div>
+
+                  {/* Submission Type Filter Pills */}
+                  <div className="flex items-center gap-1.5 p-1 bg-gray-100 rounded-2xl overflow-x-auto shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setQueueTypeFilter("ALL")}
+                      className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+                        queueTypeFilter === "ALL"
+                          ? "bg-white text-gray-950 shadow-xs"
+                          : "text-gray-500 hover:text-gray-900"
+                      }`}
+                    >
+                      <span>All Submissions</span>
+                      <span className="bg-gray-200 text-gray-700 text-[10px] px-1.5 py-0.5 rounded-md font-bold">
+                        {pendingStories.length}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setQueueTypeFilter("STORY")}
+                      className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+                        queueTypeFilter === "STORY"
+                          ? "bg-white text-gray-950 shadow-xs"
+                          : "text-gray-500 hover:text-gray-900"
+                      }`}
+                    >
+                      <FileText className="w-3.5 h-3.5 text-gray-700" />
+                      <span>Articles</span>
+                      <span className="bg-gray-200 text-gray-700 text-[10px] px-1.5 py-0.5 rounded-md font-bold">
+                        {articlesCount}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setQueueTypeFilter("PAINTING")}
+                      className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+                        queueTypeFilter === "PAINTING"
+                          ? "bg-white text-purple-900 shadow-xs"
+                          : "text-gray-500 hover:text-purple-900"
+                      }`}
+                    >
+                      <Palette className="w-3.5 h-3.5 text-purple-600" />
+                      <span>Visual Arts</span>
+                      <span className="bg-purple-100 text-purple-800 text-[10px] px-1.5 py-0.5 rounded-md font-bold">
+                        {paintingsCount}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setQueueTypeFilter("VIDEO")}
+                      className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+                        queueTypeFilter === "VIDEO"
+                          ? "bg-white text-blue-900 shadow-xs"
+                          : "text-gray-500 hover:text-blue-900"
+                      }`}
+                    >
+                      <Video className="w-3.5 h-3.5 text-blue-600" />
+                      <span>Videos</span>
+                      <span className="bg-blue-100 text-blue-800 text-[10px] px-1.5 py-0.5 rounded-md font-bold">
+                        {videosCount}
+                      </span>
+                    </button>
+                  </div>
+                </div>
+
+                {loading ? (
+                  <div className="py-20 flex justify-center items-center">
+                    <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-black"></div>
+                  </div>
+                ) : filteredPendingStories.length === 0 ? (
+                  <div className="text-center py-20 bg-white rounded-[28px] border border-gray-200 p-8 shadow-xs">
+                    <ShieldCheck className="w-12 h-12 mx-auto text-emerald-500 mb-3" />
+                    <h3 className="text-xl font-bold text-gray-900 mb-1">Queue Clean & Up to Date!</h3>
+                    <p className="text-sm text-gray-500">
+                      {queueTypeFilter !== "ALL"
+                        ? `There are no pending ${queueTypeFilter === "PAINTING" ? "visual arts works" : queueTypeFilter === "VIDEO" ? "videos" : "articles"} matching your search criteria.`
+                        : "There are no pending submissions matching your search criteria."}
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                      {filteredPendingStories.map((story) => (
+                        <div
+                          key={story.id}
+                          className="flex flex-col bg-white border border-gray-200/80 rounded-[24px] p-5 hover:shadow-lg transition-all duration-300 group/card shadow-xs"
+                        >
+                          {/* Story Cover */}
+                          <div className="relative w-full aspect-[16/9] rounded-2xl overflow-hidden bg-gray-100 mb-4 shadow-xs">
+                            {story.coverImageUrl ? (
+                              <Image
+                                src={story.coverImageUrl}
+                                alt={story.title || "Story Cover"}
+                                fill
+                                unoptimized
+                                className="object-cover group-hover/card:scale-105 transition-transform duration-500"
+                              />
+                            ) : (
+                              <div className="w-full h-full flex flex-col items-center justify-center gap-2 bg-gradient-to-br from-gray-50 via-gray-100 to-emerald-50/40 p-4 text-center">
+                                {story.submissionType === "PAINTING" ? (
+                                  <Palette className="w-8 h-8 text-purple-400" />
+                                ) : story.submissionType === "VIDEO" ? (
+                                  <Video className="w-8 h-8 text-blue-400" />
+                                ) : (
+                                  <FileText className="w-8 h-8 text-gray-400/60" />
+                                )}
+                                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                                  {story.submissionType === "PAINTING" ? "Visual Arts Artwork" : story.submissionType === "VIDEO" ? "Video Feature" : "No Cover Image"}
+                                </span>
+                              </div>
+                            )}
+                            <div className="absolute top-2.5 left-2.5 z-10 flex gap-1.5 flex-wrap">
+                              <span className="bg-[#E4F953] text-[#040706] font-bold text-[9px] uppercase tracking-wider px-2.5 py-1 rounded-xl shadow-xs">
+                                PENDING
+                              </span>
+                              {story.submissionType === "PAINTING" ? (
+                                <span className="bg-purple-600/95 backdrop-blur-xs text-white font-bold text-[9px] uppercase tracking-wider px-2.5 py-1 rounded-xl shadow-xs flex items-center gap-1">
+                                  <Palette className="w-3 h-3" /> Visual Arts
+                                </span>
+                              ) : story.submissionType === "VIDEO" ? (
+                                <span className="bg-blue-600/95 backdrop-blur-xs text-white font-bold text-[9px] uppercase tracking-wider px-2.5 py-1 rounded-xl shadow-xs flex items-center gap-1">
+                                  <Video className="w-3 h-3" /> Video
+                                </span>
+                              ) : (
+                                <span className="bg-gray-900/90 backdrop-blur-xs text-white font-bold text-[9px] uppercase tracking-wider px-2.5 py-1 rounded-xl shadow-xs flex items-center gap-1">
+                                  <FileText className="w-3 h-3" /> Article
+                                </span>
+                              )}
+                              {story.submissionType !== "PAINTING" && story.submissionType !== "VIDEO" && story.category && (
+                                <span className="bg-black/75 backdrop-blur-xs text-white font-bold text-[9px] uppercase tracking-wider px-2.5 py-1 rounded-xl shadow-xs">
+                                  {story.category}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex-1 flex flex-col justify-between space-y-4">
+                            <div>
+                              <div className="flex items-center gap-1.5 mb-2">
+                                {story.submissionType === "PAINTING" ? (
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-bold text-purple-700 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-lg">
+                                    <Palette className="w-3 h-3" /> Visual Arts
+                                  </span>
+                                ) : story.submissionType === "VIDEO" ? (
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-lg">
+                                    <Video className="w-3 h-3" /> Video Feature
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-bold text-gray-700 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded-lg">
+                                    <FileText className="w-3 h-3" /> Article
+                                  </span>
+                                )}
+                                {story.submissionType !== "PAINTING" && story.submissionType !== "VIDEO" && story.category && (
+                                  <span className="text-[10px] font-semibold text-gray-500 bg-gray-50 border border-gray-200 px-2 py-0.5 rounded-lg">
+                                    {story.category}
+                                  </span>
+                                )}
+                              </div>
+
+                              <h3 className="text-base font-bold text-gray-950 tracking-tight leading-snug line-clamp-2 group-hover/card:text-emerald-700 transition-colors">
+                                {story.title}
+                              </h3>
+                              <p className="text-xs text-gray-500 mt-1.5 flex items-center gap-1.5">
+                                <User className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                                <span className="truncate">By {story.authorName || story.authorEmail}</span>
+                              </p>
+                            </div>
+
+                            {/* Action Bar */}
+                            <div className="pt-3.5 border-t border-gray-100 flex items-center gap-1.5 flex-wrap">
+                              <button
+                                type="button"
+                                onClick={() => setSelectedStory(story)}
+                                className="flex-1 inline-flex items-center justify-center gap-1 py-2 px-2 bg-white hover:bg-gray-100 border border-gray-300 text-gray-900 text-xs font-semibold rounded-xl transition-all cursor-pointer shadow-2xs active:scale-95"
+                                title="Review submission"
+                              >
+                                <Eye className="w-3.5 h-3.5 text-gray-600 shrink-0" />
+                                <span>View</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleReview(story.id, "APPROVED_EMAGAZINE")}
+                                className="flex-1 inline-flex items-center justify-center gap-1 py-2 px-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold rounded-xl transition-all cursor-pointer shadow-2xs active:scale-95"
+                                title="Approve for E-Magazine (stores offline for digital edition)"
+                              >
+                                <BookOpen className="w-3.5 h-3.5 text-purple-200 shrink-0" />
+                                <span className="truncate">E-Magazine</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleReview(story.id, "APPROVED")}
+                                className="flex-1 inline-flex items-center justify-center gap-1 py-2 px-2 bg-gray-950 hover:bg-black text-white text-xs font-semibold rounded-xl transition-all cursor-pointer shadow-2xs active:scale-95"
+                                title="Approve & Publish to Public Web Catalog"
+                              >
+                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                                <span>Publish</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setRejectingStory(story)}
+                                className="inline-flex items-center justify-center gap-1 py-2 px-2.5 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-600 text-xs font-semibold rounded-xl transition-all cursor-pointer shadow-2xs active:scale-95"
+                                title="Reject submission"
+                              >
+                                <XCircle className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+                                <span>Reject</span>
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <PaginationFooter meta={queueMeta} onPageChange={handlePageChange} />
+                  </>
+                )}
+              </div>
+            );
+          })()}
 
           {/* TAB: E-MAGAZINE COLLECTION */}
           {activeTab === "emagazine" && (
             <div className="space-y-6 font-poppins">
               {/* Category Pills & Search */}
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-white p-4 sm:p-5 rounded-[24px] border border-gray-200/80 shadow-xs">
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-4 bg-white p-3.5 sm:p-5 rounded-2xl sm:rounded-[24px] border border-gray-200/80 shadow-xs">
                 {/* Two Categories: Magazine Pending & Magazine Published */}
-                <div className="flex items-center gap-1.5 p-1 bg-gray-100 rounded-2xl w-full sm:w-auto">
+                <div className="grid grid-cols-2 sm:flex sm:flex-row items-center gap-1.5 p-1 bg-gray-100 rounded-2xl w-full sm:w-auto">
                   <button
                     type="button"
                     onClick={() => handleEmagazineSubTabChange("PENDING")}
-                    className={`flex-1 sm:flex-initial px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex items-center justify-center gap-1.5 ${
+                    className={`px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex items-center justify-center gap-1.5 ${
                       emagazineSubTab === "PENDING"
                         ? "bg-white text-gray-950 shadow-xs"
                         : "text-gray-500 hover:text-gray-900"
                     }`}
                   >
-                    <Clock className="w-3.5 h-3.5 text-purple-600" />
-                    <span>Magazine Pending</span>
-                    <span className="ml-1 bg-purple-100 text-purple-700 text-[10px] px-2 py-0.5 rounded-full font-extrabold">
+                    <Clock className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                    <span className="truncate">Magazine Pending</span>
+                    <span className="ml-1 bg-purple-100 text-purple-700 text-[10px] px-1.5 sm:px-2 py-0.5 rounded-full font-extrabold shrink-0">
                       {emagazinePendingCount}
                     </span>
                   </button>
@@ -3294,15 +3790,15 @@ function EditorialDashboardContent() {
                   <button
                     type="button"
                     onClick={() => handleEmagazineSubTabChange("PUBLISHED")}
-                    className={`flex-1 sm:flex-initial px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex items-center justify-center gap-1.5 ${
+                    className={`px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex items-center justify-center gap-1.5 ${
                       emagazineSubTab === "PUBLISHED"
                         ? "bg-white text-gray-950 shadow-xs"
                         : "text-gray-500 hover:text-gray-900"
                     }`}
                   >
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>Magazine Published</span>
-                    <span className="ml-1 bg-emerald-100 text-emerald-700 text-[10px] px-2 py-0.5 rounded-full font-extrabold">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                    <span className="truncate">Magazine Published</span>
+                    <span className="ml-1 bg-emerald-100 text-emerald-700 text-[10px] px-1.5 sm:px-2 py-0.5 rounded-full font-extrabold shrink-0">
                       {emagazinePublishedCount}
                     </span>
                   </button>
@@ -3372,8 +3868,16 @@ function EditorialDashboardContent() {
                             />
                           ) : (
                             <div className="w-full h-full flex flex-col items-center justify-center gap-2 bg-gradient-to-br from-gray-50 via-gray-100 to-purple-50/40 p-4 text-center">
-                              <FileText className="w-8 h-8 text-gray-400/60" />
-                              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">No Cover Image</span>
+                              {story.submissionType === "PAINTING" ? (
+                                <Palette className="w-8 h-8 text-purple-400" />
+                              ) : story.submissionType === "VIDEO" ? (
+                                <Video className="w-8 h-8 text-blue-400" />
+                              ) : (
+                                <FileText className="w-8 h-8 text-gray-400/60" />
+                              )}
+                              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                                {story.submissionType === "PAINTING" ? "Visual Arts Artwork" : story.submissionType === "VIDEO" ? "Video Feature" : "No Cover Image"}
+                              </span>
                             </div>
                           )}
                           <div className="absolute top-2.5 left-2.5 z-10 flex gap-1.5 flex-wrap">
@@ -3388,8 +3892,21 @@ function EditorialDashboardContent() {
                                 ? "PUBLISHED IN MAGAZINE"
                                 : "MAGAZINE PENDING"}
                             </span>
-                            {story.category && (
-                              <span className="bg-black/80 backdrop-blur-xs text-white font-bold text-[9px] uppercase tracking-wider px-2.5 py-1 rounded-xl shadow-xs">
+                            {story.submissionType === "PAINTING" ? (
+                              <span className="bg-purple-600/95 backdrop-blur-xs text-white font-bold text-[9px] uppercase tracking-wider px-2.5 py-1 rounded-xl shadow-xs flex items-center gap-1">
+                                <Palette className="w-3 h-3" /> Visual Arts
+                              </span>
+                            ) : story.submissionType === "VIDEO" ? (
+                              <span className="bg-blue-600/95 backdrop-blur-xs text-white font-bold text-[9px] uppercase tracking-wider px-2.5 py-1 rounded-xl shadow-xs flex items-center gap-1">
+                                <Video className="w-3 h-3" /> Video
+                              </span>
+                            ) : (
+                              <span className="bg-gray-900/90 backdrop-blur-xs text-white font-bold text-[9px] uppercase tracking-wider px-2.5 py-1 rounded-xl shadow-xs flex items-center gap-1">
+                                <FileText className="w-3 h-3" /> Article
+                              </span>
+                            )}
+                            {story.submissionType !== "PAINTING" && story.submissionType !== "VIDEO" && story.category && (
+                              <span className="bg-black/75 backdrop-blur-xs text-white font-bold text-[9px] uppercase tracking-wider px-2.5 py-1 rounded-xl shadow-xs">
                                 {story.category}
                               </span>
                             )}
@@ -3398,6 +3915,27 @@ function EditorialDashboardContent() {
 
                         <div className="flex-1 flex flex-col justify-between space-y-4">
                           <div>
+                            <div className="flex items-center gap-1.5 mb-2">
+                              {story.submissionType === "PAINTING" ? (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-purple-700 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-lg">
+                                  <Palette className="w-3 h-3" /> Visual Arts
+                                </span>
+                              ) : story.submissionType === "VIDEO" ? (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-lg">
+                                  <Video className="w-3 h-3" /> Video Feature
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-gray-700 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded-lg">
+                                  <FileText className="w-3 h-3" /> Article
+                                </span>
+                              )}
+                              {story.submissionType !== "PAINTING" && story.submissionType !== "VIDEO" && story.category && (
+                                <span className="text-[10px] font-semibold text-gray-500 bg-gray-50 border border-gray-200 px-2 py-0.5 rounded-lg">
+                                  {story.category}
+                                </span>
+                              )}
+                            </div>
+
                             <h3 className="text-base font-bold text-gray-950 tracking-tight leading-snug line-clamp-2 group-hover/card:text-emerald-700 transition-colors">
                               {story.title}
                             </h3>
@@ -3492,6 +4030,8 @@ function EditorialDashboardContent() {
                   >
                     <option value="ALL">All Statuses</option>
                     <option value="PENDING">Pending</option>
+                    <option value="DISPUTED">Under Dispute (Hidden)</option>
+                    <option value="RESOLVED">Resolved</option>
                     <option value="DISMISSED">Dismissed</option>
                   </select>
 
@@ -3504,7 +4044,7 @@ function EditorialDashboardContent() {
                     className="bg-white border border-gray-200 text-gray-900 text-xs font-semibold rounded-xl px-3.5 py-2.5 outline-none focus:border-black shadow-xs cursor-pointer"
                   >
                     <option value="ALL">All Report Types</option>
-                    <option value="STORY">Story Reports</option>
+                    <option value="STORY">Works Reports</option>
                     <option value="COMMENT">Comment Reports</option>
                   </select>
                 </div>
@@ -3530,116 +4070,266 @@ function EditorialDashboardContent() {
                 <div className="text-center py-20 bg-white rounded-[28px] border border-gray-200 p-8 shadow-xs">
                   <ShieldCheck className="w-12 h-12 mx-auto text-emerald-500 mb-3" />
                   <h3 className="text-xl font-bold text-gray-900 mb-1">No Reported Content!</h3>
-                  <p className="text-sm text-gray-500">There are currently no flagged stories or user reports matching your filter criteria.</p>
+                  <p className="text-sm text-gray-500">There are currently no flagged works or user reports matching your filter criteria.</p>
                 </div>
               ) : (
                 <>
                   <div className="space-y-4">
-                    {reportsList.map((report) => (
-                      <div
-                        key={report.id}
-                        className="bg-white border border-gray-200 rounded-xl p-5 flex flex-col md:flex-row md:items-start justify-between gap-6"
-                      >
-                        <div className="flex-1 space-y-3">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span
-                              className={`text-[10px] font-bold uppercase px-2.5 py-0.5 rounded-full ${
-                                report.status === "PENDING"
-                                  ? "bg-rose-100 text-rose-700 border border-rose-200"
-                                  : report.status === "RESOLVED"
-                                    ? "bg-emerald-100 text-emerald-700 border border-emerald-200"
-                                    : "bg-gray-100 text-gray-700 border border-gray-200"
-                              }`}
-                            >
-                              {report.status}
-                            </span>
+                    {reportsList.map((report) => {
+                      const daysLeft = report.disputeExpiresAt
+                        ? Math.max(0, Math.ceil((new Date(report.disputeExpiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
+                        : null;
 
-                            <span
-                              className={`text-[10px] font-bold uppercase px-2.5 py-0.5 rounded-full ${
-                                report.commentId
-                                  ? "bg-purple-100 text-purple-700 border border-purple-200"
-                                  : "bg-blue-100 text-blue-700 border border-blue-200"
-                              }`}
-                            >
-                              {report.commentId ? "Comment Report" : "Story Report"}
-                            </span>
+                      return (
+                        <div
+                          key={report.id}
+                          className={`bg-white border rounded-xl p-5 flex flex-col md:flex-row md:items-start justify-between gap-6 transition-all ${
+                            report.status === "DISPUTED"
+                              ? "border-amber-300 bg-amber-50/20 shadow-xs"
+                              : "border-gray-200"
+                          }`}
+                        >
+                          <div className="flex-1 space-y-3">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span
+                                className={`text-[10px] font-bold uppercase px-2.5 py-0.5 rounded-full ${
+                                  report.status === "PENDING"
+                                    ? "bg-rose-100 text-rose-700 border border-rose-200"
+                                    : report.status === "DISPUTED"
+                                      ? "bg-amber-100 text-amber-900 border border-amber-300 font-extrabold"
+                                      : report.status === "RESOLVED"
+                                        ? "bg-emerald-100 text-emerald-700 border border-emerald-200"
+                                        : "bg-gray-100 text-gray-700 border border-gray-200"
+                                }`}
+                              >
+                                {report.status === "DISPUTED" ? "Under Dispute (Hidden)" : report.status}
+                              </span>
 
-                            <span className="bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-bold uppercase px-2.5 py-0.5 rounded-full">
-                              Reason: {report.reason}
-                            </span>
+                              <span
+                                className={`text-[10px] font-bold uppercase px-2.5 py-0.5 rounded-full ${
+                                  report.commentId
+                                    ? "bg-purple-100 text-purple-700 border border-purple-200"
+                                    : "bg-blue-100 text-blue-700 border border-blue-200"
+                                }`}
+                              >
+                                {report.commentId ? "Comment Report" : "Works Report"}
+                              </span>
 
-                            <span className="text-xs text-gray-400 font-medium">Reported on {new Date(report.createdAt).toLocaleDateString()}</span>
+                              <span className="bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-bold uppercase px-2.5 py-0.5 rounded-full">
+                                Reason: {report.reason}
+                              </span>
+
+                              <span className="text-xs text-gray-400 font-medium">
+                                Reported on {new Date(report.createdAt).toLocaleDateString()}
+                              </span>
+                            </div>
+
+                            {/* Flagged Comment Preview */}
+                            {report.commentContent && (
+                              <div className="p-3 bg-rose-50/60 border-l-4 border-rose-500 rounded-r-xl text-xs">
+                                <span className="font-bold text-rose-700 text-[10px] uppercase tracking-wider block mb-0.5">
+                                  Flagged Comment Content:
+                                </span>
+                                <p className="italic text-gray-800 font-medium leading-relaxed">"{report.commentContent}"</p>
+                              </div>
+                            )}
+
+                            <div>
+                              <h4 className="text-sm font-bold text-gray-950">
+                                Target Work:{" "}
+                                <Link href={`/works/${report.storySlug || report.storyId}`} className="text-black underline hover:text-gray-700">
+                                  {report.storyTitle || report.storyId}
+                                </Link>
+                              </h4>
+                              <p className="text-xs text-gray-500 mt-0.5">
+                                Reported by: <span className="font-semibold text-gray-800">{report.reporterName || report.reporterEmail}</span>
+                              </p>
+                              {report.details && (
+                                <div className="mt-2 text-xs text-gray-600 border-l-2 border-gray-300 pl-3 py-0.5 italic">"{report.details}"</div>
+                              )}
+                            </div>
+
+                            {/* Active Dispute Information & Author Response Preview (Works Only) */}
+                            {!report.commentId && report.status === "DISPUTED" && (
+                              <div className="p-3.5 bg-amber-50/70 border border-amber-200 rounded-2xl text-xs space-y-2.5">
+                                <div className="flex items-center justify-between flex-wrap gap-2">
+                                  <span className="font-bold text-amber-950 text-[11px] flex items-center gap-1.5">
+                                    <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                                    <span>Work is Hidden (Active Dispute Investigation)</span>
+                                  </span>
+                                  {daysLeft !== null && (
+                                    <span className="text-[10px] font-bold text-amber-900 bg-amber-200/80 px-2.5 py-0.5 rounded-full">
+                                      {daysLeft > 0 ? `${daysLeft} days remaining for response` : "30-day window expired"}
+                                    </span>
+                                  )}
+                                </div>
+
+                                {report.editorialNote && (
+                                  <p className="text-gray-700 text-xs">
+                                    <span className="font-semibold text-gray-900">Editorial Note:</span> {report.editorialNote}
+                                  </p>
+                                )}
+
+                                {report.authorResponse ? (
+                                  <div className="p-3 bg-white border border-emerald-200 rounded-xl space-y-1">
+                                    <div className="flex items-center justify-between text-[10px] font-bold text-emerald-800 uppercase tracking-wider">
+                                      <span className="flex items-center gap-1">
+                                        <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" /> Author Response Provided:
+                                      </span>
+                                      {report.authorRespondedAt && (
+                                        <span className="text-gray-400 font-normal">
+                                          {new Date(report.authorRespondedAt).toLocaleDateString()}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <p className="italic text-gray-900 font-medium leading-relaxed">"{report.authorResponse}"</p>
+                                  </div>
+                                ) : (
+                                  <div className="text-[11px] text-amber-800 font-medium flex items-center gap-1.5">
+                                    <Clock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                                    <span>Waiting for author response. If no response is submitted within 30 days, work auto-unpublishes.</span>
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </div>
 
-                          {/* Flagged Content Preview */}
-                          {report.commentContent && (
-                            <div className="p-3 bg-rose-50/60 border-l-4 border-rose-500 rounded-r-xl text-xs">
-                              <span className="font-bold text-rose-700 text-[10px] uppercase tracking-wider block mb-0.5">
-                                Flagged Comment Content:
-                              </span>
-                              <p className="italic text-gray-800 font-medium leading-relaxed">"{report.commentContent}"</p>
-                            </div>
-                          )}
+                          {/* Standardized Action Buttons (Uniform Sizing: h-9 px-3.5 rounded-full text-xs font-semibold) */}
+                          <div className="flex flex-wrap items-center gap-2 shrink-0 pt-3 md:pt-0 border-t md:border-t-0 border-gray-100">
+                            {report.commentId ? (
+                              <>
+                                <Link href={`/works/${report.storySlug || report.storyId}#comments-section`}>
+                                  <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    icon={<Eye className="w-3.5 h-3.5" />}
+                                    className="h-9 px-3.5 text-xs font-semibold rounded-full border border-gray-300 hover:bg-gray-100 shadow-xs cursor-pointer"
+                                  >
+                                    View Comment
+                                  </Button>
+                                </Link>
 
-                          <div>
-                            <h4 className="text-sm font-bold text-gray-950">
-                              Target Work:{" "}
-                              <Link href={`/works/${report.storySlug || report.storyId}`} className="text-black underline hover:text-gray-700">
-                                {report.storyTitle || report.storyId}
-                              </Link>
-                            </h4>
-                            <p className="text-xs text-gray-500 mt-0.5">
-                              Reported by: <span className="font-semibold text-gray-800">{report.reporterName || report.reporterEmail}</span>
-                            </p>
-                            {report.details && (
-                              <div className="mt-2 text-xs text-gray-600 border-l-2 border-gray-300 pl-3 py-0.5 italic">"{report.details}"</div>
+                                {report.status === "PENDING" && (
+                                  <>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      icon={<Trash2 className="w-3.5 h-3.5" />}
+                                      onClick={() => handleDeleteCommentFromReport(report.commentId!, report.id)}
+                                      className="h-9 px-3.5 text-xs text-rose-600 border border-rose-200 hover:bg-rose-50 font-semibold rounded-full shadow-xs cursor-pointer"
+                                    >
+                                      Delete Comment
+                                    </Button>
+
+                                    <Button
+                                      variant="secondary"
+                                      size="sm"
+                                      onClick={() => handleUpdateReportStatus(report.id, "DISMISSED")}
+                                      className="h-9 px-3.5 text-xs font-semibold rounded-full border border-gray-300 text-gray-700 hover:bg-gray-100 shadow-xs cursor-pointer"
+                                    >
+                                      Dismiss
+                                    </Button>
+                                  </>
+                                )}
+                              </>
+                            ) : (
+                              <>
+                                <Link href={`/works/${report.storySlug || report.storyId}`}>
+                                  <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    icon={<Eye className="w-3.5 h-3.5" />}
+                                    className="h-9 px-3.5 text-xs font-semibold rounded-full border border-gray-300 hover:bg-gray-100 shadow-xs cursor-pointer"
+                                  >
+                                    View Work
+                                  </Button>
+                                </Link>
+
+                                {/* Pending Work Report Actions */}
+                                {report.status === "PENDING" && report.storyId && (
+                                  <>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      icon={<AlertTriangle className="w-3.5 h-3.5 text-amber-600" />}
+                                      onClick={() => {
+                                        setDisputeModalReport(report);
+                                        setDisputeEditorialReason("");
+                                        setDisputeActionError(null);
+                                      }}
+                                      className="h-9 px-3.5 text-xs font-semibold text-amber-800 border border-amber-300 bg-amber-50/50 hover:bg-amber-100 rounded-full shadow-xs cursor-pointer"
+                                    >
+                                      Mark Disputed (Hide Work)
+                                    </Button>
+
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      icon={<Trash2 className="w-3.5 h-3.5" />}
+                                      onClick={() => handleDeleteStory(report.storyId!)}
+                                      className="h-9 px-3.5 text-xs text-rose-600 border border-rose-200 hover:bg-rose-50 font-semibold rounded-full shadow-xs cursor-pointer"
+                                    >
+                                      Delete Work
+                                    </Button>
+
+                                    <Button
+                                      variant="secondary"
+                                      size="sm"
+                                      onClick={() => handleUpdateReportStatus(report.id, "DISMISSED")}
+                                      className="h-9 px-3.5 text-xs font-semibold rounded-full border border-gray-300 text-gray-700 hover:bg-gray-100 shadow-xs cursor-pointer"
+                                    >
+                                      Dismiss
+                                    </Button>
+                                  </>
+                                )}
+
+                                {/* Actions for Disputed Work Reports */}
+                                {report.status === "DISPUTED" && report.storyId && (
+                                  <>
+                                    <Button
+                                      variant="secondary"
+                                      size="sm"
+                                      icon={<CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />}
+                                      onClick={() => {
+                                        if (confirm("Restore this work and publish it back to the catalog?")) {
+                                          handleUpdateReportStatus(report.id, "RESOLVED", "RESTORE");
+                                        }
+                                      }}
+                                      className="h-9 px-3.5 text-xs font-semibold text-emerald-800 border border-emerald-300 bg-emerald-50/50 hover:bg-emerald-100 rounded-full shadow-xs cursor-pointer"
+                                    >
+                                      Restore Work
+                                    </Button>
+
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      icon={<EyeOff className="w-3.5 h-3.5 text-orange-600" />}
+                                      onClick={() => {
+                                        if (confirm("Permanently unpublish this work following dispute resolution?")) {
+                                          handleUpdateReportStatus(report.id, "RESOLVED", "UNPUBLISH");
+                                        }
+                                      }}
+                                      className="h-9 px-3.5 text-xs font-semibold text-orange-800 border border-orange-300 bg-orange-50/50 hover:bg-orange-100 rounded-full shadow-xs cursor-pointer"
+                                    >
+                                      Unpublish Work
+                                    </Button>
+
+                                    <Button
+                                      variant="secondary"
+                                      size="sm"
+                                      onClick={() => handleUpdateReportStatus(report.id, "DISMISSED")}
+                                      className="h-9 px-3.5 text-xs font-semibold rounded-full border border-gray-300 text-gray-700 hover:bg-gray-100 shadow-xs cursor-pointer"
+                                    >
+                                      Dismiss
+                                    </Button>
+                                  </>
+                                )}
+                              </>
                             )}
                           </div>
                         </div>
-
-                        {/* Standardized Action Buttons */}
-                        <div className="flex flex-wrap items-center gap-2 shrink-0 pt-3 md:pt-0 border-t md:border-t-0 border-gray-100">
-                          <Link href={`/works/${report.storySlug || report.storyId}${report.commentId ? "#comments-section" : ""}`}>
-                            <Button variant="secondary" size="sm" icon={<Eye className="w-3.5 h-3.5" />} className="text-xs font-semibold">
-                              {report.commentId ? "View Comment" : "View Work"}
-                            </Button>
-                          </Link>
-
-                          {report.status === "PENDING" && (
-                            <Button
-                              variant="secondary"
-                              size="sm"
-                              onClick={() => handleUpdateReportStatus(report.id, "DISMISSED")}
-                              className="text-xs font-semibold cursor-pointer"
-                            >
-                              Dismiss
-                            </Button>
-                          )}
-
-                          {report.commentId ? (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              icon={<Trash2 className="w-3.5 h-3.5" />}
-                              onClick={() => handleDeleteCommentFromReport(report.commentId!, report.id)}
-                              className="text-xs text-rose-600 border-rose-200 hover:bg-rose-50 font-semibold cursor-pointer"
-                            >
-                              Delete Comment
-                            </Button>
-                          ) : report.storyId ? (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              icon={<Trash2 className="w-3.5 h-3.5" />}
-                              onClick={() => handleDeleteStory(report.storyId!)}
-                              className="text-xs text-rose-600 border-rose-200 hover:bg-rose-50 font-semibold cursor-pointer"
-                            >
-                              Delete Story
-                            </Button>
-                          ) : null}
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
 
                   <PaginationFooter meta={reportsMeta} onPageChange={handlePageChange} />
@@ -3854,69 +4544,174 @@ function EditorialDashboardContent() {
 
           {/* TAB 2: PUBLISHED CATALOG */}
           {activeTab === "catalog" && (
-            <div className="space-y-6">
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
-                <div className="relative max-w-md w-full">
-                  <Search className="absolute left-3.5 top-3 w-4 h-4 text-gray-400" />
-                  <input
-                    type="text"
-                    placeholder="Search catalog by title, category or author..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-2xl text-xs font-medium outline-none focus:border-black shadow-xs"
-                  />
+            <div className="space-y-6 font-poppins">
+              {/* Top Controls: Search, Status Badges, Medium Filter, Category Filter, Sort Order */}
+              <div className="bg-white border border-gray-200 rounded-[28px] p-5 shadow-xs space-y-4">
+                <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4">
+                  {/* Search Bar */}
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                    <input
+                      type="text"
+                      placeholder="Search catalog by title, author name, keyword..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="w-full pl-10 pr-10 py-2.5 bg-gray-50 border border-gray-200 rounded-2xl text-xs font-medium outline-none focus:border-black focus:bg-white transition-all shadow-xs"
+                    />
+                    {searchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setSearchQuery("")}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 p-1 cursor-pointer"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Publication Status Filter Tabs (Accurate Server Counts!) */}
+                  <div className="flex items-center gap-1.5 bg-gray-100 p-1.5 rounded-2xl shrink-0 overflow-x-auto">
+                    <button
+                      type="button"
+                      onClick={() => setCatalogStatusFilter("ALL")}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                        catalogStatusFilter === "ALL"
+                          ? "bg-[#040706] text-white shadow-xs"
+                          : "text-gray-600 hover:text-gray-950"
+                      }`}
+                    >
+                      All Works ({catalogCounts.all})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCatalogStatusFilter("APPROVED")}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                        catalogStatusFilter === "APPROVED"
+                          ? "bg-[#040706] text-white shadow-xs"
+                          : "text-gray-600 hover:text-gray-950"
+                      }`}
+                    >
+                      Published ({catalogCounts.published})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCatalogStatusFilter("UNPUBLISHED")}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                        catalogStatusFilter === "UNPUBLISHED"
+                          ? "bg-[#040706] text-white shadow-xs"
+                          : "text-gray-600 hover:text-gray-950"
+                      }`}
+                    >
+                      Unpublished ({catalogCounts.unpublished})
+                    </button>
+                  </div>
                 </div>
 
-                <div className="flex items-center gap-1.5 bg-gray-100 p-1 rounded-2xl w-fit shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => setCatalogStatusFilter("ALL")}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                      catalogStatusFilter === "ALL" ? "bg-white text-gray-900 shadow-xs" : "text-gray-500 hover:text-gray-900"
-                    }`}
-                  >
-                    All ({allStories.length})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setCatalogStatusFilter("APPROVED")}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                      catalogStatusFilter === "APPROVED" ? "bg-white text-gray-900 shadow-xs" : "text-gray-500 hover:text-gray-900"
-                    }`}
-                  >
-                    Published ({allStories.filter((s) => s.status === "APPROVED").length})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setCatalogStatusFilter("UNPUBLISHED")}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                      catalogStatusFilter === "UNPUBLISHED" ? "bg-white text-gray-900 shadow-xs" : "text-gray-500 hover:text-gray-900"
-                    }`}
-                  >
-                    Unpublished ({allStories.filter((s) => s.status === "UNPUBLISHED").length})
-                  </button>
+                {/* Second Row of Filters: Medium Format, Category, Sort Order, Reset */}
+                <div className="pt-3 border-t border-gray-100 flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    {/* Format / Medium Dropdown */}
+                    <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-xl px-3 py-1.5 shadow-xs">
+                      <span className="text-[11px] font-semibold text-gray-500 whitespace-nowrap">Format:</span>
+                      <select
+                        value={catalogTypeFilter}
+                        onChange={(e) => {
+                          const val = e.target.value as any;
+                          setCatalogTypeFilter(val);
+                          if (val !== "STORY") {
+                            setCatalogCategoryFilter("ALL");
+                          }
+                        }}
+                        className="bg-transparent text-xs font-bold text-gray-900 outline-none cursor-pointer"
+                      >
+                        <option value="ALL">All Formats</option>
+                        <option value="STORY">Articles</option>
+                        <option value="PAINTING">Visual Arts</option>
+                        <option value="VIDEO">Videos</option>
+                      </select>
+                    </div>
+
+                    {/* Category Dropdown (Only visible when Articles format is selected) */}
+                    {catalogTypeFilter === "STORY" && (
+                      <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-xl px-3 py-1.5 shadow-xs animate-in fade-in duration-150">
+                        <span className="text-[11px] font-semibold text-gray-500 whitespace-nowrap">Category:</span>
+                        <select
+                          value={catalogCategoryFilter}
+                          onChange={(e) => setCatalogCategoryFilter(e.target.value)}
+                          className="bg-transparent text-xs font-bold text-gray-900 outline-none cursor-pointer max-w-[150px] truncate"
+                        >
+                          <option value="ALL">All Categories</option>
+                          {allPlatformCategories.map((cat) => (
+                            <option key={cat.id} value={cat.name}>
+                              {cat.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {/* Sort Order Dropdown */}
+                    <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-xl px-3 py-1.5 shadow-xs">
+                      <span className="text-[11px] font-semibold text-gray-500 whitespace-nowrap">Sort:</span>
+                      <select
+                        value={catalogSortBy}
+                        onChange={(e) => setCatalogSortBy(e.target.value as any)}
+                        className="bg-transparent text-xs font-bold text-gray-900 outline-none cursor-pointer"
+                      >
+                        <option value="newest">Newest First</option>
+                        <option value="oldest">Oldest First</option>
+                      </select>
+                    </div>
+
+                    {/* Active Filters Clear Button */}
+                    {(catalogStatusFilter !== "ALL" || catalogTypeFilter !== "ALL" || catalogCategoryFilter !== "ALL" || catalogSortBy !== "newest" || searchQuery.trim()) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCatalogStatusFilter("ALL");
+                          setCatalogTypeFilter("ALL");
+                          setCatalogCategoryFilter("ALL");
+                          setCatalogSortBy("newest");
+                          setSearchQuery("");
+                        }}
+                        className="text-xs font-bold text-rose-600 hover:text-rose-800 hover:underline px-2 py-1 cursor-pointer flex items-center gap-1"
+                      >
+                        <RotateCcw className="w-3 h-3" /> Reset Filters
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Total loaded vs total count */}
+                  <div className="text-xs font-medium text-gray-500">
+                    Showing <strong className="text-gray-950 font-bold">{allStories.length}</strong> of{" "}
+                    <strong className="text-gray-950 font-bold">{catalogMeta.total}</strong> works
+                  </div>
                 </div>
               </div>
 
               {/* Mobile Card List View (< 640px) */}
               <div className="block sm:hidden space-y-4">
-                {allStories
-                  .filter((s) => catalogStatusFilter === "ALL" || s.status === catalogStatusFilter)
-                  .map((s) => (
+                {allStories.map((s) => (
                   <div key={s.id} className="bg-white border border-gray-200 rounded-2xl p-4 shadow-xs space-y-3">
                     <div className="flex items-start justify-between gap-2">
                       <div>
                         <h3 className="font-bold text-gray-900 text-sm leading-snug">{s.title}</h3>
-                        {s.category && (
+                        {s.submissionType !== "PAINTING" && s.submissionType !== "VIDEO" && s.category && (
                           <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mt-0.5 block">Category: {s.category}</span>
                         )}
                         <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                           {s.submissionType === "PAINTING" ? (
-                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-purple-700 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-lg">🎨 Painting</span>
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-purple-700 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-lg">
+                              <Palette className="w-3 h-3" /> Visual Arts
+                            </span>
                           ) : s.submissionType === "VIDEO" ? (
-                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-lg">🎬 Video</span>
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-lg">
+                              <Video className="w-3 h-3" /> Video
+                            </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-gray-600 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded-lg">📝 Article / Story</span>
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-gray-600 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded-lg">
+                              <FileText className="w-3 h-3" /> Article
+                            </span>
                           )}
                           <button
                             type="button"
@@ -3974,7 +4769,7 @@ function EditorialDashboardContent() {
                           type="button"
                           variant="outline"
                           size="sm"
-                          onClick={() => handleUnpublishStory(s.id)}
+                          onClick={() => handleUnpublishStory(s.id, s.title)}
                           className="flex-1 justify-center text-xs py-2 text-amber-700 border-amber-300 hover:bg-amber-50 font-semibold cursor-pointer"
                         >
                           Unpublish
@@ -4011,98 +4806,126 @@ function EditorialDashboardContent() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 text-gray-800">
-                      {allStories
-                        .filter((s) => catalogStatusFilter === "ALL" || s.status === catalogStatusFilter)
-                        .map((s) => (
-                        <tr key={s.id} className="hover:bg-gray-50/80 transition-colors">
-                          <td className="py-4 px-6 font-semibold text-gray-900">{s.title}</td>
-                          <td className="py-4 px-6 whitespace-nowrap">
-                            {s.submissionType === "PAINTING" ? (
-                              <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-purple-700 bg-purple-50 border border-purple-200 px-2.5 py-1 rounded-xl">🎨 Painting</span>
-                            ) : s.submissionType === "VIDEO" ? (
-                              <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2.5 py-1 rounded-xl">🎬 Video</span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-gray-700 bg-gray-100 border border-gray-200 px-2.5 py-1 rounded-xl">📝 Article / Story</span>
-                            )}
-                          </td>
-                          <td className="py-4 px-6 text-gray-600 font-medium">{s.category || "General"}</td>
-                          <td className="py-4 px-6 text-gray-600">{s.authorName || s.authorEmail}</td>
-                          <td className="py-4 px-6 text-center whitespace-nowrap">
-                            <button
-                              type="button"
-                              onClick={() => handleToggleFeaturedStory(s.id)}
-                              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
-                                s.isFeatured
-                                  ? "bg-[#E4F953] text-[#040706] border-[#cce42e] shadow-xs hover:bg-[#d8ed3e]"
-                                  : "bg-gray-50 text-gray-400 border-gray-200 hover:bg-gray-100 hover:text-gray-700"
-                              }`}
-                              title={s.isFeatured ? "Featured on Homepage (Click to unfeature)" : "Click to feature on Homepage"}
-                            >
-                              <Star className={`w-3.5 h-3.5 ${s.isFeatured ? "fill-[#040706]" : ""}`} />
-                              <span>{s.isFeatured ? "Featured" : "Feature"}</span>
-                            </button>
-                          </td>
-                          <td className="py-4 px-6">
-                            {s.status === "UNPUBLISHED" ? (
-                              <span className="bg-amber-100 text-amber-800 font-bold text-[10px] uppercase px-3 py-1 rounded-xl border border-amber-200">
-                                UNPUBLISHED
-                              </span>
-                            ) : (
-                              <span className="bg-[#E4F953] text-[#040706] font-bold text-[10px] uppercase px-3 py-1 rounded-xl">
-                                {s.status === "APPROVED" ? "PUBLISHED" : s.status}
-                              </span>
-                            )}
-                          </td>
-                          <td className="py-4 px-6 text-gray-500">{new Date(s.createdAt).toLocaleDateString()}</td>
-                          <td className="py-4 px-6 text-right space-x-2 whitespace-nowrap">
-                            <Button
-                              type="button"
-                              variant="secondary"
-                              size="sm"
-                              onClick={() => setSelectedStory(s)}
-                              className="border border-gray-300 text-xs px-3 py-1 cursor-pointer"
-                            >
-                              View
-                            </Button>
-                            {s.status === "UNPUBLISHED" ? (
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handlePublishStory(s.id)}
-                                className="text-xs px-3 py-1 text-emerald-700 border-emerald-300 hover:bg-emerald-50 font-semibold cursor-pointer"
-                              >
-                                Publish
-                              </Button>
-                            ) : (
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleUnpublishStory(s.id)}
-                                className="text-xs px-3 py-1 text-amber-700 border-amber-300 hover:bg-amber-50 font-semibold cursor-pointer"
-                              >
-                                Unpublish
-                              </Button>
-                            )}
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleDeleteStory(s.id)}
-                              className="text-xs px-3 py-1 text-rose-600 border-rose-200 hover:bg-rose-50 cursor-pointer"
-                            >
-                              Delete
-                            </Button>
+                      {allStories.length === 0 ? (
+                        <tr>
+                          <td colSpan={8} className="py-12 text-center text-gray-400 font-medium">
+                            No published works found matching the selected filter criteria.
                           </td>
                         </tr>
-                      ))}
+                      ) : (
+                        allStories.map((s) => (
+                          <tr key={s.id} className="hover:bg-gray-50/80 transition-colors">
+                            <td className="py-4 px-6 font-semibold text-gray-900">{s.title}</td>
+                            <td className="py-4 px-6 whitespace-nowrap">
+                              {s.submissionType === "PAINTING" ? (
+                                <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-purple-700 bg-purple-50 border border-purple-200 px-2.5 py-1 rounded-xl">
+                                  <Palette className="w-3 h-3" /> Visual Arts
+                                </span>
+                              ) : s.submissionType === "VIDEO" ? (
+                                <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2.5 py-1 rounded-xl">
+                                  <Video className="w-3 h-3" /> Video
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-gray-700 bg-gray-100 border border-gray-200 px-2.5 py-1 rounded-xl">
+                                  <FileText className="w-3 h-3" /> Article
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-4 px-6 text-gray-600 font-medium">
+                              {s.submissionType === "PAINTING" || s.submissionType === "VIDEO" ? "—" : (s.category || "General")}
+                            </td>
+                            <td className="py-4 px-6 text-gray-600">{s.authorName || s.authorEmail}</td>
+                            <td className="py-4 px-6 text-center whitespace-nowrap">
+                              <button
+                                type="button"
+                                onClick={() => handleToggleFeaturedStory(s.id)}
+                                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
+                                  s.isFeatured
+                                    ? "bg-[#E4F953] text-[#040706] border-[#cce42e] shadow-xs hover:bg-[#d8ed3e]"
+                                    : "bg-gray-50 text-gray-400 border-gray-200 hover:bg-gray-100 hover:text-gray-700"
+                                }`}
+                                title={s.isFeatured ? "Featured on Homepage (Click to unfeature)" : "Click to feature on Homepage"}
+                              >
+                                <Star className={`w-3.5 h-3.5 ${s.isFeatured ? "fill-[#040706]" : ""}`} />
+                                <span>{s.isFeatured ? "Featured" : "Feature"}</span>
+                              </button>
+                            </td>
+                            <td className="py-4 px-6">
+                              {s.status === "UNPUBLISHED" ? (
+                                <span className="bg-amber-100 text-amber-800 font-bold text-[10px] uppercase px-3 py-1 rounded-xl border border-amber-200">
+                                  UNPUBLISHED
+                                </span>
+                              ) : (
+                                <span className="bg-[#E4F953] text-[#040706] font-bold text-[10px] uppercase px-3 py-1 rounded-xl">
+                                  {s.status === "APPROVED" ? "PUBLISHED" : s.status}
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-4 px-6 text-gray-500">{new Date(s.createdAt).toLocaleDateString()}</td>
+                            <td className="py-4 px-6 text-right space-x-2 whitespace-nowrap">
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                size="sm"
+                                onClick={() => setSelectedStory(s)}
+                                className="border border-gray-300 text-xs px-3 py-1 cursor-pointer"
+                              >
+                                View
+                              </Button>
+                              {s.status === "UNPUBLISHED" ? (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handlePublishStory(s.id)}
+                                  className="text-xs px-3 py-1 text-emerald-700 border-emerald-300 hover:bg-emerald-50 font-semibold cursor-pointer"
+                                >
+                                  Publish
+                                </Button>
+                              ) : (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleUnpublishStory(s.id, s.title)}
+                                  className="text-xs px-3 py-1 text-amber-700 border-amber-300 hover:bg-amber-50 font-semibold cursor-pointer"
+                                >
+                                  Unpublish
+                                </Button>
+                              )}
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleDeleteStory(s.id)}
+                                className="text-xs px-3 py-1 text-rose-600 border-rose-200 hover:bg-rose-50 cursor-pointer"
+                              >
+                                Delete
+                              </Button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
                     </tbody>
                   </table>
                 </div>
               </div>
 
-              <PaginationFooter meta={catalogMeta} onPageChange={handlePageChange} />
+              {/* Infinite Scroll Sentinel & Loading Indicator */}
+              <div ref={catalogSentinelRef} className="h-6" />
+
+              {catalogLoadingMore && (
+                <div className="py-6 flex justify-center items-center gap-2 text-xs font-semibold text-gray-600">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#040706]"></div>
+                  <span>Loading more catalog works...</span>
+                </div>
+              )}
+
+              {catalogMeta.page >= catalogMeta.totalPages && allStories.length > 0 && (
+                <p className="text-center text-xs font-medium text-gray-400 py-4">
+                  You have viewed all {catalogMeta.total} works in this catalog selection.
+                </p>
+              )}
             </div>
           )}
 
@@ -4141,12 +4964,12 @@ function EditorialDashboardContent() {
               </div>
 
               {/* Mobile Card List View (< 640px) */}
-              <div className="block sm:hidden space-y-4">
+              <div className="block sm:hidden space-y-3.5">
                 {allUsers.map((u) => (
                   <div key={u.id} className="bg-white border border-gray-200 rounded-2xl p-4 shadow-xs space-y-3">
                     <div className="flex items-center justify-between gap-3">
                       <div className="flex items-center gap-3 min-w-0">
-                        <div className="relative w-10 h-10 rounded-full overflow-hidden bg-gray-900 text-white flex items-center justify-center font-bold text-xs shrink-0 border border-gray-200">
+                        <div className="relative w-10 h-10 rounded-full overflow-hidden bg-gray-900 text-white flex items-center justify-center font-bold text-xs shrink-0 border border-gray-200 shadow-2xs">
                           {u.avatarUrl ? (
                             <Image src={u.avatarUrl} alt="Avatar" fill className="object-cover" unoptimized />
                           ) : (
@@ -4154,20 +4977,8 @@ function EditorialDashboardContent() {
                           )}
                         </div>
                         <div className="min-w-0">
-                          <h4 className="font-bold text-gray-900 text-sm truncate">{u.name || "No name set"}</h4>
+                          <h4 className="font-bold text-gray-950 text-sm truncate">{u.name || "No name set"}</h4>
                           <p className="text-xs text-gray-500 truncate">{u.email}</p>
-                          <p className="text-xs text-gray-700 font-medium truncate mt-0.5">📞 {u.phone || "+91 98470 12345"}</p>
-                          <div className="mt-1">
-                            {u.privacyPolicyAccepted ?? true ? (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-lg">
-                                <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Terms Accepted
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-lg">
-                                <Clock className="w-3 h-3 text-amber-500" /> Terms Pending
-                              </span>
-                            )}
-                          </div>
                         </div>
                       </div>
                       <select
@@ -4178,134 +4989,83 @@ function EditorialDashboardContent() {
                             ? "bg-rose-100 text-rose-800 border-rose-300"
                             : u.role === "EDITOR"
                               ? "bg-amber-100 text-amber-800 border-amber-300"
-                              : u.role === "AUTHOR"
-                                ? "bg-[#E4F953] text-[#040706] border-lime-400"
-                                : "bg-gray-100 text-gray-700 border-gray-300"
+                              : u.role === "MODERATOR"
+                                ? "bg-sky-100 text-sky-800 border-sky-300"
+                                : u.role === "AUTHOR"
+                                  ? "bg-[#E4F953] text-[#040706] border-lime-400"
+                                  : "bg-gray-100 text-gray-700 border-gray-300"
                         }`}
                       >
                         <option value="READER">READER</option>
                         <option value="AUTHOR">AUTHOR</option>
                         <option value="EDITOR">EDITOR</option>
+                        <option value="MODERATOR">MODERATOR</option>
                       </select>
                     </div>
-                    <div className="pt-2 border-t border-gray-100 flex flex-wrap items-center justify-between gap-2.5">
-                      <div className="flex items-center gap-2 flex-wrap">
+
+                    {/* Status & Priority Badges */}
+                    <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                      {u.isFeatured && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                          <Sparkles className="w-2.5 h-2.5 fill-emerald-600" /> Featured
+                        </span>
+                      )}
+                      {u.isShadowBanned && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-700 border border-rose-200">
+                          <EyeOff className="w-2.5 h-2.5" /> Banned
+                        </span>
+                      )}
+                      {u.role === "AUTHOR" && typeof u.sortOrder === "number" && u.sortOrder > 0 && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-200">
+                          Priority #{u.sortOrder}
+                        </span>
+                      )}
+                      {!u.isFeatured && !u.isShadowBanned && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 text-gray-600">
+                          Active
+                        </span>
+                      )}
+                      {u.phone && (
+                        <span className="text-[11px] text-gray-500 font-medium ml-auto inline-flex items-center gap-1">
+                          <Phone className="w-3 h-3 text-gray-400" /> {u.phone}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Mobile Action Buttons */}
+                    <div className="pt-2 border-t border-gray-100 flex items-center justify-between gap-2">
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        icon={<Eye className="w-3.5 h-3.5" />}
+                        iconPosition="left"
+                        onClick={() => {
+                          setViewingAuthorDetails(u);
+                          setModalPriorityInput(u.sortOrder ?? 0);
+                          setAuthorDetailsModalOpen(true);
+                        }}
+                        className="h-8 px-3 text-xs font-semibold rounded-full border border-gray-300 shadow-xs cursor-pointer"
+                      >
+                        Manage
+                      </Button>
+
+                      <div className="flex items-center gap-1.5 ml-auto">
                         <button
                           type="button"
                           onClick={() => handleOpenEditAuthor(u)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-200 shadow-xs cursor-pointer transition-all"
+                          title="Edit"
+                          className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-200 shadow-xs cursor-pointer transition-all"
                         >
                           <Edit3 className="w-3.5 h-3.5 text-gray-600" />
-                          Edit
                         </button>
                         <button
                           type="button"
                           onClick={() => handleOpenDeleteAuthor(u)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 shadow-xs cursor-pointer transition-all"
+                          title="Delete"
+                          className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 shadow-xs cursor-pointer transition-all"
                         >
                           <Trash2 className="w-3.5 h-3.5 text-rose-500" />
-                          Delete
-                        </button>
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          size="sm"
-                          icon={<BookOpen className="w-3.5 h-3.5" />}
-                          iconPosition="left"
-                          onClick={() => {
-                            setStoryAuthorTarget(u);
-                            setStoryStudioTitle("");
-                            setStoryStudioContent("");
-                            setStoryStudioCoverFile(null);
-                            setStoryStudioCoverPreview(null);
-                            setAuthorStoryStudioOpen(true);
-                          }}
-                          className="text-xs px-2.5 py-1.5 border border-gray-300 font-semibold cursor-pointer shadow-2xs whitespace-nowrap"
-                        >
-                          + Article / Story
-                        </Button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setAddSubmissionAuthorTarget(u);
-                            setAddSubmissionType("PAINTING");
-                            setAddSubmissionTitle("");
-                            setAddSubmissionDescription("");
-                            setAddSubmissionVideoUrl("");
-                            setAddSubmissionPaintingFile(null);
-                            setAddSubmissionPaintingPreview(null);
-                            setAddSubmissionError(null);
-                            setAddSubmissionSuccess(null);
-                            setAddSubmissionModalOpen(true);
-                          }}
-                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold text-purple-700 bg-purple-50 border border-purple-200 hover:bg-purple-100 shadow-xs cursor-pointer transition-all"
-                        >
-                          🎨 + Painting
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setAddSubmissionAuthorTarget(u);
-                            setAddSubmissionType("VIDEO");
-                            setAddSubmissionTitle("");
-                            setAddSubmissionDescription("");
-                            setAddSubmissionVideoUrl("");
-                            setAddSubmissionPaintingFile(null);
-                            setAddSubmissionPaintingPreview(null);
-                            setAddSubmissionError(null);
-                            setAddSubmissionSuccess(null);
-                            setAddSubmissionModalOpen(true);
-                          }}
-                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 hover:bg-blue-100 shadow-xs cursor-pointer transition-all"
-                        >
-                          🎬 + Video
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleToggleFeaturedAuthor(u.id)}
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer shadow-xs ${
-                            u.isFeatured
-                              ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
-                              : "bg-gray-100 text-gray-600 border border-gray-200"
-                          }`}
-                        >
-                          <Sparkles className={`w-3.5 h-3.5 ${u.isFeatured ? "text-emerald-600 fill-emerald-600" : "text-gray-400"}`} />
-                          {u.isFeatured ? "Featured" : "+ Feature"}
-                        </button>
-                      </div>
-
-                      <div className="flex items-center gap-1.5 ml-auto">
-                        <span className="text-xs font-semibold text-gray-600">Priority:</span>
-                        <input
-                          type="number"
-                          min="0"
-                          id={`mobile-priority-input-${u.id}`}
-                          defaultValue={u.sortOrder ?? 0}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              const val = parseInt((e.target as HTMLInputElement).value, 10);
-                              if (!isNaN(val)) {
-                                handleSortOrderChange(u.id, val);
-                              }
-                            }
-                          }}
-                          className="w-14 px-2 py-1 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-center text-gray-900 outline-none focus:border-black shadow-xs"
-                        />
-                        <button
-                          type="button"
-                          title="Save Priority"
-                          onClick={() => {
-                            const input = document.getElementById(`mobile-priority-input-${u.id}`) as HTMLInputElement;
-                            if (input) {
-                              const val = parseInt(input.value, 10);
-                              if (!isNaN(val)) {
-                                handleSortOrderChange(u.id, val);
-                              }
-                            }
-                          }}
-                          className="p-1.5 bg-gray-100 hover:bg-black hover:text-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 transition cursor-pointer shadow-xs"
-                        >
-                          <Save className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     </div>
@@ -4313,199 +5073,126 @@ function EditorialDashboardContent() {
                 ))}
               </div>
 
-              {/* Desktop Table View (>= 640px) */}
+              {/* Desktop Streamlined Table View (>= 640px) */}
               <div className="hidden sm:block bg-white border border-gray-200 rounded-[28px] overflow-hidden shadow-xs">
                 <div className="overflow-x-auto w-full">
-                  <table className="w-full text-left text-xs border-collapse min-w-[1100px]">
+                  <table className="w-full text-left text-xs border-collapse">
                     <thead>
                       <tr className="bg-gray-50 border-b border-gray-200 text-gray-500 font-semibold uppercase tracking-wider whitespace-nowrap">
-                        <th className="py-4 px-6 min-w-[200px]">User</th>
-                        <th className="py-4 px-6 min-w-[200px]">Email Address</th>
-                        <th className="py-4 px-6 min-w-[150px]">Phone Number</th>
-                        <th className="py-4 px-6 min-w-[140px]">Privacy Terms</th>
-                        <th className="py-4 px-6 min-w-[140px]">Role Tier</th>
-                        <th className="py-4 px-6 min-w-[170px]">Masika Featured</th>
-                        <th className="py-4 px-6 min-w-[130px]">Priority (#)</th>
-                        <th className="py-4 px-6 min-w-[120px]">Joined Date</th>
-                        <th className="py-4 px-6 min-w-[260px] text-right">Actions</th>
+                        <th className="py-3.5 px-5">User / Author</th>
+                        <th className="py-3.5 px-5">Role Tier</th>
+                        <th className="py-3.5 px-5">Status & Highlights</th>
+                        <th className="py-3.5 px-5">Joined</th>
+                        <th className="py-3.5 px-5 text-right">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 text-gray-800">
                       {allUsers.map((u) => (
-                        <tr key={u.id} className="hover:bg-gray-50/80 transition-colors">
-                          <td className="py-4 px-6 font-semibold text-gray-900">
+                        <tr key={u.id} className={`hover:bg-gray-50/80 transition-colors ${u.isShadowBanned ? "bg-rose-50/30" : ""}`}>
+                          {/* User Info */}
+                          <td className="py-3.5 px-5 font-semibold text-gray-900">
                             <div className="flex items-center gap-3">
-                              <div className="relative w-8 h-8 rounded-full overflow-hidden bg-gray-900 text-white flex items-center justify-center font-bold text-xs shrink-0 border border-gray-200">
+                              <div className="relative w-9 h-9 rounded-full overflow-hidden bg-gray-900 text-white flex items-center justify-center font-bold text-xs shrink-0 border border-gray-200 shadow-2xs">
                                 {u.avatarUrl ? (
                                   <Image src={u.avatarUrl} alt="Avatar" fill className="object-cover" unoptimized />
                                 ) : (
                                   <span>{(u.name || u.email)[0].toUpperCase()}</span>
                                 )}
                               </div>
-                              <span className="truncate max-w-[160px] font-bold">{u.name || "No name set"}</span>
+                              <div className="flex flex-col min-w-0 max-w-[200px] sm:max-w-[240px]">
+                                <span className="truncate font-bold text-gray-950 text-xs sm:text-sm">{u.name || "No name set"}</span>
+                                <span className="truncate text-[11px] text-gray-500 font-normal">{u.email}</span>
+                              </div>
                             </div>
                           </td>
-                          <td className="py-4 px-6 text-gray-600 font-medium">{u.email}</td>
-                          <td className="py-4 px-6 text-gray-700 font-medium whitespace-nowrap">
-                            <span className="font-medium text-gray-900">{u.phone || "+91 98470 12345"}</span>
-                          </td>
-                          <td className="py-4 px-6 whitespace-nowrap">
-                            {u.privacyPolicyAccepted ?? true ? (
-                              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-xl">
-                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                                Accepted
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-xl">
-                                <Clock className="w-3.5 h-3.5 text-amber-500" />
-                                Pending
-                              </span>
-                            )}
-                          </td>
-                          <td className="py-4 px-6 whitespace-nowrap">
+
+                          {/* Role Tier */}
+                          <td className="py-3.5 px-5 whitespace-nowrap">
                             <select
                               value={u.role}
                               onChange={(e) => handleRoleChange(u.id, e.target.value)}
-                              className={`font-bold text-[10px] uppercase tracking-wider px-3 py-1.5 rounded-xl border outline-none cursor-pointer shadow-xs transition-all ${
+                              className={`font-bold text-[10px] uppercase tracking-wider px-2.5 py-1 rounded-xl border outline-none cursor-pointer shadow-xs transition-all ${
                                 u.role === "ADMIN"
                                   ? "bg-rose-100 text-rose-800 border-rose-300"
                                   : u.role === "EDITOR"
                                     ? "bg-amber-100 text-amber-800 border-amber-300"
-                                    : u.role === "AUTHOR"
-                                      ? "bg-[#E4F953] text-[#040706] border-lime-400"
-                                      : "bg-gray-100 text-gray-700 border-gray-300"
+                                    : u.role === "MODERATOR"
+                                      ? "bg-sky-100 text-sky-800 border-sky-300"
+                                      : u.role === "AUTHOR"
+                                        ? "bg-[#E4F953] text-[#040706] border-lime-400"
+                                        : "bg-gray-100 text-gray-700 border-gray-300"
                               }`}
                             >
                               <option value="READER">READER</option>
                               <option value="AUTHOR">AUTHOR</option>
                               <option value="EDITOR">EDITOR</option>
+                              <option value="MODERATOR">MODERATOR</option>
                             </select>
                           </td>
-                          <td className="py-4 px-6 whitespace-nowrap">
-                            <button
-                              type="button"
-                              onClick={() => handleToggleFeaturedAuthor(u.id)}
-                              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer shadow-xs ${
-                                u.isFeatured
-                                  ? "bg-emerald-100 text-emerald-800 border border-emerald-300 hover:bg-emerald-200"
-                                  : "bg-gray-100 text-gray-600 border border-gray-200 hover:bg-gray-200"
-                              }`}
-                            >
-                              <Sparkles className={`w-3.5 h-3.5 ${u.isFeatured ? "text-emerald-600 fill-emerald-600" : "text-gray-400"}`} />
-                              {u.isFeatured ? "Featured Author" : "+ Feature Author"}
-                            </button>
-                          </td>
-                          <td className="py-4 px-6 whitespace-nowrap">
-                            <div className="flex items-center gap-1.5">
-                              <input
-                                type="number"
-                                min="0"
-                                id={`priority-input-${u.id}`}
-                                defaultValue={u.sortOrder ?? 0}
-                                onKeyDown={(e) => {
-                                  if (e.key === "Enter") {
-                                    const val = parseInt((e.target as HTMLInputElement).value, 10);
-                                    if (!isNaN(val)) {
-                                      handleSortOrderChange(u.id, val);
-                                    }
-                                  }
-                                }}
-                                className="w-14 px-2 py-1.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-center text-gray-900 outline-none focus:border-black shadow-xs"
-                              />
-                              <button
-                                type="button"
-                                title="Save Priority"
-                                onClick={() => {
-                                  const input = document.getElementById(`priority-input-${u.id}`) as HTMLInputElement;
-                                  if (input) {
-                                    const val = parseInt(input.value, 10);
-                                    if (!isNaN(val)) {
-                                      handleSortOrderChange(u.id, val);
-                                    }
-                                  }
-                                }}
-                                className="p-1.5 bg-gray-100 hover:bg-black hover:text-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 transition cursor-pointer shadow-xs flex items-center justify-center"
-                              >
-                                <Save className="w-3.5 h-3.5" />
-                              </button>
+
+                          {/* Status & Highlights */}
+                          <td className="py-3.5 px-5 whitespace-nowrap">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {u.isFeatured && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                  <Sparkles className="w-2.5 h-2.5 fill-emerald-600" /> Featured
+                                </span>
+                              )}
+                              {u.isShadowBanned && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-700 border border-rose-200">
+                                  <EyeOff className="w-2.5 h-2.5" /> Banned
+                                </span>
+                              )}
+                              {u.role === "AUTHOR" && typeof u.sortOrder === "number" && u.sortOrder > 0 && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-200">
+                                  #{u.sortOrder}
+                                </span>
+                              )}
+                              {!u.isFeatured && !u.isShadowBanned && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 text-gray-600">
+                                  Active
+                                </span>
+                              )}
                             </div>
                           </td>
-                          <td className="py-4 px-6 text-gray-500 whitespace-nowrap">
-                            {u.createdAt ? new Date(u.createdAt).toLocaleDateString() : "N/A"}
+
+                          {/* Joined Date */}
+                          <td className="py-3.5 px-5 text-gray-500 whitespace-nowrap text-xs">
+                            {u.createdAt ? new Date(u.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "N/A"}
                           </td>
-                          <td className="py-4 px-6 text-right whitespace-nowrap">
-                            <div className="flex items-center justify-end gap-2">
+
+                          {/* Actions */}
+                          <td className="py-3.5 px-5 text-right whitespace-nowrap">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                icon={<Eye className="w-3.5 h-3.5" />}
+                                iconPosition="left"
+                                onClick={() => {
+                                  setViewingAuthorDetails(u);
+                                  setModalPriorityInput(u.sortOrder ?? 0);
+                                  setAuthorDetailsModalOpen(true);
+                                }}
+                                className="h-8 px-3 text-xs font-semibold rounded-full border border-gray-300 shadow-xs cursor-pointer"
+                              >
+                                Details
+                              </Button>
                               <button
                                 type="button"
                                 onClick={() => handleOpenEditAuthor(u)}
-                                title="Edit Author Profile"
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 border border-gray-200 transition-all cursor-pointer shadow-xs hover:border-gray-300"
+                                title="Edit Profile"
+                                className="w-8 h-8 rounded-full text-gray-700 bg-gray-100 hover:bg-gray-200 border border-gray-200 transition-all cursor-pointer shadow-xs inline-flex items-center justify-center"
                               >
                                 <Edit3 className="w-3.5 h-3.5 text-gray-600" />
-                                Edit
                               </button>
                               <button
                                 type="button"
                                 onClick={() => handleOpenDeleteAuthor(u)}
-                                title="Delete Author Account"
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition-all cursor-pointer shadow-xs hover:border-rose-300"
+                                title="Delete Account"
+                                className="w-8 h-8 rounded-full text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition-all cursor-pointer shadow-xs inline-flex items-center justify-center"
                               >
                                 <Trash2 className="w-3.5 h-3.5 text-rose-500" />
-                                Delete
-                              </button>
-                              <Button
-                                type="button"
-                                variant="secondary"
-                                size="sm"
-                                icon={<BookOpen className="w-3.5 h-3.5" />}
-                                iconPosition="left"
-                                onClick={() => {
-                                  setStoryAuthorTarget(u);
-                                  setStoryStudioTitle("");
-                                  setStoryStudioContent("");
-                                  setStoryStudioCoverFile(null);
-                                  setStoryStudioCoverPreview(null);
-                                  setAuthorStoryStudioOpen(true);
-                                }}
-                                className="border border-gray-300 text-xs px-3 py-1.5 font-semibold cursor-pointer shadow-xs hover:bg-gray-100 inline-flex items-center gap-1.5 whitespace-nowrap"
-                              >
-                                + Article / Story
-                              </Button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setAddSubmissionAuthorTarget(u);
-                                  setAddSubmissionType("PAINTING");
-                                  setAddSubmissionTitle("");
-                                  setAddSubmissionDescription("");
-                                  setAddSubmissionVideoUrl("");
-                                  setAddSubmissionPaintingFile(null);
-                                  setAddSubmissionPaintingPreview(null);
-                                  setAddSubmissionError(null);
-                                  setAddSubmissionSuccess(null);
-                                  setAddSubmissionModalOpen(true);
-                                }}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-purple-700 bg-purple-50 border border-purple-200 hover:bg-purple-100 shadow-xs cursor-pointer transition-all whitespace-nowrap"
-                              >
-                                🎨 + Painting
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setAddSubmissionAuthorTarget(u);
-                                  setAddSubmissionType("VIDEO");
-                                  setAddSubmissionTitle("");
-                                  setAddSubmissionDescription("");
-                                  setAddSubmissionVideoUrl("");
-                                  setAddSubmissionPaintingFile(null);
-                                  setAddSubmissionPaintingPreview(null);
-                                  setAddSubmissionError(null);
-                                  setAddSubmissionSuccess(null);
-                                  setAddSubmissionModalOpen(true);
-                                }}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 hover:bg-blue-100 shadow-xs cursor-pointer transition-all whitespace-nowrap"
-                              >
-                                🎬 + Video
                               </button>
                             </div>
                           </td>
@@ -4528,7 +5215,7 @@ function EditorialDashboardContent() {
                 <Search className="absolute left-3.5 top-3 w-4 h-4 text-gray-400" />
                 <input
                   type="text"
-                  placeholder="Search categories by name, Malayalam title, or description..."
+                  placeholder="Search categories by name or description..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-2xl text-xs font-medium outline-none focus:border-black shadow-xs"
@@ -4540,26 +5227,15 @@ function EditorialDashboardContent() {
                 <h3 className="text-lg font-bold text-gray-950 mb-1">Add New Platform Category</h3>
                 <p className="text-xs text-gray-500 mb-6">Create editorial taxonomy labels used across content submissions (articles, paintings, videos) and homepage filtering.</p>
 
-                <form onSubmit={handleAddCategory} className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <form onSubmit={handleAddCategory} className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1">Category Name (English)</label>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">Category Name</label>
                     <input
                       type="text"
                       placeholder="e.g. Science & Fiction"
                       value={newCatName}
                       onChange={(e) => setNewCatName(e.target.value)}
                       required
-                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-900 outline-none focus:border-black"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1">Malayalam Name (മലയാളം)</label>
-                    <input
-                      type="text"
-                      placeholder="ഉദാ: ശാസ്ത്രസാഹിത്യം"
-                      value={newCatMalName}
-                      onChange={(e) => setNewCatMalName(e.target.value)}
                       className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-900 outline-none focus:border-black"
                     />
                   </div>
@@ -4610,9 +5286,6 @@ function EditorialDashboardContent() {
                           </span>
                         )}
                       </div>
-                      {cat.malName && (
-                        <h4 className="text-xs font-bold text-gray-800 mt-1.5 font-malayalam">{cat.malName}</h4>
-                      )}
                       <p className="text-xs text-gray-500 leading-relaxed mt-2 line-clamp-3">
                         {cat.description || "No description provided."}
                       </p>
@@ -5056,7 +5729,7 @@ function EditorialDashboardContent() {
                   }}
                   className="text-xs font-semibold cursor-pointer shadow-xs whitespace-nowrap px-4 py-2.5"
                 >
-                  Add Event / Workshop
+                  Add Event
                 </Button>
               </div>
 
@@ -5069,6 +5742,7 @@ function EditorialDashboardContent() {
                   { id: "WORKSHOP", label: "Workshops" },
                   { id: "EXHIBITION", label: "Exhibitions" },
                   { id: "FILM_SCREENING", label: "Film Screenings" },
+                  { id: "OTHER", label: "Other Events" },
                   { id: "PAST_ARCHIVE", label: "Past Archives" },
                 ].map((f) => (
                   <button
@@ -5096,7 +5770,7 @@ function EditorialDashboardContent() {
                   <p className="text-xs text-gray-500 mt-1 max-w-sm mx-auto">
                     {searchQuery
                       ? `No events matched your search query "${searchQuery}". Try a different keyword or clear the search.`
-                      : `No events currently in this category. Click "Add Event / Workshop" to create one.`}
+                      : `No events currently in this category. Click "Add Event" to create one.`}
                   </p>
                   {searchQuery && (
                     <button
@@ -5165,6 +5839,24 @@ function EditorialDashboardContent() {
                                 setEventFormTime(ev.time || "");
                                 setEventFormDay(ev.day || "");
                                 setEventFormMonthYear(ev.monthYear || "");
+                                let sDate = "";
+                                let eDate = "";
+                                if (ev.eventDate) {
+                                  const d = new Date(ev.eventDate);
+                                  if (!isNaN(d.getTime())) {
+                                    sDate = d.toISOString().split("T")[0];
+                                  }
+                                }
+                                if (sDate && ev.day && (ev.day.includes("-") || ev.day.includes("–"))) {
+                                  const parts = ev.day.split(/[-–]/).map((p: string) => p.trim());
+                                  if (parts.length === 2 && !isNaN(Number(parts[1]))) {
+                                    const endDayNum = Number(parts[1]);
+                                    const [sy, sm] = sDate.split("-");
+                                    eDate = `${sy}-${sm}-${String(endDayNum).padStart(2, "0")}`;
+                                  }
+                                }
+                                setEventStartDate(sDate);
+                                setEventEndDate(eDate);
                                 setEventFormImage(ev.imageSrc || "");
                                 setEventFormImages(Array.isArray(ev.images) && ev.images.length > 0 ? ev.images : (ev.imageSrc ? [ev.imageSrc] : []));
                                 setEventFormRegisterHref(ev.registerHref || "");
@@ -5198,11 +5890,20 @@ function EditorialDashboardContent() {
 
                         {/* Meta Details */}
                         <div className="space-y-1.5 text-xs text-gray-500 font-medium mb-4">
-                          <div>📍 {ev.location}</div>
-                          {ev.time && <div>⏰ {ev.time}</div>}
+                          <div className="flex items-center gap-1.5">
+                            <MapPin className="w-3.5 h-3.5 text-gray-400" />
+                            <span>{ev.location}</span>
+                          </div>
+                          {ev.time && (
+                            <div className="flex items-center gap-1.5">
+                              <Clock className="w-3.5 h-3.5 text-gray-400" />
+                              <span>{ev.time}</span>
+                            </div>
+                          )}
                           {ev.day && ev.monthYear && (
-                            <div>
-                              🗓️ {ev.day} {ev.monthYear}
+                            <div className="flex items-center gap-1.5">
+                              <Calendar className="w-3.5 h-3.5 text-gray-400" />
+                              <span>{ev.day} {ev.monthYear}</span>
                             </div>
                           )}
                           {ev.videoUrl && (
@@ -5212,7 +5913,8 @@ function EditorialDashboardContent() {
                               rel="noopener noreferrer"
                               className="inline-flex items-center gap-1.5 text-emerald-700 hover:text-emerald-900 font-semibold underline underline-offset-2 transition-colors"
                             >
-                              🎥 View Recording
+                              <Video className="w-3.5 h-3.5" />
+                              <span>View Recording</span>
                               <ExternalLink className="w-3 h-3" />
                             </a>
                           )}
@@ -5221,8 +5923,9 @@ function EditorialDashboardContent() {
 
                       <div className="pt-3 border-t border-gray-100 flex items-center justify-between flex-wrap gap-2">
                         <div className="flex items-center gap-2">
-                          <span className="text-[11px] font-bold text-gray-700 bg-gray-100 px-2.5 py-1 rounded-full">
-                            👥 {ev.registrationCount || 0} Registered
+                          <span className="text-[11px] font-bold text-gray-700 bg-gray-100 px-2.5 py-1 rounded-full inline-flex items-center gap-1">
+                            <Users className="w-3 h-3 text-gray-500" />
+                            <span>{ev.registrationCount || 0} Registered</span>
                           </span>
                           <button
                             onClick={() => handleViewRegistrations(ev)}
@@ -5445,6 +6148,32 @@ function EditorialDashboardContent() {
                 </Button>
               </div>
 
+              {/* Category Filter Pills */}
+              <div className="flex flex-wrap items-center gap-2">
+                {[
+                  { id: "ALL", label: "All Media" },
+                  { id: "interviews", label: "Interviews" },
+                  { id: "discussions", label: "Discussions & Debates" },
+                  { id: "cultural", label: "Cultural Programmes" },
+                  { id: "recordings", label: "Event Recordings" },
+                ].map((cat) => (
+                  <button
+                    key={cat.id}
+                    onClick={() => {
+                      setMediaCategoryFilter(cat.id);
+                      if (currentPage !== 1) setCurrentPage(1);
+                    }}
+                    className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${
+                      mediaCategoryFilter === cat.id
+                        ? "bg-black text-white shadow-xs"
+                        : "bg-white text-gray-600 hover:bg-gray-100 hover:text-gray-900 border border-gray-200/80 shadow-xs"
+                    }`}
+                  >
+                    {cat.label}
+                  </button>
+                ))}
+              </div>
+
               {/* Media List Grid */}
               {mediaList.length === 0 ? (
                 <div className="bg-white rounded-[28px] p-12 text-center border border-gray-200/80 shadow-xs">
@@ -5478,7 +6207,13 @@ function EditorialDashboardContent() {
                             className="w-full h-full object-cover"
                           />
                           <div className="absolute top-2 left-2 bg-black/75 text-white text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider backdrop-blur-xs">
-                            {item.category}
+                            {item.category === "discussions" || item.category === "conversations"
+                              ? "Discussions & Debates"
+                              : item.category === "cultural"
+                              ? "Cultural Programmes"
+                              : item.category === "recordings"
+                              ? "Event Recordings"
+                              : "Interviews"}
                           </div>
 
                           <div className="absolute top-2 right-2 flex items-center gap-1.5">
@@ -5530,7 +6265,7 @@ function EditorialDashboardContent() {
                             onClick={() => {
                               setEditingMediaId(item.id);
                               setMediaFormTitle(item.title);
-                              setMediaFormCategory(item.category);
+                              setMediaFormCategory(item.category === "conversations" ? "discussions" : item.category);
                               setMediaFormYoutubeUrl(item.youtubeUrl);
                               setMediaFormDesc(item.description);
                               setMediaFormPublished(item.isPublished);
@@ -5696,14 +6431,14 @@ function EditorialDashboardContent() {
 
           {/* Add/Edit Edition Modal */}
           {showAddEditionModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
-              <div className="relative w-full max-w-lg bg-white rounded-[28px] p-6 sm:p-8 shadow-2xl font-poppins max-h-[90vh] overflow-y-auto">
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
+              <div className="relative w-full max-w-lg bg-white rounded-2xl sm:rounded-[28px] p-4 sm:p-7 md:p-8 shadow-2xl font-poppins max-h-[92vh] sm:max-h-[90vh] overflow-y-auto">
                 <button
                   onClick={() => {
                     setShowAddEditionModal(false);
                     resetEditionForm();
                   }}
-                  className="absolute top-5 right-5 p-2 text-gray-400 hover:text-gray-700 rounded-full hover:bg-gray-100 cursor-pointer"
+                  className="absolute top-4 sm:top-5 right-4 sm:right-5 p-2 text-gray-400 hover:text-gray-700 rounded-full hover:bg-gray-100 cursor-pointer"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -5878,7 +6613,7 @@ function EditorialDashboardContent() {
                     </button>
                   </div>
 
-                  <div className="flex gap-3 pt-2">
+                  <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3 pt-2">
                     <Button
                       type="button"
                       variant="secondary"
@@ -5887,7 +6622,7 @@ function EditorialDashboardContent() {
                         setShowAddEditionModal(false);
                         resetEditionForm();
                       }}
-                      className="flex-1 border border-gray-200"
+                      className="w-full sm:w-auto flex-1 justify-center border border-gray-200"
                     >
                       Cancel
                     </Button>
@@ -5896,7 +6631,7 @@ function EditorialDashboardContent() {
                       variant="primary"
                       size="md"
                       disabled={submittingEdition || !editionFormTitle.trim() || !editionFormPdfUrl.trim() || !editionFormCoverImage.trim()}
-                      className="flex-1 bg-black hover:bg-gray-800 text-white"
+                      className="w-full sm:w-auto flex-1 justify-center bg-black hover:bg-gray-800 text-white"
                     >
                       {submittingEdition ? "Saving…" : editingEditionId ? "Update Edition" : "Save Edition"}
                     </Button>
@@ -6305,40 +7040,43 @@ function EditorialDashboardContent() {
 
       {/* Reader Modal */}
       {selectedStory && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs animate-in fade-in">
-          <div className="relative w-full max-w-4xl max-h-[90vh] bg-white rounded-[32px] p-6 sm:p-8 overflow-y-auto shadow-2xl flex flex-col font-poppins">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 md:p-6 bg-black/70 backdrop-blur-xs animate-in fade-in">
+          <div className="relative w-full max-w-4xl max-h-[92vh] sm:max-h-[90vh] bg-white rounded-2xl sm:rounded-[32px] p-4 sm:p-7 md:p-8 shadow-2xl flex flex-col font-poppins min-h-0">
             {/* Header */}
-            <div className="flex items-start justify-between pb-4 border-b border-gray-100 mb-6 gap-4 shrink-0">
-              <div>
-                <div className="flex items-center gap-2 flex-wrap mb-2">
-                  <span className="bg-[#E4F953] text-[#040706] font-bold text-[10px] uppercase tracking-wider px-3 py-1 rounded-xl shadow-xs">
+            <div className="flex items-start justify-between pb-3 sm:pb-4 border-b border-gray-100 mb-4 sm:mb-6 gap-3 shrink-0">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap mb-2">
+                  <span className="bg-[#E4F953] text-[#040706] font-bold text-[9px] sm:text-[10px] uppercase tracking-wider px-2.5 sm:px-3 py-0.5 sm:py-1 rounded-xl shadow-xs">
                     {selectedStory.status === "PUBLISHED_EMAGAZINE"
                       ? "PUBLISHED IN E-MAGAZINE"
                       : selectedStory.status === "APPROVED_EMAGAZINE"
                       ? "E-MAGAZINE (PENDING)"
                       : selectedStory.status === "APPROVED"
-                      ? "PUBLISHED STORY"
+                      ? "PUBLISHED WORK"
                       : "REVIEWING SUBMISSION"}
                   </span>
-                  {selectedStory.submissionType === "PAINTING" && (
-                    <span className="bg-purple-700 text-white font-bold text-[10px] uppercase tracking-wider px-2.5 py-1 rounded-xl shadow-xs flex items-center gap-1">
-                      <Palette className="w-3 h-3" /> Painting
+                  {selectedStory.submissionType === "PAINTING" ? (
+                    <span className="bg-purple-700 text-white font-bold text-[9px] sm:text-[10px] uppercase tracking-wider px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-xl shadow-xs flex items-center gap-1">
+                      <Palette className="w-3 h-3" /> Visual Arts
                     </span>
-                  )}
-                  {selectedStory.submissionType === "VIDEO" && (
-                    <span className="bg-rose-600 text-white font-bold text-[10px] uppercase tracking-wider px-2.5 py-1 rounded-xl shadow-xs flex items-center gap-1">
+                  ) : selectedStory.submissionType === "VIDEO" ? (
+                    <span className="bg-blue-600 text-white font-bold text-[9px] sm:text-[10px] uppercase tracking-wider px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-xl shadow-xs flex items-center gap-1">
                       <Video className="w-3 h-3" /> Video
                     </span>
+                  ) : (
+                    <span className="bg-gray-900 text-white font-bold text-[9px] sm:text-[10px] uppercase tracking-wider px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-xl shadow-xs flex items-center gap-1">
+                      <FileText className="w-3 h-3" /> Article
+                    </span>
                   )}
-                  {selectedStory.category && (
-                    <span className="bg-black text-white font-bold text-[10px] uppercase tracking-wider px-2.5 py-1 rounded-xl shadow-xs">
+                  {selectedStory.submissionType !== "PAINTING" && selectedStory.submissionType !== "VIDEO" && selectedStory.category && (
+                    <span className="bg-black text-white font-bold text-[9px] sm:text-[10px] uppercase tracking-wider px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-xl shadow-xs">
                       Category: {selectedStory.category}
                     </span>
                   )}
                 </div>
-                <h2 className="text-2xl sm:text-3xl font-bold text-gray-950 leading-tight">{selectedStory.title}</h2>
+                <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-950 leading-snug sm:leading-tight break-words">{selectedStory.title}</h2>
                 {selectedStory.description && (
-                  <div className="mt-3.5 rounded-2xl text-xs sm:text-sm text-gray-700 leading-relaxed">
+                  <div className="mt-2.5 sm:mt-3.5 rounded-2xl text-xs sm:text-sm text-gray-700 leading-relaxed">
                     <p className="whitespace-pre-wrap">{selectedStory.description}</p>
                   </div>
                 )}
@@ -6347,123 +7085,170 @@ function EditorialDashboardContent() {
               <button
                 type="button"
                 onClick={() => setSelectedStory(null)}
-                className="p-2 text-gray-400 hover:text-gray-700 rounded-full hover:bg-gray-100 cursor-pointer shrink-0"
+                className="p-1.5 sm:p-2 text-gray-400 hover:text-gray-700 rounded-full hover:bg-gray-100 cursor-pointer shrink-0 -mr-1 -mt-1"
+                aria-label="Close"
               >
                 <XCircle className="w-6 h-6" />
               </button>
             </div>
 
-            {/* Video Player Embed if VIDEO submission */}
-            {selectedStory.submissionType === "VIDEO" && (
-              <div className="w-full max-w-3xl mx-auto mb-8 shrink-0 rounded-[24px] overflow-hidden shadow-md aspect-video bg-black relative flex items-center justify-center">
-                {(() => {
-                  const embed = selectedStory.mediaUrl ? getAddSubmissionVideoEmbed(selectedStory.mediaUrl) : null;
-                  if (embed?.type === "youtube") {
-                    return (
-                      <iframe
-                        src={`https://www.youtube-nocookie.com/embed/${embed.id}`}
-                        title="Video Preview"
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                        allowFullScreen
-                        className="w-full h-full border-0"
-                      />
-                    );
-                  } else if (embed?.type === "vimeo") {
-                    return (
-                      <iframe
-                        src={`https://player.vimeo.com/video/${embed.id}`}
-                        title="Video Preview"
-                        allow="autoplay; fullscreen; picture-in-picture"
-                        allowFullScreen
-                        className="w-full h-full border-0"
-                      />
-                    );
-                  } else if (selectedStory.coverImageUrl) {
-                    return (
-                      <div className="relative w-full h-full">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={formatAssetUrl(selectedStory.coverImageUrl)}
-                          alt={selectedStory.title}
-                          className="w-full h-full object-cover"
+            {/* Content Scroll Container */}
+            <div className="flex-1 overflow-y-auto pr-1 sm:pr-2 overscroll-contain space-y-6 min-h-0">
+              {/* Video Player Embed if VIDEO submission */}
+              {selectedStory.submissionType === "VIDEO" && (
+                <div className="w-full max-w-3xl mx-auto mb-6 sm:mb-8 shrink-0 rounded-[20px] sm:rounded-[24px] overflow-hidden shadow-md aspect-video bg-black relative flex items-center justify-center">
+                  {(() => {
+                    const embed = selectedStory.mediaUrl ? getAddSubmissionVideoEmbed(selectedStory.mediaUrl) : null;
+                    if (embed?.type === "direct") {
+                      return (
+                        <video
+                          src={formatAssetUrl(embed.directUrl)}
+                          controls
+                          playsInline
+                          className="w-full h-full object-contain"
                         />
-                        {selectedStory.mediaUrl && (
-                          <a
-                            href={selectedStory.mediaUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="absolute inset-0 flex items-center justify-center bg-black/40 hover:bg-black/50 transition-colors group cursor-pointer z-10"
-                          >
-                            <div className="w-14 h-14 rounded-full bg-white/90 text-gray-900 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
-                              <Play className="w-6 h-6 fill-current ml-1 text-black" />
-                            </div>
+                      );
+                    } else if (embed?.embedUrl) {
+                      return (
+                        <iframe
+                          src={embed.embedUrl}
+                          title="Video Preview"
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+                          allowFullScreen
+                          className="w-full h-full border-0"
+                        />
+                      );
+                    } else if (selectedStory.coverImageUrl) {
+                      return (
+                        <div className="relative w-full h-full">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={formatAssetUrl(selectedStory.coverImageUrl)}
+                            alt={selectedStory.title}
+                            className="w-full h-full object-cover"
+                          />
+                          {selectedStory.mediaUrl && (
+                            <a
+                              href={selectedStory.mediaUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="absolute inset-0 flex items-center justify-center bg-black/40 hover:bg-black/50 transition-colors group cursor-pointer z-10"
+                            >
+                              <div className="w-14 h-14 rounded-full bg-white/90 text-gray-900 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
+                                <Play className="w-6 h-6 fill-current ml-1 text-black" />
+                              </div>
+                            </a>
+                          )}
+                        </div>
+                      );
+                    }
+                    return (
+                      <div className="w-full h-full flex items-center justify-center text-white text-xs p-6">
+                        {selectedStory.mediaUrl ? (
+                          <a href={selectedStory.mediaUrl} target="_blank" rel="noreferrer" className="underline font-semibold hover:text-[#E4F953]">
+                            Open Video Link in New Tab
                           </a>
+                        ) : (
+                          <span className="text-gray-400">No video source provided</span>
                         )}
                       </div>
                     );
-                  }
-                  return (
-                    <div className="w-full h-full flex items-center justify-center text-white text-xs p-6">
-                      {selectedStory.mediaUrl ? (
-                        <a href={selectedStory.mediaUrl} target="_blank" rel="noreferrer" className="underline font-semibold hover:text-[#E4F953]">
-                          Open Video Link in New Tab
-                        </a>
-                      ) : (
-                        <span className="text-gray-400">No video source provided</span>
-                      )}
-                    </div>
-                  );
-                })()}
-              </div>
-            )}
-
-            {/* Painting Artwork Display */}
-            {selectedStory.submissionType === "PAINTING" && (selectedStory.mediaUrl || selectedStory.coverImageUrl) && (
-              <div className="relative w-full max-w-3xl mx-auto mb-8 shrink-0 rounded-[24px] overflow-hidden bg-[#0A0D0C] border border-gray-200/80 shadow-sm flex items-center justify-center p-3 sm:p-4 group">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={formatAssetUrl(selectedStory.mediaUrl || selectedStory.coverImageUrl || "")}
-                  alt={selectedStory.title || "Painting Artwork"}
-                  className="w-full max-h-[550px] object-contain rounded-xl block"
-                />
-                <div className="absolute bottom-3 right-3 z-10 bg-black/80 backdrop-blur-md text-white text-[11px] font-semibold px-3 py-1 rounded-xl flex items-center gap-1.5 shadow-xs pointer-events-none">
-                  <Palette className="w-3.5 h-3.5 text-purple-300" />
-                  <span>Original Artwork</span>
+                  })()}
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* Article / Story Cover Image (Card style matching LatestStories) */}
-            {selectedStory.submissionType !== "VIDEO" && selectedStory.submissionType !== "PAINTING" && (selectedStory.coverImageUrl || selectedStory.mediaUrl) && (
-              <div className="relative w-64 sm:w-72 md:w-80 aspect-square mx-auto mb-8 shrink-0 rounded-[22px] overflow-hidden bg-gray-100 border border-gray-200/80 shadow-md">
-                <Image
-                  src={formatAssetUrl(selectedStory.coverImageUrl || selectedStory.mediaUrl || "")}
-                  alt={selectedStory.title || "Cover Preview"}
-                  fill
-                  priority
-                  unoptimized
-                  className="object-cover object-center"
-                />
-              </div>
-            )}
+              {/* Painting Artwork Display */}
+              {selectedStory.submissionType === "PAINTING" && (() => {
+                const galleryImages: Array<{ src: string; alt: string }> = [];
+                const seen = new Set<string>();
 
-            {/* Content Parser */}
-            <div className="mb-6 flex-1">
-              {renderStoryContent(selectedStory.content)}
+                if (selectedStory.content) {
+                  const imgRegex = /!\[(.*?)\]\((.*?)\)/g;
+                  let match;
+                  while ((match = imgRegex.exec(selectedStory.content)) !== null) {
+                    const url = match[2]?.trim();
+                    if (url && !seen.has(url)) {
+                      seen.add(url);
+                      galleryImages.push({ src: url, alt: match[1] || selectedStory.title || "Visual Arts Artwork" });
+                    }
+                  }
+                }
+
+                if (selectedStory.mediaUrl && !seen.has(selectedStory.mediaUrl.trim())) {
+                  seen.add(selectedStory.mediaUrl.trim());
+                  galleryImages.unshift({ src: selectedStory.mediaUrl.trim(), alt: selectedStory.title || "Primary Artwork" });
+                }
+
+                if (galleryImages.length === 0 && selectedStory.coverImageUrl && !seen.has(selectedStory.coverImageUrl.trim())) {
+                  galleryImages.push({ src: selectedStory.coverImageUrl.trim(), alt: selectedStory.title || "Cover Artwork" });
+                }
+
+                if (galleryImages.length === 0) return null;
+
+                return (
+                  <div className="w-full max-w-3xl mx-auto mb-6 sm:mb-8 space-y-3">
+                    <div className="relative w-full rounded-[20px] sm:rounded-[24px] overflow-hidden bg-[#0A0D0C] border border-gray-200/80 shadow-sm flex items-center justify-center p-2.5 sm:p-4 group">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={formatAssetUrl(galleryImages[0].src)}
+                        alt={galleryImages[0].alt}
+                        className="w-full max-h-[500px] sm:max-h-[550px] object-contain rounded-xl block"
+                      />
+                      <div className="absolute bottom-3 right-3 z-10 bg-black/80 backdrop-blur-md text-white text-[10px] sm:text-[11px] font-semibold px-2.5 sm:px-3 py-1 rounded-xl flex items-center gap-1.5 shadow-xs pointer-events-none">
+                        <Palette className="w-3.5 h-3.5 text-purple-300" />
+                        <span>{galleryImages.length > 1 ? `${galleryImages.length} Images in Gallery` : "Original Artwork"}</span>
+                      </div>
+                    </div>
+
+                    {galleryImages.length > 1 && (
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-2.5">
+                        {galleryImages.map((img, idx) => (
+                          <div key={idx} className="relative rounded-xl overflow-hidden border border-gray-200 aspect-[4/3] bg-gray-900">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={formatAssetUrl(img.src)} alt={img.alt} className="w-full h-full object-cover" />
+                            <span className="absolute bottom-1 left-1 bg-black/75 text-white text-[9px] font-bold px-1.5 py-0.5 rounded">
+                              #{idx + 1} {idx === 0 ? "(Cover)" : ""}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* Article Cover Image */}
+              {selectedStory.submissionType !== "VIDEO" && selectedStory.submissionType !== "PAINTING" && (selectedStory.coverImageUrl || selectedStory.mediaUrl) && (
+                <div className="relative w-48 sm:w-64 md:w-80 aspect-square mx-auto mb-6 sm:mb-8 shrink-0 rounded-[18px] sm:rounded-[22px] overflow-hidden bg-gray-100 border border-gray-200/80 shadow-md">
+                  <Image
+                    src={formatAssetUrl(selectedStory.coverImageUrl || selectedStory.mediaUrl || "")}
+                    alt={selectedStory.title || "Cover Preview"}
+                    fill
+                    priority
+                    unoptimized
+                    className="object-cover object-center"
+                  />
+                </div>
+              )}
+
+              {/* Content Parser */}
+              <div className="mb-4 flex-1 max-w-3xl mx-auto w-full">
+                {renderStoryContent(selectedStory.content)}
+              </div>
             </div>
 
             {/* Bottom Actions Row */}
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-5 border-t border-gray-100 mt-auto shrink-0">
+            <div className="shrink-0 pt-4 border-t border-gray-100 mt-3 sm:mt-4 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3 bg-white">
               <Button
                 variant="secondary"
                 size="sm"
                 onClick={() => setSelectedStory(null)}
-                className="justify-center border border-gray-300 text-gray-700 hover:bg-gray-100 cursor-pointer shrink-0"
+                className="w-full sm:w-auto justify-center border border-gray-300 text-gray-700 hover:bg-gray-100 cursor-pointer text-xs sm:text-sm font-medium py-2.5 sm:py-1.5"
               >
                 Close Preview
               </Button>
 
-              <div className="flex flex-wrap items-center justify-end gap-2.5">
+              <div className="grid grid-cols-1 sm:flex sm:flex-row items-stretch sm:items-center gap-2 sm:gap-2.5 w-full sm:w-auto">
                 {selectedStory.status === "PENDING" && (
                   <>
                     <Button
@@ -6474,29 +7259,29 @@ function EditorialDashboardContent() {
                         setSelectedStory(null);
                         setRejectingStory(s);
                       }}
-                      className="justify-center text-rose-600 border-rose-200 hover:bg-rose-50 cursor-pointer shrink-0 whitespace-nowrap"
+                      className="w-full sm:w-auto justify-center text-rose-600 border-rose-200 hover:bg-rose-50 cursor-pointer text-xs sm:text-sm font-medium py-2.5 sm:py-1.5 whitespace-nowrap"
                     >
                       Reject with Note
                     </Button>
                     <Button
                       variant="secondary"
                       size="sm"
-                      icon={<BookOpen className="w-4 h-4 text-purple-600" />}
+                      icon={<BookOpen className="w-4 h-4 text-purple-600 shrink-0" />}
                       iconPosition="left"
                       onClick={() => handleReview(selectedStory.id, "APPROVED_EMAGAZINE")}
                       disabled={actionLoading}
-                      className="justify-center bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100 font-semibold cursor-pointer shrink-0 whitespace-nowrap"
+                      className="w-full sm:w-auto justify-center bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100 font-semibold cursor-pointer text-xs sm:text-sm py-2.5 sm:py-1.5 whitespace-nowrap"
                     >
                       Approve for E-Magazine
                     </Button>
                     <Button
                       variant="primary"
                       size="sm"
-                      icon={<CheckCircle2 className="w-4 h-4" />}
+                      icon={<CheckCircle2 className="w-4 h-4 shrink-0" />}
                       iconPosition="left"
                       onClick={() => handleReview(selectedStory.id, "APPROVED")}
                       disabled={actionLoading}
-                      className="justify-center cursor-pointer bg-black text-white hover:bg-gray-800 shrink-0 whitespace-nowrap"
+                      className="w-full sm:w-auto justify-center cursor-pointer bg-black text-white hover:bg-gray-800 font-semibold text-xs sm:text-sm py-2.5 sm:py-1.5 whitespace-nowrap"
                     >
                       Approve & Publish
                     </Button>
@@ -6508,7 +7293,7 @@ function EditorialDashboardContent() {
                     <Button
                       variant="outline"
                       size="sm"
-                      icon={<Undo className="w-4 h-4 text-gray-500" />}
+                      icon={<Undo className="w-4 h-4 text-gray-500 shrink-0" />}
                       iconPosition="left"
                       onClick={() => {
                         const sId = selectedStory.id;
@@ -6518,14 +7303,14 @@ function EditorialDashboardContent() {
                         }
                       }}
                       disabled={actionLoading}
-                      className="justify-center text-gray-700 border-gray-300 hover:bg-gray-100 font-semibold cursor-pointer shrink-0 whitespace-nowrap"
+                      className="w-full sm:w-auto justify-center text-gray-700 border-gray-300 hover:bg-gray-100 font-semibold cursor-pointer text-xs sm:text-sm py-2.5 sm:py-1.5 whitespace-nowrap"
                     >
                       Return to Queue
                     </Button>
                     <Button
                       variant="primary"
                       size="sm"
-                      icon={<BookOpen className="w-4 h-4 text-[#040706]" />}
+                      icon={<BookOpen className="w-4 h-4 text-[#040706] shrink-0" />}
                       iconPosition="left"
                       onClick={() => {
                         const sId = selectedStory.id;
@@ -6535,7 +7320,7 @@ function EditorialDashboardContent() {
                         }
                       }}
                       disabled={actionLoading}
-                      className="justify-center bg-[#E4F953] hover:bg-[#d5ea44] text-[#040706] font-bold cursor-pointer shrink-0 whitespace-nowrap shadow-xs"
+                      className="w-full sm:w-auto justify-center bg-[#E4F953] hover:bg-[#d5ea44] text-[#040706] font-bold cursor-pointer text-xs sm:text-sm py-2.5 sm:py-1.5 whitespace-nowrap shadow-xs"
                     >
                       Publish to Magazine
                     </Button>
@@ -6546,7 +7331,7 @@ function EditorialDashboardContent() {
                   <Button
                     variant="outline"
                     size="sm"
-                    icon={<Undo className="w-4 h-4 text-gray-500" />}
+                    icon={<Undo className="w-4 h-4 text-gray-500 shrink-0" />}
                     iconPosition="left"
                     onClick={() => {
                       const sId = selectedStory.id;
@@ -6556,7 +7341,7 @@ function EditorialDashboardContent() {
                       }
                     }}
                     disabled={actionLoading}
-                    className="justify-center text-amber-700 border-amber-300 hover:bg-amber-50 font-semibold cursor-pointer shrink-0 whitespace-nowrap"
+                    className="w-full sm:w-auto justify-center text-amber-700 border-amber-300 hover:bg-amber-50 font-semibold cursor-pointer text-xs sm:text-sm py-2.5 sm:py-1.5 whitespace-nowrap"
                   >
                     Unpublish from Magazine
                   </Button>
@@ -6568,10 +7353,11 @@ function EditorialDashboardContent() {
                     size="sm"
                     onClick={() => {
                       const sId = selectedStory.id;
+                      const sTitle = selectedStory.title;
                       setSelectedStory(null);
-                      handleUnpublishStory(sId);
+                      handleUnpublishStory(sId, sTitle);
                     }}
-                    className="justify-center text-amber-700 border-amber-300 hover:bg-amber-50 font-semibold cursor-pointer shrink-0 whitespace-nowrap"
+                    className="w-full sm:w-auto justify-center text-amber-700 border-amber-300 hover:bg-amber-50 font-semibold cursor-pointer text-xs sm:text-sm py-2.5 sm:py-1.5 whitespace-nowrap"
                   >
                     Unpublish Story
                   </Button>
@@ -6581,14 +7367,14 @@ function EditorialDashboardContent() {
                   <Button
                     variant="primary"
                     size="sm"
-                    icon={<Globe className="w-4 h-4 text-emerald-200" />}
+                    icon={<Globe className="w-4 h-4 text-emerald-200 shrink-0" />}
                     iconPosition="left"
                     onClick={() => {
                       const sId = selectedStory.id;
                       setSelectedStory(null);
                       handlePublishStory(sId);
                     }}
-                    className="justify-center bg-emerald-600 hover:bg-emerald-700 text-white font-semibold cursor-pointer shrink-0 whitespace-nowrap"
+                    className="w-full sm:w-auto justify-center bg-emerald-600 hover:bg-emerald-700 text-white font-semibold cursor-pointer text-xs sm:text-sm py-2.5 sm:py-1.5 whitespace-nowrap"
                   >
                     Publish to Web
                   </Button>
@@ -6770,7 +7556,7 @@ function EditorialDashboardContent() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs animate-in fade-in font-poppins">
           <div className="relative w-full max-w-lg bg-white rounded-[28px] p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-gray-100 mb-4">
-              <h3 className="text-xl font-bold text-gray-950">{editingEventId ? "Edit Event / Workshop" : "Add Event / Workshop"}</h3>
+              <h3 className="text-xl font-bold text-gray-950">{editingEventId ? "Edit Event" : "Add Event"}</h3>
               <button
                 onClick={() => {
                   setShowAddEventModal(false);
@@ -6795,6 +7581,7 @@ function EditorialDashboardContent() {
                     { id: "WORKSHOP", label: "Workshop" },
                     { id: "EXHIBITION", label: "Exhibition" },
                     { id: "FILM_SCREENING", label: "Film Screening" },
+                    { id: "OTHER", label: "Other Event" },
                     { id: "PAST_ARCHIVE", label: "Past Archive" },
                   ].map((t) => (
                     <button
@@ -6858,51 +7645,55 @@ function EditorialDashboardContent() {
                 />
               </div>
 
-              {/* Single Selectable Date & Time Input Box */}
-              <div>
-                <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider">
-                  Event Date & Time <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="datetime-local"
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    if (!val) return;
-                    const [datePart, timePart] = val.split("T");
-                    if (datePart) {
-                      const [y, m, d] = datePart.split("-");
-                      const dateObj = new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
-                      if (!isNaN(dateObj.getTime())) {
-                        const dayStr = String(dateObj.getDate()).padStart(2, "0");
-                        const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-                        const monthYearStr = `${monthNames[dateObj.getMonth()]} ${dateObj.getFullYear()}`;
-                        setEventFormDay(dayStr);
-                        setEventFormMonthYear(monthYearStr);
-                      }
-                    }
-                    if (timePart) {
-                      const [h, min] = timePart.split(":");
-                      let hour = parseInt(h, 10);
-                      const ampm = hour >= 12 ? "PM" : "AM";
-                      hour = hour % 12 || 12;
-                      const formattedHour = String(hour).padStart(2, "0");
-                      setEventFormTime(`${formattedHour}:${min} ${ampm}`);
-                    }
-                  }}
-                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-900 outline-none focus:border-black shadow-xs cursor-pointer"
-                />
-
-                {/* Selected Schedule Display Pill */}
-                {(eventFormDay || eventFormMonthYear || eventFormTime) && (
-                  <div className="mt-2 text-xs text-gray-700 font-medium bg-gray-100/80 px-3.5 py-2 rounded-xl flex items-center gap-2 border border-gray-200/60">
-                    <span className="font-bold text-gray-900">Selected Schedule:</span>
-                    <span>
-                      {eventFormDay ? `${eventFormDay} ` : ""}
-                      {eventFormMonthYear ? `${eventFormMonthYear}` : ""}
-                      {eventFormTime ? ` @ ${eventFormTime}` : ""}
-                    </span>
+              {/* Event Dates & Time */}
+              <div className="space-y-3 bg-gray-50/80 p-3.5 rounded-2xl border border-gray-200/80">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider">
+                      Start Date <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={eventStartDate}
+                      onChange={(e) => {
+                        const sVal = e.target.value;
+                        setEventStartDate(sVal);
+                        computeEventDateStrings(sVal, eventEndDate);
+                      }}
+                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-900 outline-none focus:border-black shadow-xs cursor-pointer"
+                    />
                   </div>
-                )}
+                  <div>
+                    <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider">
+                      End Date <span className="text-gray-400 font-normal lowercase tracking-normal">(optional for multi-day)</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={eventEndDate}
+                      min={eventStartDate || undefined}
+                      onChange={(e) => {
+                        const eVal = e.target.value;
+                        setEventEndDate(eVal);
+                        computeEventDateStrings(eventStartDate, eVal);
+                      }}
+                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-900 outline-none focus:border-black shadow-xs cursor-pointer"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider">
+                    Time / Timing <span className="text-gray-400 font-normal lowercase tracking-normal">(optional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={eventFormTime}
+                    onChange={(e) => setEventFormTime(e.target.value)}
+                    placeholder="e.g. 04:00 PM or 10:00 AM – 05:00 PM daily"
+                    className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-medium text-gray-900 outline-none focus:border-black shadow-xs"
+                  />
+                </div>
               </div>
 
               {/* Cover & Gallery Images / Video Option */}
@@ -6927,7 +7718,8 @@ function EditorialDashboardContent() {
                             : "text-gray-500 hover:text-gray-900"
                         }`}
                       >
-                        <span>📸 Photo Gallery</span>
+                        <Images className="w-3.5 h-3.5" />
+                        <span>Photo Gallery</span>
                       </button>
                       <button
                         type="button"
@@ -6941,7 +7733,7 @@ function EditorialDashboardContent() {
                             : "text-gray-500 hover:text-gray-900"
                         }`}
                       >
-                        <span className="text-rose-600">▶</span>
+                        <Play className="w-3.5 h-3.5 text-rose-600 fill-rose-600" />
                         <span>YouTube Video</span>
                       </button>
                     </div>
@@ -7010,9 +7802,10 @@ function EditorialDashboardContent() {
                           disabled={uploadingEventImage}
                           className="hidden"
                         />
-                        <div className="text-center">
+                        <div className="text-center flex flex-col items-center">
+                          <Upload className="w-5 h-5 text-gray-400 mb-1.5" />
                           <span className="text-xs font-bold text-gray-900">
-                            {uploadingEventImage ? "Uploading Images..." : "📁 Select Images from Device (Multiple Allowed)"}
+                            {uploadingEventImage ? "Uploading Images..." : "Select Images from Device (Multiple Allowed)"}
                           </span>
                           <p className="text-[10px] text-gray-500 mt-1">PNG, JPG, WEBP up to 5MB each</p>
                         </div>
@@ -7028,7 +7821,7 @@ function EditorialDashboardContent() {
                       <div>
                         <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider flex items-center justify-between">
                           <span className="flex items-center gap-1.5">
-                            <span className="text-rose-600 font-bold">▶</span> YouTube URL <span className="text-rose-500">*</span>
+                            <Play className="w-3.5 h-3.5 text-rose-600 fill-rose-600" /> YouTube URL <span className="text-rose-500">*</span>
                           </span>
                         </label>
                         <input
@@ -7089,8 +7882,9 @@ function EditorialDashboardContent() {
                               disabled={uploadingEventImage}
                               className="hidden"
                             />
-                            <span className="text-xs font-semibold text-gray-600">
-                              {uploadingEventImage ? "Uploading..." : "📁 Upload Custom Cover (or leave empty for YouTube thumbnail)"}
+                            <span className="text-xs font-semibold text-gray-600 flex items-center gap-1.5">
+                              <Upload className="w-3.5 h-3.5 text-gray-500" />
+                              <span>{uploadingEventImage ? "Uploading..." : "Upload Custom Cover (or leave empty for YouTube thumbnail)"}</span>
                             </span>
                           </label>
                         )}
@@ -7131,9 +7925,10 @@ function EditorialDashboardContent() {
                         disabled={uploadingEventImage}
                         className="hidden"
                       />
-                      <div className="text-center">
+                      <div className="text-center flex flex-col items-center">
+                        <Upload className="w-5 h-5 text-gray-400 mb-1.5" />
                         <span className="text-xs font-bold text-gray-900">
-                          {uploadingEventImage ? "Uploading Image..." : "📁 Select Cover Image"}
+                          {uploadingEventImage ? "Uploading Image..." : "Select Cover Image"}
                         </span>
                         <p className="text-[10px] text-gray-500 mt-1">PNG, JPG, WEBP up to 5MB</p>
                       </div>
@@ -7240,9 +8035,10 @@ function EditorialDashboardContent() {
                       a.download = `registrations-${selectedEventForReg.id}.csv`;
                       a.click();
                     }}
-                    className="px-3 py-1 bg-gray-100 hover:bg-black hover:text-white text-gray-900 rounded-lg text-xs font-bold transition-all cursor-pointer"
+                    className="px-3 py-1 bg-gray-100 hover:bg-black hover:text-white text-gray-900 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
                   >
-                    📥 Export CSV
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Export CSV</span>
                   </button>
                 </div>
 
@@ -7256,8 +8052,9 @@ function EditorialDashboardContent() {
                             {reg.email} {reg.phone ? `• ${reg.phone}` : ""}
                           </div>
                           {reg.notes && (
-                            <div className="text-xs text-gray-500 bg-amber-50 border border-amber-200/60 p-2 rounded-xl mt-2 font-normal">
-                              💬 &quot;{reg.notes}&quot;
+                            <div className="text-xs text-gray-500 bg-amber-50 border border-amber-200/60 p-2 rounded-xl mt-2 font-normal flex items-start gap-1.5">
+                              <MessageSquare className="w-3.5 h-3.5 text-amber-700 shrink-0 mt-0.5" />
+                              <span>&quot;{reg.notes}&quot;</span>
                             </div>
                           )}
                         </div>
@@ -7321,7 +8118,8 @@ function EditorialDashboardContent() {
                         : "text-gray-500 hover:text-gray-900"
                     }`}
                   >
-                    <span>📸 Photo Gallery</span>
+                    <Images className="w-3.5 h-3.5" />
+                    <span>Photo Gallery</span>
                   </button>
                   <button
                     type="button"
@@ -7335,165 +8133,152 @@ function EditorialDashboardContent() {
                         : "text-gray-500 hover:text-gray-900"
                     }`}
                   >
-                    <span className="text-rose-600">▶</span>
+                    <Play className="w-3.5 h-3.5 text-rose-600 fill-rose-600" />
                     <span>YouTube Video</span>
                   </button>
                 </div>
               </div>
 
-              {archiveMediaType === "IMAGES" ? (
-                /* Archive Gallery & Cover Image Upload */
+            {archiveMediaType === "IMAGES" ? (
+              /* Archive Gallery & Cover Image Upload */
+              <div>
+                <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider">
+                  Archive Images Gallery <span className="text-rose-500">*</span>
+                </label>
+
+                {/* Uploaded Thumbnails Grid */}
+                {archiveImages.length > 0 && (
+                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 mb-3">
+                    {archiveImages.map((url, idx) => {
+                      const isCover = archiveImage === url || (!archiveImage && idx === 0);
+                      return (
+                        <div
+                          key={idx}
+                          onClick={() => setArchiveImage(url)}
+                          className={`relative rounded-xl overflow-hidden border cursor-pointer h-20 bg-gray-50 group transition-all ${
+                            isCover ? "border-amber-500 ring-2 ring-amber-500/30" : "border-gray-200 hover:border-gray-400"
+                          }`}
+                        >
+                          <img
+                            src={url.startsWith("/") ? `${API_BASE_URL.replace(/\/api$/, "")}${url}` : url}
+                            alt={`Archive image ${idx + 1}`}
+                            className="w-full h-full object-cover"
+                          />
+                          {isCover && (
+                            <span className="absolute bottom-1 left-1 bg-amber-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow-xs">
+                              Cover
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const updated = archiveImages.filter((_, i) => i !== idx);
+                              setArchiveImages(updated);
+                              if (archiveImage === url) {
+                                setArchiveImage(updated[0] || "");
+                              }
+                            }}
+                            className="absolute top-1 right-1 p-1 bg-black/70 hover:bg-rose-600 text-white rounded-full transition-colors cursor-pointer"
+                            title="Remove image"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* File Drop / Select Area */}
+                <label className="border-2 border-dashed border-gray-200 hover:border-black rounded-2xl p-4 flex flex-col items-center justify-center cursor-pointer transition-colors bg-gray-50/50 hover:bg-gray-50">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handleArchiveImageUpload}
+                    disabled={uploadingArchiveImage}
+                    className="hidden"
+                  />
+                  <div className="text-center flex flex-col items-center">
+                    <Upload className="w-5 h-5 text-gray-400 mb-1.5" />
+                    <span className="text-xs font-bold text-gray-900">
+                      {uploadingArchiveImage ? "Uploading Images..." : "Select Images for Archive (Multiple Allowed)"}
+                    </span>
+                    <p className="text-[10px] text-gray-500 mt-1">PNG, JPG, WEBP up to 5MB each</p>
+                  </div>
+                </label>
+                {archiveImages.length === 0 && !archiveImage && (
+                  <p className="text-[11px] text-rose-500 mt-1 font-medium">
+                    * At least one cover image is required to move an event to Past Archive.
+                  </p>
+                )}
+              </div>
+            ) : (
+              /* YouTube Video URL */
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <Play className="w-3.5 h-3.5 text-rose-600 fill-rose-600" /> YouTube / Video URL <span className="text-rose-500">*</span>
+                    </span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="url"
+                      value={archiveVideoUrl}
+                      onChange={(e) => setArchiveVideoUrl(e.target.value)}
+                      placeholder="https://youtu.be/... or https://youtube.com/watch?v=..."
+                      className="w-full pl-9 pr-4 py-2.5 bg-white border border-gray-200 rounded-2xl text-xs font-medium outline-none focus:border-black shadow-xs transition-all"
+                    />
+                    <Video className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  </div>
+                  <p className="text-[10px] text-gray-400 mt-1">This will display as a watchable video card with a play button in the archive.</p>
+                </div>
+
+                {/* Video Cover Image Option */}
                 <div>
                   <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider">
-                    Archive Images Gallery <span className="text-rose-500">*</span>
+                    Video Cover Image <span className="text-[10px] font-normal text-gray-400 normal-case">(Optional - defaults to YouTube cover)</span>
                   </label>
 
-                  {/* Uploaded Thumbnails Grid */}
-                  {archiveImages.length > 0 && (
-                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 mb-3">
-                      {archiveImages.map((url, idx) => {
-                        const isCover = archiveImage === url || (!archiveImage && idx === 0);
-                        return (
-                          <div
-                            key={idx}
-                            onClick={() => setArchiveImage(url)}
-                            className={`relative rounded-xl overflow-hidden border cursor-pointer h-20 bg-gray-50 group transition-all ${
-                              isCover ? "border-amber-500 ring-2 ring-amber-500/30" : "border-gray-200 hover:border-gray-400"
-                            }`}
-                          >
-                            <img
-                              src={url.startsWith("/") ? `${API_BASE_URL.replace(/\/api$/, "")}${url}` : url}
-                              alt={`Archive image ${idx + 1}`}
-                              className="w-full h-full object-cover"
-                            />
-                            {isCover && (
-                              <span className="absolute bottom-1 left-1 bg-amber-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow-xs">
-                                Cover
-                              </span>
-                            )}
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                const updated = archiveImages.filter((_, i) => i !== idx);
-                                setArchiveImages(updated);
-                                if (archiveImage === url) {
-                                  setArchiveImage(updated[0] || "");
-                                }
-                              }}
-                              className="absolute top-1 right-1 p-1 bg-black/70 hover:bg-rose-600 text-white rounded-full transition-colors cursor-pointer"
-                              title="Remove image"
-                            >
-                              <X className="w-3 h-3" />
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  {/* File Drop / Select Area */}
-                  <label className="border-2 border-dashed border-gray-200 hover:border-black rounded-2xl p-4 flex flex-col items-center justify-center cursor-pointer transition-colors bg-gray-50/50 hover:bg-gray-50">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      onChange={handleArchiveImageUpload}
-                      disabled={uploadingArchiveImage}
-                      className="hidden"
-                    />
-                    <div className="text-center">
-                      <span className="text-xs font-bold text-gray-900">
-                        {uploadingArchiveImage ? "Uploading Images..." : "📁 Select Images for Archive (Multiple Allowed)"}
-                      </span>
-                      <p className="text-[10px] text-gray-500 mt-1">PNG, JPG, WEBP up to 5MB each</p>
-                    </div>
-                  </label>
-                  {archiveImages.length === 0 && !archiveImage && (
-                    <p className="text-[11px] text-rose-500 mt-1 font-medium">
-                      * At least one cover image is required to move an event to Past Archive.
-                    </p>
-                  )}
-                </div>
-              ) : (
-                /* YouTube Video URL */
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider flex items-center justify-between">
-                      <span className="flex items-center gap-1.5">
-                        <span className="text-rose-600 font-bold">▶</span> YouTube / Video URL <span className="text-rose-500">*</span>
-                      </span>
-                    </label>
-                    <div className="relative">
-                      <input
-                        type="url"
-                        value={archiveVideoUrl}
-                        onChange={(e) => setArchiveVideoUrl(e.target.value)}
-                        placeholder="https://youtu.be/... or https://youtube.com/watch?v=..."
-                        className="w-full pl-9 pr-4 py-2.5 bg-white border border-gray-200 rounded-2xl text-xs font-medium outline-none focus:border-black shadow-xs transition-all"
+                  {archiveImage ? (
+                    <div className="relative rounded-2xl overflow-hidden border border-gray-200 h-32 bg-gray-50 flex items-center justify-center group">
+                      <img
+                        src={archiveImage.startsWith("/") ? `${API_BASE_URL.replace(/\/api$/, "")}${archiveImage}` : archiveImage}
+                        alt="Custom Video Cover"
+                        className="w-full h-full object-cover"
                       />
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">🎥</span>
+                      <button
+                        type="button"
+                        onClick={() => setArchiveImage("")}
+                        className="absolute top-2 right-2 p-1.5 bg-black/70 hover:bg-rose-600 text-white rounded-full transition-colors cursor-pointer"
+                        title="Remove custom cover"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                      <span className="absolute bottom-2 left-2 bg-black/70 text-white text-[10px] font-semibold px-2 py-0.5 rounded shadow-xs">
+                        Custom Cover
+                      </span>
                     </div>
-                    <p className="text-[10px] text-gray-400 mt-1">This will display as a watchable video card with a play button in the archive.</p>
-                  </div>
-
-                  {/* Video Cover Image Option */}
-                  <div>
-                    <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider">
-                      Video Cover Image <span className="text-[10px] font-normal text-gray-400 normal-case">(Optional - defaults to YouTube cover)</span>
-                    </label>
-
-                    {archiveImage ? (
-                      <div className="relative rounded-2xl overflow-hidden border border-gray-200 h-32 bg-gray-50 flex items-center justify-center group">
+                  ) : archiveVideoUrl.trim() ? (
+                    <div className="space-y-2">
+                      <div className="relative rounded-2xl overflow-hidden border border-gray-200 h-32 bg-gray-900 flex items-center justify-center">
                         <img
-                          src={archiveImage.startsWith("/") ? `${API_BASE_URL.replace(/\/api$/, "")}${archiveImage}` : archiveImage}
-                          alt="Custom Video Cover"
-                          className="w-full h-full object-cover"
+                          src={getYouTubeThumbnail(archiveVideoUrl)}
+                          alt="YouTube Thumbnail"
+                          className="w-full h-full object-cover opacity-80"
                         />
-                        <button
-                          type="button"
-                          onClick={() => setArchiveImage("")}
-                          className="absolute top-2 right-2 p-1.5 bg-black/70 hover:bg-rose-600 text-white rounded-full transition-colors cursor-pointer"
-                          title="Remove custom cover"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                        <span className="absolute bottom-2 left-2 bg-black/70 text-white text-[10px] font-semibold px-2 py-0.5 rounded shadow-xs">
-                          Custom Cover
+                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                          <div className="w-10 h-10 rounded-full bg-rose-600 text-white flex items-center justify-center pl-0.5 shadow-lg">
+                            <Play className="w-5 h-5 fill-white" />
+                          </div>
+                        </div>
+                        <span className="absolute bottom-2 left-2 bg-black/70 text-white text-[10px] font-medium px-2 py-0.5 rounded">
+                          Auto YouTube Thumbnail
                         </span>
                       </div>
-                    ) : archiveVideoUrl.trim() ? (
-                      <div className="space-y-2">
-                        <div className="relative rounded-2xl overflow-hidden border border-gray-200 h-32 bg-gray-900 flex items-center justify-center">
-                          <img
-                            src={getYouTubeThumbnail(archiveVideoUrl)}
-                            alt="YouTube Thumbnail"
-                            className="w-full h-full object-cover opacity-80"
-                          />
-                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                            <div className="w-10 h-10 rounded-full bg-rose-600 text-white flex items-center justify-center pl-0.5 shadow-lg">
-                              <Play className="w-5 h-5 fill-white" />
-                            </div>
-                          </div>
-                          <span className="absolute bottom-2 left-2 bg-black/70 text-white text-[10px] font-medium px-2 py-0.5 rounded">
-                            Auto YouTube Thumbnail
-                          </span>
-                        </div>
-                        <label className="border border-dashed border-gray-200 hover:border-black rounded-xl p-2.5 flex items-center justify-center cursor-pointer transition-colors bg-gray-50/50 hover:bg-gray-50 text-center">
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={handleArchiveImageUpload}
-                            disabled={uploadingArchiveImage}
-                            className="hidden"
-                          />
-                          <span className="text-xs font-semibold text-gray-700">
-                            {uploadingArchiveImage ? "Uploading..." : "📁 Upload Custom Cover Image"}
-                          </span>
-                        </label>
-                      </div>
-                    ) : (
-                      <label className="border-2 border-dashed border-gray-200 hover:border-black rounded-2xl p-4 flex flex-col items-center justify-center cursor-pointer transition-colors bg-gray-50/50 hover:bg-gray-50 text-center">
+                      <label className="border border-dashed border-gray-200 hover:border-black rounded-xl p-2.5 flex items-center justify-center cursor-pointer transition-colors bg-gray-50/50 hover:bg-gray-50 text-center">
                         <input
                           type="file"
                           accept="image/*"
@@ -7501,15 +8286,33 @@ function EditorialDashboardContent() {
                           disabled={uploadingArchiveImage}
                           className="hidden"
                         />
+                        <span className="text-xs font-semibold text-gray-700 flex items-center gap-1.5">
+                          <Upload className="w-3.5 h-3.5 text-gray-500" />
+                          <span>{uploadingArchiveImage ? "Uploading..." : "Upload Custom Cover Image"}</span>
+                        </span>
+                      </label>
+                    </div>
+                  ) : (
+                    <label className="border-2 border-dashed border-gray-200 hover:border-black rounded-2xl p-4 flex flex-col items-center justify-center cursor-pointer transition-colors bg-gray-50/50 hover:bg-gray-50 text-center">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleArchiveImageUpload}
+                        disabled={uploadingArchiveImage}
+                        className="hidden"
+                      />
+                      <div className="text-center flex flex-col items-center">
+                        <Upload className="w-5 h-5 text-gray-400 mb-1.5" />
                         <span className="text-xs font-bold text-gray-900">
-                          {uploadingArchiveImage ? "Uploading Cover..." : "📁 Upload Custom Cover Image"}
+                          {uploadingArchiveImage ? "Uploading Cover..." : "Upload Custom Cover Image"}
                         </span>
                         <p className="text-[10px] text-gray-500 mt-1">PNG, JPG, WEBP up to 5MB (or leave empty to use YouTube thumbnail)</p>
-                      </label>
-                    )}
-                  </div>
+                      </div>
+                    </label>
+                  )}
                 </div>
-              )}
+              </div>
+            )}
 
               <div className="flex items-center justify-end gap-3 pt-3 border-t border-gray-100">
                 <Button
@@ -7804,7 +8607,7 @@ function EditorialDashboardContent() {
                   className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-900 outline-none focus:border-black shadow-xs cursor-pointer"
                 >
                   <option value="interviews">Interviews</option>
-                  <option value="conversations">Conversations</option>
+                  <option value="discussions">Discussions & Debates</option>
                   <option value="cultural">Cultural Programmes</option>
                   <option value="recordings">Event Recordings</option>
                 </select>
@@ -7822,8 +8625,9 @@ function EditorialDashboardContent() {
                   placeholder="https://www.youtube.com/watch?v=dQw4w9WgXcQ"
                   className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium text-gray-900 outline-none focus:border-black shadow-xs"
                 />
-                <p className="text-[11px] text-emerald-600 font-medium mt-1">
-                  ✨ Thumbnail auto-generated directly from YouTube ID (No image upload required).
+                <p className="text-[11px] text-emerald-600 font-medium mt-1 flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  <span>Thumbnail auto-generated directly from YouTube ID (No image upload required).</span>
                 </p>
               </div>
 
@@ -8066,6 +8870,277 @@ function EditorialDashboardContent() {
         </div>
       )}
 
+      {/* View Author / User Details & Settings Modal */}
+      {authorDetailsModalOpen && viewingAuthorDetails && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in font-poppins"
+          onClick={() => {
+            setAuthorDetailsModalOpen(false);
+            setViewingAuthorDetails(null);
+          }}
+        >
+          <div
+            className="relative w-full max-w-lg bg-white rounded-3xl p-6 sm:p-7 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-start justify-between gap-3 border-b border-gray-100 pb-4">
+              <div className="flex items-center gap-3.5 min-w-0">
+                <div className="relative w-14 h-14 rounded-full overflow-hidden bg-gray-900 text-white flex items-center justify-center font-bold text-lg shrink-0 border border-gray-200 shadow-xs">
+                  {viewingAuthorDetails.avatarUrl ? (
+                    <Image src={viewingAuthorDetails.avatarUrl} alt="Avatar" fill className="object-cover" unoptimized />
+                  ) : (
+                    <span>{(viewingAuthorDetails.name || viewingAuthorDetails.email)[0].toUpperCase()}</span>
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-lg font-bold text-gray-950 truncate leading-tight">
+                      {viewingAuthorDetails.name || "No name set"}
+                    </h3>
+                    <span
+                      className={`font-bold text-[10px] uppercase tracking-wider px-2.5 py-0.5 rounded-full border shadow-2xs shrink-0 ${
+                        viewingAuthorDetails.role === "ADMIN"
+                          ? "bg-rose-100 text-rose-800 border-rose-300"
+                          : viewingAuthorDetails.role === "EDITOR"
+                            ? "bg-amber-100 text-amber-800 border-amber-300"
+                            : viewingAuthorDetails.role === "MODERATOR"
+                              ? "bg-sky-100 text-sky-800 border-sky-300"
+                              : viewingAuthorDetails.role === "AUTHOR"
+                                ? "bg-[#E4F953] text-[#040706] border-lime-400"
+                                : "bg-gray-100 text-gray-700 border-gray-300"
+                      }`}
+                    >
+                      {viewingAuthorDetails.role}
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-500 truncate mt-0.5">{viewingAuthorDetails.email}</p>
+                  {viewingAuthorDetails.phone && (
+                    <p className="text-xs text-gray-700 font-medium truncate mt-0.5 flex items-center gap-1.5">
+                      <Phone className="w-3 h-3 text-gray-400 shrink-0" />
+                      <span>{viewingAuthorDetails.phone}</span>
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthorDetailsModalOpen(false);
+                  setViewingAuthorDetails(null);
+                }}
+                className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-500 flex items-center justify-center cursor-pointer transition-colors shrink-0"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Author Bio Section */}
+            <div className="bg-gray-50/80 border border-gray-200/80 rounded-2xl p-4 space-y-1.5 text-xs">
+              <span className="font-bold text-gray-700 uppercase tracking-wider text-[10px] block">Author Biography</span>
+              <p className="text-gray-700 leading-relaxed font-normal italic">
+                {viewingAuthorDetails.bio || "No biography provided yet for this profile."}
+              </p>
+              <div className="pt-2 border-t border-gray-200/60 flex items-center justify-between text-[11px] text-gray-500">
+                <span>Account Created:</span>
+                <span className="font-semibold text-gray-700">
+                  {viewingAuthorDetails.createdAt
+                    ? new Date(viewingAuthorDetails.createdAt).toLocaleDateString("en-IN", {
+                        day: "numeric",
+                        month: "short",
+                        year: "numeric",
+                      })
+                    : "N/A"}
+                </span>
+              </div>
+            </div>
+
+            {/* Settings & Configuration Cards */}
+            <div className="space-y-3">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-gray-900">
+                Author Permissions & Showcase Settings
+              </h4>
+
+              {/* Role Tier Selector */}
+              <div className="flex items-center justify-between p-3.5 bg-white border border-gray-200 rounded-2xl shadow-xs">
+                <div>
+                  <p className="text-xs font-bold text-gray-900">Platform Role Tier</p>
+                  <p className="text-[11px] text-gray-500 mt-0.5">Controls dashboard & submission permissions</p>
+                </div>
+                <select
+                  value={viewingAuthorDetails.role}
+                  onChange={(e) => handleRoleChange(viewingAuthorDetails.id, e.target.value)}
+                  className={`font-bold text-xs uppercase tracking-wider px-3 py-1.5 rounded-xl border outline-none cursor-pointer shadow-xs transition-all ${
+                    viewingAuthorDetails.role === "ADMIN"
+                      ? "bg-rose-100 text-rose-800 border-rose-300"
+                      : viewingAuthorDetails.role === "EDITOR"
+                        ? "bg-amber-100 text-amber-800 border-amber-300"
+                        : viewingAuthorDetails.role === "MODERATOR"
+                          ? "bg-sky-100 text-sky-800 border-sky-300"
+                          : viewingAuthorDetails.role === "AUTHOR"
+                            ? "bg-[#E4F953] text-[#040706] border-lime-400"
+                            : "bg-gray-100 text-gray-700 border-gray-300"
+                  }`}
+                >
+                  <option value="READER">READER</option>
+                  <option value="AUTHOR">AUTHOR</option>
+                  <option value="EDITOR">EDITOR</option>
+                  <option value="MODERATOR">MODERATOR</option>
+                </select>
+              </div>
+
+              {/* Masika Featured Author */}
+              {viewingAuthorDetails.role === "AUTHOR" && (
+                <div className="flex items-center justify-between p-3.5 bg-white border border-gray-200 rounded-2xl shadow-xs">
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-emerald-600 fill-emerald-600" />
+                      <p className="text-xs font-bold text-gray-900">Masika Featured Author</p>
+                    </div>
+                    <p className="text-[11px] text-gray-500 mt-0.5">Spotlight author in the Masika Journal showcase</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleToggleFeaturedAuthor(viewingAuthorDetails.id)}
+                    className={`h-8 px-3.5 rounded-full text-xs font-semibold cursor-pointer shadow-xs transition-all inline-flex items-center gap-1.5 ${
+                      viewingAuthorDetails.isFeatured
+                        ? "bg-emerald-100 text-emerald-800 border border-emerald-300 hover:bg-emerald-200"
+                        : "bg-gray-100 text-gray-700 border border-gray-200 hover:bg-gray-200"
+                    }`}
+                  >
+                    {viewingAuthorDetails.isFeatured ? "★ Featured" : "+ Feature"}
+                  </button>
+                </div>
+              )}
+
+              {/* Shadow Ban */}
+              {viewingAuthorDetails.role === "AUTHOR" && (
+                <div className="flex items-center justify-between p-3.5 bg-white border border-gray-200 rounded-2xl shadow-xs">
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <EyeOff className="w-3.5 h-3.5 text-rose-600" />
+                      <p className="text-xs font-bold text-gray-900">Shadow Ban Status</p>
+                    </div>
+                    <p className="text-[11px] text-gray-500 mt-0.5">Hides all authored works and profile from public view</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleToggleShadowBan(viewingAuthorDetails.id)}
+                    className={`h-8 px-3.5 rounded-full text-xs font-semibold cursor-pointer shadow-xs transition-all inline-flex items-center gap-1.5 ${
+                      viewingAuthorDetails.isShadowBanned
+                        ? "bg-rose-100 text-rose-800 border border-rose-300 hover:bg-rose-200"
+                        : "bg-gray-100 text-gray-700 border border-gray-200 hover:bg-gray-200"
+                    }`}
+                  >
+                    {viewingAuthorDetails.isShadowBanned ? "Shadow Banned" : "Active (Visible)"}
+                  </button>
+                </div>
+              )}
+
+              {/* Display Priority Order */}
+              {viewingAuthorDetails.role === "AUTHOR" && (
+                <div className="flex items-center justify-between p-3.5 bg-white border border-gray-200 rounded-2xl shadow-xs">
+                  <div>
+                    <p className="text-xs font-bold text-gray-900">Display Priority Ranking (#)</p>
+                    <p className="text-[11px] text-gray-500 mt-0.5">Higher number ranks higher in author directory</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min="0"
+                      value={modalPriorityInput}
+                      onChange={(e) => setModalPriorityInput(parseInt(e.target.value, 10) || 0)}
+                      className="w-16 px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-center text-gray-900 outline-none focus:border-black shadow-xs"
+                    />
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => handleSortOrderChange(viewingAuthorDetails.id, modalPriorityInput)}
+                      className="h-8 px-3 text-xs font-semibold rounded-full border border-gray-300 shadow-xs cursor-pointer"
+                    >
+                      Save
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Quick Action Footer */}
+            <div className="flex items-center justify-between gap-2 pt-4 border-t border-gray-100 flex-wrap">
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  icon={<Edit3 className="w-3.5 h-3.5" />}
+                  iconPosition="left"
+                  onClick={() => {
+                    const target = viewingAuthorDetails;
+                    setAuthorDetailsModalOpen(false);
+                    setViewingAuthorDetails(null);
+                    handleOpenEditAuthor(target);
+                  }}
+                  className="h-9 px-3.5 rounded-full text-xs font-semibold border border-gray-300 shadow-xs cursor-pointer"
+                >
+                  Edit Profile
+                </Button>
+                {viewingAuthorDetails.role === "AUTHOR" && (
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    icon={<PenLine className="w-3.5 h-3.5" />}
+                    iconPosition="left"
+                    onClick={() => {
+                      const target = viewingAuthorDetails;
+                      setAuthorDetailsModalOpen(false);
+                      setViewingAuthorDetails(null);
+                      setAddSubmissionAuthorTarget(target);
+                      setAddSubmissionType("STORY");
+                      setAddSubmissionTitle("");
+                      setAddSubmissionDescription("");
+                      setAddSubmissionError(null);
+                      setAddSubmissionModalOpen(true);
+                    }}
+                    className="h-9 px-3.5 rounded-full text-xs font-semibold shadow-xs cursor-pointer"
+                  >
+                    Start Writing
+                  </Button>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2 ml-auto">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  icon={<Trash2 className="w-3.5 h-3.5" />}
+                  iconPosition="left"
+                  onClick={() => {
+                    const target = viewingAuthorDetails;
+                    setAuthorDetailsModalOpen(false);
+                    setViewingAuthorDetails(null);
+                    handleOpenDeleteAuthor(target);
+                  }}
+                  className="h-9 px-3.5 rounded-full text-xs font-semibold text-rose-600 border border-rose-200 hover:bg-rose-50 shadow-xs cursor-pointer"
+                >
+                  Delete
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    setAuthorDetailsModalOpen(false);
+                    setViewingAuthorDetails(null);
+                  }}
+                  className="h-9 px-4 rounded-full text-xs font-semibold border border-gray-300 text-gray-700 hover:bg-gray-100 cursor-pointer shadow-xs"
+                >
+                  Close
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Edit Author / User Modal */}
       {editAuthorModalOpen && editingAuthorTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs animate-in fade-in font-poppins">
@@ -8143,6 +9218,7 @@ function EditorialDashboardContent() {
                     <option value="READER">READER</option>
                     <option value="AUTHOR">AUTHOR</option>
                     <option value="EDITOR">EDITOR</option>
+                    <option value="MODERATOR">MODERATOR</option>
                   </select>
                 </div>
               </div>
@@ -8211,31 +9287,46 @@ function EditorialDashboardContent() {
                 </div>
               </div>
 
-              <div className="space-y-2 pt-2 border-t border-gray-100">
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="edit-author-featured-checkbox"
-                    checked={authorEditIsFeatured}
-                    onChange={(e) => setAuthorEditIsFeatured(e.target.checked)}
-                    className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
-                  />
-                  <label htmlFor="edit-author-featured-checkbox" className="text-xs font-bold text-gray-900 cursor-pointer">
-                    ★ Feature Author on Masika Journal Showcase
-                  </label>
-                </div>
+              {authorEditRole === "AUTHOR" && (
+                <div className="space-y-2 pt-2 border-t border-gray-100">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="edit-author-featured-checkbox"
+                      checked={authorEditIsFeatured}
+                      onChange={(e) => setAuthorEditIsFeatured(e.target.checked)}
+                      className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                    />
+                    <label htmlFor="edit-author-featured-checkbox" className="text-xs font-bold text-gray-900 cursor-pointer">
+                      ★ Feature Author on Masika Journal Showcase
+                    </label>
+                  </div>
 
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-gray-700">Display Priority (#):</span>
-                  <input
-                    type="number"
-                    min="0"
-                    value={authorEditSortOrder}
-                    onChange={(e) => setAuthorEditSortOrder(parseInt(e.target.value, 10) || 0)}
-                    className="w-20 px-3 py-1 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-center text-gray-900 outline-none focus:border-black shadow-xs"
-                  />
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-gray-700">Display Priority (#):</span>
+                    <input
+                      type="number"
+                      min="0"
+                      value={authorEditSortOrder}
+                      onChange={(e) => setAuthorEditSortOrder(parseInt(e.target.value, 10) || 0)}
+                      className="w-20 px-3 py-1 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-center text-gray-900 outline-none focus:border-black shadow-xs"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-2 pt-1 mt-1 border-t border-rose-100">
+                    <input
+                      type="checkbox"
+                      id="edit-author-shadowban-checkbox"
+                      checked={authorEditIsShadowBanned}
+                      onChange={(e) => setAuthorEditIsShadowBanned(e.target.checked)}
+                      className="w-4 h-4 rounded text-rose-600 focus:ring-rose-500 cursor-pointer accent-rose-600"
+                    />
+                    <label htmlFor="edit-author-shadowban-checkbox" className="text-xs font-bold text-rose-600 cursor-pointer flex items-center gap-1">
+                      <EyeOff className="w-3.5 h-3.5" /> Shadow Ban Author — hides all works and public profile
+                    </label>
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-100">
                 <Button
@@ -8349,7 +9440,7 @@ function EditorialDashboardContent() {
                   WRITING STUDIO
                 </span>
                 <h2 className="text-2xl sm:text-3xl font-bold text-gray-950 mt-1">
-                  Write Article / Story for {storyAuthorTarget.name || storyAuthorTarget.email}
+                  Write Article for {storyAuthorTarget.name || storyAuthorTarget.email}
                 </h2>
                 <p className="text-xs text-gray-500 mt-0.5">
                   Write articles, blogs, essays, or stories with rich text formatting, upload cover art, and publish on behalf of {storyAuthorTarget.name || storyAuthorTarget.email}.
@@ -8791,7 +9882,7 @@ function EditorialDashboardContent() {
                   onClick={() => handleAuthorStorySubmit(true)}
                   className="w-full sm:w-auto font-semibold text-xs cursor-pointer"
                 >
-                  {savingAuthorStory ? "Publishing..." : "Publish Article / Story Directly"}
+                  {savingAuthorStory ? "Publishing..." : "Publish Article Directly"}
                 </Button>
               </div>
             </div>
@@ -8877,27 +9968,31 @@ function EditorialDashboardContent() {
             <div className="flex items-center justify-between pb-4 border-b border-gray-100">
               <div className="flex items-center gap-3">
                 <div className={`w-11 h-11 rounded-2xl flex items-center justify-center font-bold shadow-xs ${
-                  addSubmissionType === "PAINTING"
+                  addSubmissionType === "STORY"
+                    ? "bg-gray-100 text-gray-800"
+                    : addSubmissionType === "PAINTING"
                     ? "bg-purple-100 text-purple-800"
                     : "bg-blue-100 text-blue-800"
                 }`}>
-                  {addSubmissionType === "PAINTING" ? "🎨" : "🎬"}
+                  {addSubmissionType === "STORY" ? <FileText className="w-5 h-5" /> : addSubmissionType === "PAINTING" ? <Palette className="w-5 h-5" /> : <Video className="w-5 h-5" />}
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
                     <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-lg ${
-                      addSubmissionType === "PAINTING"
+                      addSubmissionType === "STORY"
+                        ? "bg-gray-100 text-gray-800 border border-gray-200"
+                        : addSubmissionType === "PAINTING"
                         ? "bg-purple-100 text-purple-800 border border-purple-200"
                         : "bg-blue-100 text-blue-800 border border-blue-200"
                     }`}>
-                      {addSubmissionType === "PAINTING" ? "Painting Artwork" : "Video Feature"}
+                      {addSubmissionType === "STORY" ? "Article" : addSubmissionType === "PAINTING" ? "Visual Arts" : "Video Feature"}
                     </span>
                   </div>
                   <h2 className="text-xl sm:text-2xl font-bold text-gray-950 mt-0.5">
-                    Add {addSubmissionType === "PAINTING" ? "Painting" : "Video"} for {addSubmissionAuthorTarget.name || addSubmissionAuthorTarget.email}
+                    Start Writing for {addSubmissionAuthorTarget.name || addSubmissionAuthorTarget.email}
                   </h2>
                   <p className="text-xs text-gray-500">
-                    Publish or save a {addSubmissionType.toLowerCase()} submission on behalf of this author.
+                    Choose a content type and submit on behalf of this author.
                   </p>
                 </div>
               </div>
@@ -8911,7 +10006,21 @@ function EditorialDashboardContent() {
             </div>
 
             {/* Type Switcher */}
-            <div className="grid grid-cols-2 gap-2 p-1.5 bg-gray-100 rounded-2xl">
+            <div className="grid grid-cols-3 gap-2 p-1.5 bg-gray-100 rounded-2xl">
+              <button
+                type="button"
+                onClick={() => {
+                  setAddSubmissionType("STORY");
+                  setAddSubmissionError(null);
+                }}
+                className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  addSubmissionType === "STORY"
+                    ? "bg-white text-gray-900 shadow-xs"
+                    : "text-gray-600 hover:text-gray-900"
+                }`}
+              >
+                <FileText className="w-3.5 h-3.5" /> Article
+              </button>
               <button
                 type="button"
                 onClick={() => {
@@ -8925,7 +10034,7 @@ function EditorialDashboardContent() {
                     : "text-gray-600 hover:text-gray-900"
                 }`}
               >
-                🎨 Painting
+                <Palette className="w-3.5 h-3.5" /> Visual Arts
               </button>
               <button
                 type="button"
@@ -8940,7 +10049,7 @@ function EditorialDashboardContent() {
                     : "text-gray-600 hover:text-gray-900"
                 }`}
               >
-                🎬 Video
+                <Video className="w-3.5 h-3.5" /> Video
               </button>
             </div>
 
@@ -8954,9 +10063,41 @@ function EditorialDashboardContent() {
 
             {/* Form Fields */}
             <div className="space-y-4">
-              {/* Title & Category row */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="sm:col-span-2">
+              {/* STORY: CTA to open Article Studio */}
+              {addSubmissionType === "STORY" && (
+                <div className="rounded-2xl border-2 border-dashed border-gray-200 bg-gray-50 p-8 flex flex-col items-center text-center gap-4">
+                  <div className="w-14 h-14 rounded-2xl bg-gray-900 flex items-center justify-center text-2xl shadow-sm">
+                    <PenLine className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-gray-900">Open Article Studio</p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Writing an article uses the full rich-text editor. Click below to open the Article Studio for{" "}
+                      <span className="font-semibold text-gray-800">{addSubmissionAuthorTarget?.name || addSubmissionAuthorTarget?.email}</span>.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAddSubmissionModalOpen(false);
+                      setStoryAuthorTarget(addSubmissionAuthorTarget);
+                      setStoryStudioTitle("");
+                      setStoryStudioContent("");
+                      setStoryStudioCoverFile(null);
+                      setStoryStudioCoverPreview(null);
+                      setAuthorStoryStudioOpen(true);
+                    }}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-white bg-gray-900 hover:bg-gray-700 border border-gray-800 shadow-xs cursor-pointer transition-all"
+                  >
+                    <BookOpen className="w-4 h-4" />
+                    Open Article Studio
+                  </button>
+                </div>
+              )}
+
+              {/* PAINTING / VIDEO: Title row */}
+              {addSubmissionType !== "STORY" && (
+                <div>
                   <label className="block text-xs font-bold text-gray-900 mb-1.5 uppercase tracking-wider">
                     Title <span className="text-rose-500">*</span>
                   </label>
@@ -8965,37 +10106,16 @@ function EditorialDashboardContent() {
                     required
                     value={addSubmissionTitle}
                     onChange={(e) => setAddSubmissionTitle(e.target.value)}
-                    placeholder={addSubmissionType === "PAINTING" ? "Title of painting / artwork..." : "Title of video..."}
+                    placeholder={addSubmissionType === "PAINTING" ? "Title of painting, photograph, or artwork..." : "Title of video..."}
                     className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-900 outline-none focus:border-black focus:bg-white transition-all shadow-xs"
                   />
                 </div>
-                <div>
-                  <label className="block text-xs font-bold text-gray-900 mb-1.5 uppercase tracking-wider">
-                    Category
-                  </label>
-                  <select
-                    value={addSubmissionCategory}
-                    onChange={(e) => setAddSubmissionCategory(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-900 outline-none focus:border-black focus:bg-white transition-all shadow-xs cursor-pointer"
-                  >
-                    {(allPlatformCategories.length > 0 ? allPlatformCategories : categoriesList).length > 0 ? (
-                      (allPlatformCategories.length > 0 ? allPlatformCategories : categoriesList).map((cat) => (
-                        <option key={cat.id} value={cat.name}>{cat.name}</option>
-                      ))
-                    ) : (
-                      <>
-                        <option value="Culture">Culture</option>
-                        <option value="Literature">Literature</option>
-                        <option value="Fiction">Fiction</option>
-                        <option value="Art">Art</option>
-                        <option value="General">General</option>
-                      </>
-                    )}
-                  </select>
-                </div>
-              </div>
+              )}
 
-              {/* Description (Required) */}
+
+
+              {/* Description (Required) - only for PAINTING / VIDEO */}
+              {addSubmissionType !== "STORY" && (
               <div>
                 <label className="block text-xs font-bold text-gray-900 mb-1.5 uppercase tracking-wider">
                   Description <span className="text-rose-500">*</span>
@@ -9007,18 +10127,21 @@ function EditorialDashboardContent() {
                   onChange={(e) => setAddSubmissionDescription(e.target.value)}
                   placeholder={
                     addSubmissionType === "PAINTING"
-                      ? "Describe the painting, medium (oil, acrylic, watercolor), inspiration, dimensions..."
+                      ? "Describe the visual arts piece, medium (oil, acrylic, photo, digital), camera, inspiration, dimensions..."
                       : "Describe what this video is about, creators, background..."
                   }
                   className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium text-gray-900 outline-none focus:border-black focus:bg-white transition-all shadow-xs resize-none"
                 />
               </div>
+              )}
+
+
 
               {/* PAINTING Type Specifics */}
               {addSubmissionType === "PAINTING" && (
                 <div>
                   <label className="block text-xs font-bold text-gray-900 mb-1.5 uppercase tracking-wider">
-                    Painting Artwork Image <span className="text-rose-500">*</span>
+                    Visual Arts Image <span className="text-rose-500">*</span>
                   </label>
                   <input
                     type="file"
@@ -9063,7 +10186,7 @@ function EditorialDashboardContent() {
                           <Upload className="w-5 h-5" />
                         </div>
                         <div>
-                          <p className="text-xs font-bold text-gray-900">Click to upload artwork image</p>
+                          <p className="text-xs font-bold text-gray-900">Click to upload visual arts artwork</p>
                           <p className="text-[11px] text-gray-400 mt-0.5">PNG, JPG, or WEBP up to 25MB</p>
                         </div>
                       </div>
@@ -9093,23 +10216,22 @@ function EditorialDashboardContent() {
                   {addSubmissionVideoUrl && (() => {
                     const embed = getAddSubmissionVideoEmbed(addSubmissionVideoUrl);
                     if (!embed) return (
-                      <p className="text-[11px] text-amber-600 font-medium">Please enter a valid YouTube or Vimeo URL to preview.</p>
+                      <p className="text-[11px] text-amber-600 font-medium">Please enter a valid YouTube, Vimeo, Google Drive, Dailymotion, or MP4 URL.</p>
                     );
                     return (
-                      <div className="rounded-2xl overflow-hidden border border-gray-200 shadow-xs bg-black aspect-video max-h-56">
-                        {embed.type === "youtube" ? (
-                          <iframe
-                            src={`https://www.youtube-nocookie.com/embed/${embed.id}`}
-                            title="YouTube preview"
-                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                            allowFullScreen
-                            className="w-full h-full border-0"
+                      <div className="rounded-2xl overflow-hidden border border-gray-200 shadow-xs bg-black aspect-video max-h-56 flex items-center justify-center">
+                        {embed.type === "direct" ? (
+                          <video
+                            src={formatAssetUrl(embed.directUrl)}
+                            controls
+                            playsInline
+                            className="w-full h-full object-contain"
                           />
                         ) : (
                           <iframe
-                            src={`https://player.vimeo.com/video/${embed.id}`}
-                            title="Vimeo preview"
-                            allow="autoplay; fullscreen; picture-in-picture"
+                            src={embed.embedUrl}
+                            title="Video preview"
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
                             allowFullScreen
                             className="w-full h-full border-0"
                           />
@@ -9184,6 +10306,7 @@ function EditorialDashboardContent() {
                 Cancel
               </Button>
 
+              {addSubmissionType !== "STORY" && (
               <div className="flex items-center gap-2 w-full sm:w-auto">
                 <Button
                   type="button"
@@ -9205,9 +10328,229 @@ function EditorialDashboardContent() {
                   onClick={() => handleAuthorSubmissionSubmit(true)}
                   className="w-full sm:w-auto font-semibold text-xs cursor-pointer"
                 >
-                  {savingAddSubmission ? "Publishing..." : `Publish ${addSubmissionType === "PAINTING" ? "Painting" : "Video"} Directly`}
+                  {savingAddSubmission ? "Publishing..." : `Publish ${addSubmissionType === "PAINTING" ? "Visual Arts" : "Video"} Directly`}
                 </Button>
               </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Unpublish Reason Modal */}
+      {unpublishTarget && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in font-poppins"
+          onClick={() => !unpublishSaving && setUnpublishTarget(null)}
+        >
+          <div
+            className="relative w-full max-w-md bg-white rounded-[28px] shadow-2xl p-6 sm:p-8 flex flex-col gap-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-start gap-4">
+              <div className="w-11 h-11 rounded-2xl bg-amber-100 border border-amber-200 flex items-center justify-center shrink-0">
+                <Archive className="w-5 h-5 text-amber-700" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h2 className="text-lg font-bold text-gray-950 leading-tight">Unpublish Content</h2>
+                <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
+                  This will hide{" "}
+                  <span className="font-semibold text-gray-800 truncate">"{unpublishTarget.title}"</span>{" "}
+                  from the public catalog. The author will be notified with your reason.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => !unpublishSaving && setUnpublishTarget(null)}
+                className="p-1.5 rounded-full text-gray-400 hover:text-black hover:bg-gray-100 cursor-pointer transition shrink-0"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Reason presets */}
+            <div>
+              <label className="block text-xs font-bold text-gray-800 uppercase tracking-wider mb-2">
+                Reason for unpublishing <span className="text-rose-500">*</span>
+              </label>
+              <div className="flex flex-wrap gap-1.5 mb-3">
+                {[
+                  "Content violates guidelines",
+                  "Requires revision",
+                  "Duplicate submission",
+                  "Author requested removal",
+                  "Copyright issue",
+                  "Low quality content",
+                ].map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => setUnpublishReason(preset)}
+                    className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg border cursor-pointer transition-all ${
+                      unpublishReason === preset
+                        ? "bg-gray-900 text-white border-gray-900"
+                        : "bg-gray-50 text-gray-600 border-gray-200 hover:border-gray-400 hover:text-gray-900"
+                    }`}
+                  >
+                    {preset}
+                  </button>
+                ))}
+              </div>
+              <textarea
+                rows={3}
+                value={unpublishReason}
+                onChange={(e) => setUnpublishReason(e.target.value)}
+                placeholder="Describe the reason in detail (required)..."
+                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl text-xs font-medium text-gray-900 outline-none focus:border-gray-800 focus:bg-white transition-all resize-none shadow-xs"
+                maxLength={500}
+              />
+            </div>
+
+            {/* Error */}
+            {unpublishError && (
+              <div className="flex items-center gap-2 p-3 bg-rose-50 border border-rose-200 rounded-2xl text-xs font-semibold text-rose-700">
+                <XCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                {unpublishError}
+              </div>
+            )}
+
+            {/* Actions */}
+            <div className="flex items-center gap-3 pt-1">
+              <Button
+                type="button"
+                variant="secondary"
+                size="md"
+                onClick={() => setUnpublishTarget(null)}
+                disabled={unpublishSaving}
+                className="flex-1 border border-gray-200 text-xs font-semibold cursor-pointer"
+              >
+                Cancel
+              </Button>
+              <button
+                type="button"
+                disabled={unpublishSaving || !unpublishReason.trim()}
+                onClick={handleConfirmUnpublish}
+                className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed border border-amber-700 shadow-xs cursor-pointer transition-all"
+              >
+                {unpublishSaving ? (
+                  <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Unpublishing...</>
+                ) : (
+                  <><Archive className="w-3.5 h-3.5" /> Confirm Unpublish</>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Place Work Under Dispute Action Modal ─────────────────────────────── */}
+      {disputeModalReport && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in font-poppins"
+          onClick={() => !disputeActionSaving && setDisputeModalReport(null)}
+        >
+          <div
+            className="relative w-full max-w-lg bg-white rounded-3xl p-6 sm:p-7 shadow-2xl space-y-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-3.5">
+                <div className="w-11 h-11 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                  <AlertTriangle className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-gray-950 leading-snug">
+                    Place Work Under Dispute
+                  </h3>
+                  <p className="text-xs text-gray-500 mt-0.5 font-medium line-clamp-1">
+                    "{disputeModalReport.storyTitle || "Reported Work"}"
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                disabled={disputeActionSaving}
+                onClick={() => setDisputeModalReport(null)}
+                className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors cursor-pointer shrink-0 disabled:opacity-50"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Explanatory Banner */}
+            <div className="bg-amber-50/90 border border-amber-200/90 rounded-2xl p-4 text-xs text-amber-950 space-y-2">
+              <p className="font-semibold text-amber-900 flex items-center gap-1.5">
+                <Clock className="w-4 h-4 text-amber-600 shrink-0" />
+                What happens when a work is marked as Disputed:
+              </p>
+              <ul className="list-disc pl-4 space-y-1 text-amber-900/90 text-[11px] leading-relaxed">
+                <li>The work is <strong>immediately hidden</strong> from the public catalog & search.</li>
+                <li>The author receives an in-app notification with a <strong>30-day window</strong> to submit their explanation/proof.</li>
+                <li>If the author does not respond within 30 days, the work will be <strong>automatically unpublished</strong>.</li>
+              </ul>
+            </div>
+
+            {/* Report Reason Context */}
+            {disputeModalReport.reason && (
+              <div className="bg-gray-50 border border-gray-200 rounded-2xl p-3 text-xs space-y-1">
+                <div className="flex items-center justify-between text-gray-500 text-[10px] uppercase tracking-wider font-semibold">
+                  <span>Report Reason</span>
+                  <span>Reported by {disputeModalReport.reporterName || disputeModalReport.reporterEmail}</span>
+                </div>
+                <p className="font-bold text-gray-900">{disputeModalReport.reason.replace(/_/g, " ")}</p>
+                {disputeModalReport.details && (
+                  <p className="text-gray-600 text-xs italic">"{disputeModalReport.details}"</p>
+                )}
+              </div>
+            )}
+
+            {/* Dispute Reason / Editorial Note Input */}
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 mb-1.5">
+                Dispute Reason / Editorial Note for Author <span className="text-gray-400 font-normal normal-case">(Visible to author)</span>
+              </label>
+              <textarea
+                rows={4}
+                value={disputeEditorialReason}
+                onChange={(e) => setDisputeEditorialReason(e.target.value)}
+                placeholder="State the reason for dispute (e.g. Ownership claim filed, plagiarism review required) and specify what proof or clarification the author needs to submit..."
+                className="w-full p-3.5 bg-gray-50 border border-gray-200 rounded-2xl text-xs text-gray-900 placeholder-gray-400 outline-none focus:border-amber-500 focus:bg-white resize-y font-normal transition-all"
+              />
+            </div>
+
+            {/* Error Message */}
+            {disputeActionError && (
+              <div className="flex items-center gap-2 p-3 bg-rose-50 border border-rose-200 rounded-2xl text-xs font-semibold text-rose-700">
+                <XCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                {disputeActionError}
+              </div>
+            )}
+
+            {/* Modal Actions */}
+            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-gray-100">
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                disabled={disputeActionSaving}
+                onClick={() => setDisputeModalReport(null)}
+                className="h-9 px-4 rounded-full text-xs font-semibold border border-gray-300 text-gray-700 hover:bg-gray-100 cursor-pointer shadow-xs"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="primary"
+                size="sm"
+                disabled={disputeActionSaving}
+                onClick={handleConfirmDisputeAction}
+                className="h-9 px-5 bg-amber-600 hover:bg-amber-700 text-white rounded-full text-xs font-semibold shadow-xs cursor-pointer disabled:opacity-50"
+                icon={<AlertTriangle className="w-3.5 h-3.5" />}
+                iconPosition="left"
+              >
+                {disputeActionSaving ? "Placing Under Dispute..." : "Confirm & Hide Work"}
+              </Button>
             </div>
           </div>
         </div>

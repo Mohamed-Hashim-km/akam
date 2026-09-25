@@ -133,7 +133,7 @@ export class SubscriptionService {
 
       // Dispatch in-app notification to user
       try {
-        await this.notificationsService.notifySubscriptionGranted(userId, 6, false);
+        await this.notificationsService.notifySubscriptionGranted(userId, 6, false, sub.endDate);
       } catch (notifErr: any) {
         this.logger.warn(`Failed to dispatch in-app notification: ${notifErr.message}`);
       }
@@ -159,7 +159,7 @@ export class SubscriptionService {
 
     if (sub) {
       try {
-        await this.notificationsService.notifySubscriptionGranted(userId, 6, true);
+        await this.notificationsService.notifySubscriptionGranted(userId, 6, true, sub.endDate);
       } catch (notifErr: any) {
         this.logger.warn(`Failed to dispatch student in-app notification: ${notifErr.message}`);
       }
@@ -188,8 +188,8 @@ export class SubscriptionService {
     const isActive = row.status === 'ACTIVE' && new Date(row.endDate) > new Date();
     return {
       subscriptionStatus: isActive ? 'ACTIVE' : 'EXPIRED',
-      subscriptionEndDate: new Date(row.endDate).toISOString(),
-      isStudent: row.isStudent,
+      subscriptionEndDate: isActive ? new Date(row.endDate).toISOString() : null,
+      isStudent: Boolean(isActive && row.isStudent),
     };
   }
 
@@ -420,8 +420,6 @@ export class SubscriptionService {
           referenceId: refId,
           fullName: user.name || cleanEmail.split('@')[0],
           institution: 'Verified Scholar / Student Member',
-          studentIdNumber: 'EDITORIAL_PASS',
-          course: 'Academic Scholar',
           email: cleanEmail,
           idCardUrl: '/images/home/aboutDigital.png',
           submittedAt: new Date().toISOString(),
@@ -459,7 +457,7 @@ export class SubscriptionService {
     // Send in-app notification to the user
     if (sub && user.id) {
       try {
-        await this.notificationsService.notifySubscriptionGranted(user.id, months, isStudent);
+        await this.notificationsService.notifySubscriptionGranted(user.id, months, isStudent, sub.endDate);
       } catch (notifErr: any) {
         this.logger.warn(`Failed to dispatch in-app notification to user: ${notifErr.message}`);
       }
@@ -527,8 +525,6 @@ export class SubscriptionService {
           referenceId: refId,
           fullName: row.name || cleanEmail.split('@')[0],
           institution: 'Verified Scholar / Student Member',
-          studentIdNumber: 'EDITORIAL_PASS',
-          course: 'Academic Scholar',
           email: cleanEmail,
           idCardUrl: '/images/home/aboutDigital.png',
           submittedAt: new Date().toISOString(),

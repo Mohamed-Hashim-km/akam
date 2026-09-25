@@ -11,9 +11,23 @@ export class EventsController {
   constructor(private readonly eventsService: EventsService) {}
 
   @Get()
-  @ApiOperation({ summary: 'List all published events, workshops, reading sessions, and past archives' })
+  @ApiOperation({ summary: 'List all published events, workshops, reading sessions, and past archives (optionally paginated)' })
   @ApiQuery({ name: 'type', enum: EventType, required: false })
-  findAllPublished(@Query('type') type?: EventType) {
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({ name: 'upcoming', required: false, type: Boolean })
+  findAllPublished(
+    @Query('type') type?: EventType,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('upcoming') upcoming?: string,
+  ) {
+    if (page !== undefined || limit !== undefined) {
+      const pageNum = Math.max(1, parseInt(page || '1', 10));
+      const limitNum = Math.max(1, Math.min(50, parseInt(limit || '6', 10)));
+      const isUpcoming = upcoming !== 'false';
+      return this.eventsService.findPublishedPaginated(type, pageNum, limitNum, isUpcoming);
+    }
     return this.eventsService.findAllPublished(type);
   }
 

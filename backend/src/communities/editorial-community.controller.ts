@@ -24,14 +24,14 @@ class UpdateReportStatusDto {
 @ApiTags('Editorial — Community Moderation')
 @Controller('editorial/community')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('EDITOR', 'ADMIN')
+@Roles('EDITOR', 'ADMIN', 'MODERATOR')
 @ApiBearerAuth()
 export class EditorialCommunityController {
   constructor(private readonly prisma: PrismaService) {}
 
   // ─── Community Report Queue ───────────────────────────────────────────────
   @Get('reports')
-  @ApiOperation({ summary: '[EDITOR/ADMIN] Get community report queue' })
+  @ApiOperation({ summary: '[EDITOR/ADMIN/MODERATOR] Get community report queue' })
   @ApiQuery({ name: 'status', enum: ['PENDING', 'DISMISSED', 'ACTIONED', 'ALL'], required: false })
   @ApiQuery({ name: 'page', required: false })
   @ApiQuery({ name: 'limit', required: false })

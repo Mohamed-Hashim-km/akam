@@ -34,6 +34,10 @@ export class CreateStoryDto {
   @IsOptional()
   @IsString()
   mediaUrl?: string; // For VIDEO: YouTube/Vimeo URL
+
+  @IsOptional()
+  @IsString()
+  coverImageUrl?: string;
 }
 
 
