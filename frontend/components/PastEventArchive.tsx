@@ -77,9 +77,10 @@ export const PastEventArchive: React.FC<PastEventArchiveProps> = ({
   useEffect(() => {
     // Props-seed path (backward compat — if caller passes events directly)
     if (initialEvents !== undefined) {
-      const sliced = initialEvents.length > LIMIT ? initialEvents.slice(0, LIMIT) : initialEvents;
+      const filtered = initialEvents.filter((e: any) => !e.type || e.type === "PAST_ARCHIVE");
+      const sliced = filtered.length > LIMIT ? filtered.slice(0, LIMIT) : filtered;
       setEventList(sliced);
-      setHasMore(initialHasMore !== undefined ? initialHasMore : initialEvents.length > LIMIT);
+      setHasMore(initialHasMore !== undefined ? initialHasMore : filtered.length > LIMIT);
       setIsInitialLoading(false);
       return;
     }
@@ -90,8 +91,9 @@ export const PastEventArchive: React.FC<PastEventArchiveProps> = ({
         const res = await fetch(`${API_BASE_URL}/events/past-archives?page=1&limit=${LIMIT}`);
         if (!res.ok) return;
         const json = await res.json();
-        const data: any[] = json.data ?? (Array.isArray(json) ? json : []);
+        const raw: any[] = json.data ?? (Array.isArray(json) ? json : []);
         const meta = json.meta;
+        const data = raw.filter((e: any) => !e.type || e.type === "PAST_ARCHIVE");
 
         setEventList(data.map(mapRawToPastEvent));
         // Server returns meta.hasMore — use it directly
@@ -117,8 +119,9 @@ export const PastEventArchive: React.FC<PastEventArchiveProps> = ({
       const res = await fetch(`${API_BASE_URL}/events/past-archives?page=${nextPage}&limit=${LIMIT}`);
       if (!res.ok) { setHasMore(false); return; }
       const json = await res.json();
-      const data: any[] = json.data ?? (Array.isArray(json) ? json : []);
+      const raw: any[] = json.data ?? (Array.isArray(json) ? json : []);
       const meta = json.meta;
+      const data = raw.filter((e: any) => !e.type || e.type === "PAST_ARCHIVE");
 
       if (data.length > 0) {
         setEventList((prev) => {
@@ -244,7 +247,7 @@ export const PastEventArchive: React.FC<PastEventArchiveProps> = ({
                 {/* Card Content */}
                 <div className="p-5 flex flex-col justify-between grow">
                   <div>
-                    <h3 className="text-base sm:text-lg font-bold text-gray-900 leading-snug mb-2 font-poppins group-hover:text-sky-600 transition-colors">
+                    <h3 className="text-base sm:text-lg font-semibold leading-snug mb-2 font-poppins group-hover:text-sky-600 transition-colors">
                       {item.title}
                     </h3>
                     <p className="text-xs sm:text-sm text-gray-500 font-normal leading-relaxed font-poppins mb-3">

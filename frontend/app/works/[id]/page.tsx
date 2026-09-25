@@ -27,6 +27,7 @@ import {
   Play,
   Video,
   Palette,
+  Lock,
 } from "lucide-react";
 import { Swiper, SwiperSlide } from "swiper/react";
 import { Navigation } from "swiper/modules";
@@ -38,10 +39,22 @@ import { useSubscription } from "@/lib/useSubscription";
 import dynamic from "next/dynamic";
 
 const FreemiumPaywall = dynamic(() => import("@/components/FreemiumPaywall"), { ssr: false });
+const StudentVerificationModal = dynamic(() => import("@/components/StudentVerificationModal"), { ssr: false });
 
 // Swiper CSS imports
 import "swiper/css";
 import "swiper/css/navigation";
+
+interface DisputeInfo {
+  id: string;
+  reason: string;
+  details?: string | null;
+  editorialNote?: string | null;
+  disputedAt: string;
+  disputeExpiresAt?: string | null;
+  authorResponse?: string | null;
+  authorRespondedAt?: string | null;
+}
 
 interface StoryDetail {
   id: string;
@@ -64,6 +77,7 @@ interface StoryDetail {
   hasFullAccess?: boolean;
   totalLength?: number;
   previewLength?: number;
+  disputeInfo?: DisputeInfo | null;
 }
 
 interface CommentItem {
@@ -113,14 +127,25 @@ export default function WorkDetailPage() {
   const [submittingReport, setSubmittingReport] = useState(false);
   const [reportSuccess, setReportSuccess] = useState(false);
 
+  // Author Dispute Response Modal State
+  const [disputeResponseModalOpen, setDisputeResponseModalOpen] = useState(false);
+  const [disputeResponseText, setDisputeResponseText] = useState("");
+  const [submittingDisputeResponse, setSubmittingDisputeResponse] = useState(false);
+
+  // Student Verification Modal — lifted to page level so it survives FreemiumPaywall unmount
+  const [studentModalOpen, setStudentModalOpen] = useState(false);
+
   // Reading Progress State
   const [readingProgress, setReadingProgress] = useState(0);
   const progressTimerRef = useRef<NodeJS.Timeout | null>(null);
   const storyContentRef = useRef<HTMLDivElement | null>(null);
 
+  // Active painting gallery slide
+  const [activePaintingIndex, setActivePaintingIndex] = useState(0);
+
   // Load user data from localStorage
   // ── Freemium / Subscription ─────────────────────────────────────────────
-  const { isSubscribed, refreshSubscription } = useSubscription();
+  const { isSubscribed, isLoading: isSubscriptionLoading, refreshSubscription } = useSubscription();
 
   const loadUser = () => {
     const savedUser = localStorage.getItem("akam_user");
@@ -437,6 +462,32 @@ export default function WorkDetailPage() {
     }
   };
 
+  const handleSubmitDisputeClarification = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!story || !disputeResponseText.trim()) return;
+    setSubmittingDisputeResponse(true);
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/stories/${story.id}/dispute-response`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ response: disputeResponseText.trim() }),
+      });
+      if (res.ok) {
+        alert("Your clarification response has been submitted to the Editorial Board.");
+        setDisputeResponseModalOpen(false);
+        fetchStoryData(false);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(err.message || "Failed to submit dispute response");
+      }
+    } catch (e) {
+      console.error("Failed to submit dispute response", e);
+      alert("Error submitting dispute response");
+    } finally {
+      setSubmittingDisputeResponse(false);
+    }
+  };
+
   const handleShare = () => {
     if (typeof window !== "undefined") {
       navigator.clipboard.writeText(window.location.href);
@@ -445,34 +496,47 @@ export default function WorkDetailPage() {
     }
   };
 
+  // ─── Markdown / HTML helpers (matching submit/page.tsx Live Reader View) ───
+  const convertMarkdownToHtml = (mdStr: string): string => {
+    if (!mdStr) return "";
+    let html = mdStr.replace(/\r\n/g, "\n");
+    html = html.replace(/&nbsp;/gi, " ").replace(/&#160;/gi, " ");
+    html = html.replace(/!\[(.*?)\]\((.*?)\)/g, '<div contenteditable="false" class="my-6 text-center select-none"><img src="$2" alt="$1" class="max-h-[420px] w-auto mx-auto rounded-2xl border border-gray-200 shadow-md object-cover inline-block" /></div><p><br></p>');
+    html = html.replace(/^###\s+(.*)$/gm, '<h3 class="text-xl font-bold my-3 text-gray-900">$1</h3>');
+    html = html.replace(/^##\s+(.*)$/gm, '<h2 class="text-2xl font-bold my-4 text-gray-950">$1</h2>');
+    html = html.replace(/\*\*(.*?)\*\*/g, "<b>$1</b>").replace(/__(.*?)__/g, "<b>$1</b>");
+    html = html.replace(/\*(.*?)\*/g, "<i>$1</i>");
+    html = html.replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-emerald-700 underline font-medium hover:text-emerald-900">$1</a>');
+    html = html.replace(/^>\s+(.*)$/gm, '<blockquote class="border-l-4 border-emerald-500 pl-4 py-2 italic my-4 text-gray-800 bg-gray-50/70 rounded-r-xl">$1</blockquote>');
+    html = html.replace(/^[\*\-]\s+(.*)$/gm, '<ul class="my-2"><li class="ml-4 list-disc mb-1 text-gray-900">$1</li></ul>');
+    html = html.replace(/^\d+\.\s+(.*)$/gm, '<ol class="my-2"><li class="ml-4 list-decimal mb-1 text-gray-900">$1</li></ol>');
+    html = html.replace(/\*\*/g, "");
+    const lines = html.split("\n");
+    const resultBlocks: string[] = [];
+    let currentParagraphLines: string[] = [];
+    const flushParagraph = () => {
+      if (currentParagraphLines.length > 0) {
+        const text = currentParagraphLines.join("<br>");
+        if (text.trim()) resultBlocks.push(`<p class="mb-6 leading-[1.9] text-gray-900 whitespace-pre-wrap">${text}</p>`);
+        currentParagraphLines = [];
+      }
+    };
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) { flushParagraph(); continue; }
+      if (trimmed.startsWith('<div contenteditable="false"') || trimmed.startsWith("<h2") || trimmed.startsWith("<h3") || trimmed.startsWith("<blockquote") || trimmed.startsWith("<ul") || trimmed.startsWith("<ol") || trimmed.startsWith("<p")) {
+        flushParagraph(); resultBlocks.push(trimmed); continue;
+      }
+      currentParagraphLines.push(trimmed);
+    }
+    flushParagraph();
+    return resultBlocks.join("");
+  };
+
   const renderStoryBody = (contentStr?: string) => {
     if (!contentStr || !contentStr.trim()) {
-      return (
-       null
-      );
+      return null;
     }
-
-    // Markdown -> HTML inline converter
-    const mdToHtml = (md: string): string => {
-      let h = md.replace(/&nbsp;/gi, " ");
-      // Headings
-      h = h.replace(/^###\s+(.*)$/gm, '<h3 class="text-xl font-bold my-4 text-gray-900">$1</h3>');
-      h = h.replace(/^##\s+(.*)$/gm, '<h2 class="text-2xl font-bold my-5 text-gray-950">$1</h2>');
-      // Bold / Italic
-      h = h.replace(/\*\*(.*?)\*\*/g, "<b>$1</b>");
-      h = h.replace(/__(.*?)__/g, "<b>$1</b>");
-      h = h.replace(/\*(.*?)\*/g, "<i>$1</i>");
-      // Blockquote
-      h = h.replace(/^>\s+(.*)$/gm, '<blockquote class="border-l-4 border-emerald-500 pl-4 py-2 italic my-4 text-gray-800 bg-gray-50/70 rounded-r-xl">$1</blockquote>');
-      // Links
-      h = h.replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-emerald-700 underline font-medium hover:text-emerald-900">$1</a>');
-      // Lists
-      h = h.replace(/^[\*\-]\s+(.*)$/gm, '<li class="ml-5 list-disc mb-1 text-gray-900">$1</li>');
-      h = h.replace(/^(\d+)\.\s+(.*)$/gm, '<li class="ml-5 list-decimal mb-1 text-gray-900">$2</li>');
-      // Strip leftover ** markers
-      h = h.replace(/\*\*/g, "");
-      return h;
-    };
 
     // Split at image boundaries
     const withImgs = contentStr.replace(/!\[(.*?)\]\((.*?)\)/g, '<img src="$2" alt="$1" />');
@@ -496,59 +560,29 @@ export default function WorkDetailPage() {
     }
     if (parts.length === 0) parts.push({ type: "text", value: contentStr });
 
-    // Render
+    // Render with identical typography prose tokens as submit/page.tsx:L821
     return (
-      <div className="space-y-0">
-        {parts.map((part, idx) => {
+      <div className="space-y-4 pt-2 text-gray-900 font-normal text-base sm:text-lg">
+        {parts.map((part, index) => {
           if (part.type === "image") {
             return (
-              <div key={idx} className="my-8 sm:my-10 flex justify-center">
+              <div key={index} className="my-6 sm:my-8 flex justify-center">
                 <img
-                  src={part.src}
+                  src={formatAssetUrl(part.src)}
                   alt={part.alt}
-                  className="w-full max-w-4xl h-auto max-h-[600px] object-cover rounded-2xl shadow-xs"
+                  className="w-full max-w-3xl h-auto max-h-[500px] object-cover rounded-2xl shadow-xs"
                 />
               </div>
             );
           }
-
-          // Text — line-by-line: first blank = paragraph end, extra blanks = section gap
-          const lines = part.value.replace(/\r\n/g, "\n").split("\n");
-          const blocks: React.ReactNode[] = [];
-          let paraLines: string[] = [];
-
-          const flushPara = (key: string) => {
-            if (paraLines.length > 0) {
-              const combined = paraLines.join("<br />");
-              if (combined.trim()) {
-                blocks.push(
-                  <div
-                    key={key}
-                    className="text-[#1A1A1A] text-base sm:text-lg leading-[1.9] mb-6 font-normal [&_b]:font-bold [&_i]:italic [&_a]:text-emerald-700 [&_a]:underline [&_a]:hover:text-emerald-900 [&_h2]:text-2xl [&_h2]:font-bold [&_h2]:my-5 [&_h2]:text-gray-950 [&_h3]:text-xl [&_h3]:font-bold [&_h3]:my-4 [&_h3]:text-gray-900 [&_blockquote]:border-l-4 [&_blockquote]:border-emerald-500 [&_blockquote]:pl-4 [&_blockquote]:py-2 [&_blockquote]:italic [&_blockquote]:my-4 [&_blockquote]:bg-gray-50/70 [&_blockquote]:rounded-r-xl [&_li]:ml-5 [&_li]:list-disc [&_li]:mb-1"
-                    dangerouslySetInnerHTML={{ __html: mdToHtml(combined) }}
-                  />
-                );
-              }
-              paraLines = [];
-            }
-          };
-
-          lines.forEach((line, li) => {
-            if (line.trim() === "") {
-              if (paraLines.length > 0) {
-                flushPara(`${idx}-p-${li}`);
-              } else {
-                blocks.push(
-                  <div key={`${idx}-gap-${li}`} className="mb-10 select-none" aria-hidden="true" />
-                );
-              }
-            } else {
-              paraLines.push(line);
-            }
-          });
-          flushPara(`${idx}-p-end`);
-
-          return <div key={idx}>{blocks}</div>;
+          const renderedChunkHtml = convertMarkdownToHtml(part.value);
+          return (
+            <div
+              key={index}
+              className="prose prose-lg max-w-none text-gray-900 leading-[1.9] font-normal [&_p]:mb-6 [&_p]:mt-0 [&_p]:leading-[1.9] [&_p]:text-[#1A1A1A] [&_b]:font-bold [&_strong]:font-bold [&_i]:italic [&_em]:italic [&_a]:text-emerald-700 [&_a]:underline [&_a]:font-medium [&_ul]:list-disc [&_ul]:pl-6 [&_ul]:mb-4 [&_ol]:list-decimal [&_ol]:pl-6 [&_ol]:mb-4 [&_h2]:text-2xl [&_h2]:font-bold [&_h2]:mt-6 [&_h2]:mb-3 [&_h2]:text-gray-950 [&_h3]:text-xl [&_h3]:font-bold [&_h3]:mt-5 [&_h3]:mb-2 [&_h3]:text-gray-900 [&_blockquote]:border-l-4 [&_blockquote]:border-emerald-500 [&_blockquote]:pl-4 [&_blockquote]:py-2 [&_blockquote]:italic [&_blockquote]:my-4 [&_blockquote]:bg-gray-50/70 [&_blockquote]:rounded-r-xl"
+              dangerouslySetInnerHTML={{ __html: renderedChunkHtml }}
+            />
+          );
         })}
       </div>
     );
@@ -583,6 +617,11 @@ export default function WorkDetailPage() {
       </div>
     );
   }
+
+  const userRoleUpper = (user?.role || "").toUpperCase();
+  const isStaff = ["ADMIN", "EDITOR", "EDITORIAL", "CHIEF_EDITOR", "STAFF_EDITOR", "MODERATOR"].includes(userRoleUpper);
+  const isAuthor = Boolean(user && (user.id === story.authorId || user.email === story.authorEmail));
+  const canReadFull = !isSubscriptionLoading && (isStaff || isAuthor || isSubscribed || story.hasFullAccess);
 
   return (
     <div className="min-h-screen bg-[#F9FAFB] font-poppins relative">
@@ -642,12 +681,121 @@ export default function WorkDetailPage() {
 
       {/* Story Main Reader Content */}
       <main className="container max-w-5xl lg:max-w-6xl px-4 sm:px-6 lg:px-8 mx-auto py-10 sm:py-16">
+        {/* ── Active Dispute Investigation Notice (Visible only to Author and Editorial Board) ── */}
+        {story.status === "DISPUTED" && (() => {
+          const daysLeft = story.disputeInfo?.disputeExpiresAt
+            ? Math.max(0, Math.ceil((new Date(story.disputeInfo.disputeExpiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
+            : story.disputeInfo?.disputedAt
+            ? Math.max(0, 30 - Math.ceil((Date.now() - new Date(story.disputeInfo.disputedAt).getTime()) / (1000 * 60 * 60 * 24)))
+            : 30;
+
+          return (
+            <div className="mb-10 bg-gradient-to-r from-amber-50/95 via-amber-50/50 to-white border border-amber-300/90 rounded-[24px] p-5 sm:p-6 shadow-xs">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-start gap-3.5">
+                  <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0 shadow-2xs mt-0.5">
+                    <AlertCircle className="w-6 h-6" />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="text-base sm:text-lg font-bold text-gray-900">Work Under Dispute Investigation</h3>
+                      <span className="bg-amber-100 text-amber-800 font-bold text-[10px] uppercase tracking-wider px-3 py-1 rounded-full border border-amber-200">
+                        Hidden from Public Catalog
+                      </span>
+                    </div>
+                    <p className="text-xs sm:text-sm text-gray-700 leading-relaxed max-w-2xl">
+                      This work has been reported and placed under editorial dispute. It is currently hidden from public readers until the dispute is resolved.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="shrink-0 flex flex-col sm:items-end gap-2">
+                  <div className={`px-3.5 py-1.5 rounded-xl border ${
+                    daysLeft <= 5 ? "bg-rose-50 border-rose-200 text-rose-900" : "bg-amber-100/80 border-amber-300 text-amber-950"
+                  }`}>
+                    <p className="text-[10px] uppercase tracking-wider font-bold text-amber-800 flex items-center sm:justify-end gap-1">
+                      <Clock className="w-3 h-3 text-amber-700" /> Deadline to React
+                    </p>
+                    <p className="text-xs sm:text-sm font-extrabold text-amber-950">
+                      {daysLeft} Day{daysLeft === 1 ? "" : "s"} Remaining
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Note / Details Section */}
+              <div className="mt-4 pt-3 border-t border-amber-200/70 space-y-2 text-xs text-amber-950">
+                {story.disputeInfo?.reason && (
+                  <p><strong className="font-semibold text-amber-950">Dispute Reason:</strong> {story.disputeInfo.reason.replace(/_/g, " ")}</p>
+                )}
+                {story.disputeInfo?.editorialNote && (
+                  <div className="bg-white/80 border border-amber-200 rounded-xl p-3">
+                    <strong className="font-semibold text-amber-950 block mb-1">Editorial Note:</strong>
+                    <p className="italic text-gray-800">{story.disputeInfo.editorialNote}</p>
+                  </div>
+                )}
+                {story.disputeInfo?.authorResponse ? (
+                  <div className="bg-emerald-50/90 border border-emerald-200 rounded-xl p-3">
+                    <div className="flex items-center justify-between mb-1">
+                      <strong className="font-semibold text-emerald-950 flex items-center gap-1.5">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                        Author Clarification (Under Editorial Review)
+                      </strong>
+                      {story.disputeInfo.authorRespondedAt && (
+                        <span className="text-[10px] text-emerald-700">
+                          Submitted on {new Date(story.disputeInfo.authorRespondedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-gray-800 bg-white/70 p-2.5 rounded-lg border border-emerald-100 text-xs leading-relaxed">
+                      {story.disputeInfo.authorResponse}
+                    </p>
+                  </div>
+                ) : isAuthor ? (
+                  <p className="text-amber-800 text-xs">
+                    Please submit your response or proof of authorship within the 30-day window. If no response is provided, this work will be automatically unpublished.
+                  </p>
+                ) : null}
+              </div>
+
+              {/* Action Buttons */}
+              <div className="mt-4 pt-3 border-t border-amber-200/70 flex items-center justify-between flex-wrap gap-3">
+                {isStaff && (
+                  <Link
+                    href="/editorial?tab=reports"
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-amber-900 hover:text-black underline"
+                  >
+                    Open in Editorial Reports Queue →
+                  </Link>
+                )}
+                {isAuthor && (
+                  <div className="flex items-center gap-2 ml-auto">
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      icon={<Send className="w-3.5 h-3.5" />}
+                      iconPosition="left"
+                      className="h-9 px-5 text-xs font-semibold rounded-full shadow-xs cursor-pointer"
+                      onClick={() => {
+                        setDisputeResponseText(story.disputeInfo?.authorResponse || "");
+                        setDisputeResponseModalOpen(true);
+                      }}
+                    >
+                      {story.disputeInfo?.authorResponse ? "Update Clarification" : "Submit Clarification Response"}
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })()}
+
         <article>
           {/* Header Metadata Section */}
-          <header className="mb-12 text-center max-w-3xl lg:max-w-4xl mx-auto">
+          <header className="mb-10 text-center max-w-3xl mx-auto">
             <div className="flex items-center justify-center gap-2 mb-4">
               <span className="bg-[#E4F953] text-[#040706] font-bold text-[10px] uppercase tracking-wider px-3.5 py-1.5 rounded-xl shadow-xs inline-block">
-                {(story.category || "Fiction").toUpperCase()}
+                {(story.submissionType === "PAINTING" ? "Visual Arts" : story.submissionType === "VIDEO" ? "Video" : (story.category || "Article")).toUpperCase()}
               </span>
             </div>
 
@@ -697,78 +845,343 @@ export default function WorkDetailPage() {
 
           {/* Featured Video Embed or Cover Image */}
           {(story.submissionType?.toUpperCase() === "VIDEO" || story.category?.toLowerCase() === "video") && story.mediaUrl ? (
-            <div className="w-full max-w-4xl lg:max-w-5xl mx-auto aspect-video rounded-[32px] overflow-hidden mb-12 bg-black shadow-lg">
-              {(() => {
-                const ytMatch = story.mediaUrl.match(
-                  /(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/
-                );
-                if (ytMatch && ytMatch[1]) {
+            !canReadFull ? (
+              <div className="w-full max-w-4xl lg:max-w-5xl mx-auto aspect-video rounded-[32px] overflow-hidden mb-12 bg-black shadow-xl relative flex items-center justify-center group border border-gray-800">
+                {/* Background Video Thumbnail */}
+                {(() => {
+                  const clean = story.mediaUrl?.trim() || "";
+                  let thumb = story.coverImageUrl;
+                  if (!thumb) {
+                    const ytMatch = clean.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/|live\/))([\w-]{11})/);
+                    if (ytMatch && ytMatch[1]) {
+                      thumb = `https://img.youtube.com/vi/${ytMatch[1]}/hqdefault.jpg`;
+                    }
+                  }
+                  if (thumb) {
+                    return (
+                      <Image
+                        src={formatAssetUrl(thumb)}
+                        alt={story.title}
+                        fill
+                        unoptimized
+                        className="object-cover filter blur-[3px] brightness-[0.45] scale-105 transition-transform duration-700 pointer-events-none select-none"
+                      />
+                    );
+                  }
+                  return <div className="absolute inset-0 bg-gradient-to-br from-gray-950 via-gray-900 to-black" />;
+                })()}
+
+                {/* Lock Overlay */}
+                <div className="relative z-10 flex flex-col items-center justify-center p-6 text-center">
+                  <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-black/80 backdrop-blur-md border border-white/20 flex items-center justify-center shadow-2xl mb-4 group-hover:scale-105 transition-transform">
+                    <Lock className="w-8 h-8 sm:w-10 sm:h-10 text-[#E4F953]" />
+                  </div>
+                  <span className="bg-[#E4F953] text-[#040706] font-extrabold text-[10px] uppercase tracking-wider px-3.5 py-1 rounded-full shadow-xs mb-2.5">
+                    Premium Video
+                  </span>
+                  <h3 className="text-white font-extrabold text-xl sm:text-2xl max-w-lg mb-1.5 drop-shadow-sm">
+                    Subscriber Exclusive Video
+                  </h3>
+                  <p className="text-gray-300 text-xs sm:text-sm max-w-md drop-shadow-xs">
+                    Subscribe to Akam Digital or apply for a free Student Pass to watch the full video.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="w-full max-w-4xl lg:max-w-5xl mx-auto aspect-video rounded-[32px] overflow-hidden mb-12 bg-black shadow-lg flex items-center justify-center">
+                {(() => {
+                  const clean = story.mediaUrl.trim();
+
+                  // 1. YouTube
+                  const ytMatch = clean.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/|live\/))([\w-]{11})/);
+                  if (ytMatch && ytMatch[1]) {
+                    return (
+                      <iframe
+                        src={`https://www.youtube-nocookie.com/embed/${ytMatch[1]}`}
+                        title={story.title}
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen
+                        className="w-full h-full border-0"
+                      />
+                    );
+                  }
+
+                  // 2. Vimeo
+                  const vimeoMatch = clean.match(/vimeo\.com\/(?:video\/)?(\d+)/);
+                  if (vimeoMatch && vimeoMatch[1]) {
+                    return (
+                      <iframe
+                        src={`https://player.vimeo.com/video/${vimeoMatch[1]}`}
+                        title={story.title}
+                        allow="autoplay; fullscreen; picture-in-picture"
+                        allowFullScreen
+                        className="w-full h-full border-0"
+                      />
+                    );
+                  }
+
+                  // 3. Dailymotion
+                  const dmMatch = clean.match(/(?:dailymotion\.com\/(?:video|embed\/video)\/|dai\.ly\/)([a-zA-Z0-9]+)/);
+                  if (dmMatch && dmMatch[1]) {
+                    return (
+                      <iframe
+                        src={`https://www.dailymotion.com/embed/video/${dmMatch[1]}`}
+                        title={story.title}
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen
+                        className="w-full h-full border-0"
+                      />
+                    );
+                  }
+
+                  // 4. Google Drive
+                  const gdMatch = clean.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/);
+                  if (gdMatch && gdMatch[1]) {
+                    return (
+                      <iframe
+                        src={`https://drive.google.com/file/d/${gdMatch[1]}/preview`}
+                        title={story.title}
+                        allow="autoplay; fullscreen"
+                        allowFullScreen
+                        className="w-full h-full border-0"
+                      />
+                    );
+                  }
+
+                  // 5. Direct video stream or file (MP4, WebM, OGG, MOV)
+                  if (/\.(mp4|webm|ogg|mov)(\?.*)?$/i.test(clean) || clean.startsWith("blob:") || /^https?:\/\/.*\/uploads\/.*video/i.test(clean)) {
+                    return (
+                      <video
+                        src={formatAssetUrl(clean)}
+                        controls
+                        playsInline
+                        className="w-full h-full object-contain"
+                      />
+                    );
+                  }
+
                   return (
-                    <iframe
-                      src={`https://www.youtube-nocookie.com/embed/${ytMatch[1]}`}
-                      title={story.title}
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                      allowFullScreen
-                      className="w-full h-full border-0"
-                    />
+                    <div className="w-full h-full flex flex-col items-center justify-center p-8 text-white gap-3">
+                      <Play className="w-12 h-12 text-[#E4F953]" />
+                      <a
+                        href={story.mediaUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline text-sm font-semibold hover:text-[#E4F953]"
+                      >
+                        Watch Video on External Source
+                      </a>
+                    </div>
                   );
+                })()}
+              </div>
+            )
+          ) : story.submissionType === "PAINTING" ? (
+            (() => {
+              const galleryImages: Array<{ src: string; alt: string }> = [];
+              const seen = new Set<string>();
+
+              if (story.content) {
+                const imgRegex = /!\[(.*?)\]\((.*?)\)/g;
+                let match;
+                while ((match = imgRegex.exec(story.content)) !== null) {
+                  const url = match[2]?.trim();
+                  if (url && !seen.has(url)) {
+                    seen.add(url);
+                    galleryImages.push({ src: url, alt: match[1] || story.title });
+                  }
                 }
-                const vimeoMatch = story.mediaUrl.match(/vimeo\.com\/(?:video\/)?(\d+)/);
-                if (vimeoMatch && vimeoMatch[1]) {
-                  return (
-                    <iframe
-                      src={`https://player.vimeo.com/video/${vimeoMatch[1]}`}
-                      title={story.title}
-                      allow="autoplay; fullscreen; picture-in-picture"
-                      allowFullScreen
-                      className="w-full h-full border-0"
-                    />
-                  );
-                }
+              }
+
+              if (story.mediaUrl && !seen.has(story.mediaUrl.trim())) {
+                seen.add(story.mediaUrl.trim());
+                galleryImages.unshift({ src: story.mediaUrl.trim(), alt: story.title });
+              }
+
+              if (galleryImages.length === 0 && story.coverImageUrl && !seen.has(story.coverImageUrl.trim())) {
+                galleryImages.push({ src: story.coverImageUrl.trim(), alt: story.title });
+              }
+
+              if (galleryImages.length === 0) return null;
+
+              if (!canReadFull) {
+                const previewImg = galleryImages[0];
                 return (
-                  <div className="w-full h-full flex flex-col items-center justify-center p-8 text-white gap-3">
-                    <Play className="w-12 h-12 text-[#E4F953]" />
-                    <a
-                      href={story.mediaUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="underline text-sm font-semibold hover:text-[#E4F953]"
-                    >
-                      Watch Video on External Source
-                    </a>
+                  <div className="w-full max-w-4xl lg:max-w-5xl mx-auto mb-10 space-y-4">
+                    <div className="relative rounded-[32px] overflow-hidden bg-black/95 border border-gray-200 shadow-xl flex items-center justify-center min-h-[380px] sm:min-h-[500px] max-h-[80vh] group">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={formatAssetUrl(previewImg.src)}
+                        alt={previewImg.alt || story.title}
+                        className="w-full h-auto max-h-[80vh] object-contain mx-auto filter blur-[3px] brightness-60 scale-105 transition-all duration-700 select-none pointer-events-none"
+                      />
+
+                      {/* Counter Badge */}
+                      {galleryImages.length > 1 && (
+                        <div className="absolute top-4 left-4 z-10 bg-black/70 backdrop-blur-md text-white text-xs font-semibold px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-md">
+                          <Palette className="w-3.5 h-3.5 text-purple-400" />
+                          <span>{galleryImages.length} Artwork Pieces (Locked)</span>
+                        </div>
+                      )}
+
+                      {/* Center Lock Overlay */}
+                      <div className="absolute inset-0 bg-black/40 backdrop-blur-xs flex flex-col items-center justify-center p-6 text-center z-10">
+                        <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-black/80 backdrop-blur-md border border-white/20 flex items-center justify-center shadow-2xl mb-4 group-hover:scale-105 transition-transform">
+                          <Lock className="w-8 h-8 sm:w-10 sm:h-10 text-[#E4F953]" />
+                        </div>
+                        <span className="bg-[#E4F953] text-[#040706] font-extrabold text-[10px] uppercase tracking-wider px-3.5 py-1 rounded-full shadow-xs mb-2.5">
+                          Exclusive Visual Art
+                        </span>
+                        <h3 className="text-white font-extrabold text-xl sm:text-2xl max-w-lg mb-1.5 drop-shadow-sm">
+                          Full Artwork & Gallery Locked
+                        </h3>
+                        <p className="text-gray-300 text-xs sm:text-sm max-w-md drop-shadow-xs">
+                          Subscribe to Akam Digital to view full high-resolution artwork and access complete visual art exhibitions.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Locked Thumbnails Strip if multiple images */}
+                    {galleryImages.length > 1 && (
+                      <div className="flex items-center gap-3 overflow-x-auto pb-2 px-1 opacity-60 pointer-events-none select-none">
+                        {galleryImages.map((img, idx) => (
+                          <div
+                            key={idx}
+                            className="relative flex-shrink-0 w-20 sm:w-24 aspect-[4/3] rounded-xl overflow-hidden border border-gray-700 bg-gray-900 shadow-xs"
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={formatAssetUrl(img.src)}
+                              alt={img.alt || `Thumbnail ${idx + 1}`}
+                              className="w-full h-full object-cover filter blur-[2px] brightness-50"
+                            />
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+                              <Lock className="w-3.5 h-3.5 text-white/90" />
+                            </div>
+                            <span className="absolute bottom-1 right-1 text-[9px] font-bold bg-black/80 text-white px-1 rounded">
+                              #{idx + 1}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 );
-              })()}
-            </div>
-          ) : story.submissionType === "PAINTING" && (story.mediaUrl || story.coverImageUrl) ? (
-            <div className="relative w-full max-w-4xl lg:max-w-5xl mx-auto rounded-[32px] overflow-hidden mb-12 bg-gray-100 border border-gray-200 shadow-md">
-              <img
-                src={formatAssetUrl(story.mediaUrl || story.coverImageUrl || "")}
-                alt={story.title}
-                className="w-full h-auto max-h-[75vh] object-contain mx-auto"
-              />
-            </div>
+              }
+
+              const currentIdx = Math.min(Math.max(0, activePaintingIndex), galleryImages.length - 1);
+              const currentImg = galleryImages[currentIdx];
+
+              if (galleryImages.length === 1) {
+                return (
+                  <div className="relative w-full max-w-4xl lg:max-w-5xl mx-auto rounded-[32px] overflow-hidden mb-12 bg-gray-100 border border-gray-200 shadow-md">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={formatAssetUrl(currentImg.src)}
+                      alt={currentImg.alt || story.title}
+                      className="w-full h-auto max-h-[80vh] object-contain mx-auto"
+                    />
+                  </div>
+                );
+              }
+
+              return (
+                <div className="w-full max-w-4xl lg:max-w-5xl mx-auto mb-12 space-y-4">
+                  {/* Main Gallery Display */}
+                  <div className="relative rounded-[32px] overflow-hidden bg-black/95 border border-gray-200 shadow-xl flex items-center justify-center min-h-[380px] sm:min-h-[500px] max-h-[80vh] group">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={formatAssetUrl(currentImg.src)}
+                      alt={currentImg.alt || `${story.title} - Image ${currentIdx + 1}`}
+                      className="w-full h-auto max-h-[80vh] object-contain transition-all duration-300"
+                    />
+
+                    {/* Counter Badge */}
+                    <div className="absolute top-4 left-4 z-10 bg-black/70 backdrop-blur-md text-white text-xs font-semibold px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-md">
+                      <Palette className="w-3.5 h-3.5 text-purple-400" />
+                      <span>Image {currentIdx + 1} of {galleryImages.length}</span>
+                    </div>
+
+                    {/* Prev / Next Buttons */}
+                    <button
+                      type="button"
+                      onClick={() => setActivePaintingIndex((prev) => (prev > 0 ? prev - 1 : galleryImages.length - 1))}
+                      className="absolute left-4 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-black/60 hover:bg-black/90 text-white backdrop-blur-md flex items-center justify-center transition-all opacity-80 group-hover:opacity-100 shadow-lg cursor-pointer hover:scale-105"
+                      aria-label="Previous image"
+                    >
+                      <ChevronLeft className="w-6 h-6" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActivePaintingIndex((prev) => (prev < galleryImages.length - 1 ? prev + 1 : 0))}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-black/60 hover:bg-black/90 text-white backdrop-blur-md flex items-center justify-center transition-all opacity-80 group-hover:opacity-100 shadow-lg cursor-pointer hover:scale-105"
+                      aria-label="Next image"
+                    >
+                      <ChevronRight className="w-6 h-6" />
+                    </button>
+
+                    {/* Caption */}
+                    {currentImg.alt && currentImg.alt !== story.title && (
+                      <div className="absolute bottom-4 left-4 right-4 z-10 text-center">
+                        <span className="inline-block bg-black/70 backdrop-blur-md text-white/90 text-xs px-3.5 py-1.5 rounded-xl max-w-md truncate">
+                          {currentImg.alt}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Thumbnails Strip */}
+                  <div className="flex items-center gap-3 overflow-x-auto pb-2 px-1">
+                    {galleryImages.map((img, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => setActivePaintingIndex(idx)}
+                        className={`relative flex-shrink-0 w-20 sm:w-24 aspect-[4/3] rounded-xl overflow-hidden border-2 transition-all cursor-pointer ${
+                          idx === currentIdx
+                            ? "border-purple-600 ring-2 ring-purple-300 scale-102 shadow-md"
+                            : "border-transparent opacity-60 hover:opacity-100 hover:border-gray-300"
+                        }`}
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={formatAssetUrl(img.src)}
+                          alt={img.alt || `Thumbnail ${idx + 1}`}
+                          className="w-full h-full object-cover"
+                        />
+                        <span className="absolute bottom-1 right-1 text-[9px] font-bold bg-black/70 text-white px-1 rounded">
+                          #{idx + 1}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()
           ) : null}
 
-          {/* Narrative Body Text */}
-          <div ref={storyContentRef} className="max-w-3xl lg:max-w-4xl mx-auto relative">
-            {/* For non-subscribers: show preview only with paywall anchored directly below */}
+          {/* Narrative Body Text & Paywall */}
+          <div ref={storyContentRef} className="max-w-3xl mx-auto relative">
             {(() => {
-              const userRoleUpper = (user?.role || "").toUpperCase();
-              const isStaff = ["ADMIN", "EDITOR", "EDITORIAL", "CHIEF_EDITOR", "STAFF_EDITOR"].includes(userRoleUpper);
-              const isAuthor = Boolean(user && (user.id === story.authorId || user.email === story.authorEmail));
-              const canReadFull = isStaff || isAuthor || isSubscribed || story.hasFullAccess;
+              // If painting submission and content is only images, don't re-render duplicate images in text
+              let contentToRender = story.content;
+              if (story.submissionType === "PAINTING" && story.content) {
+                const textWithoutImages = story.content.replace(/!\[(.*?)\]\((.*?)\)/g, "").trim();
+                contentToRender = textWithoutImages || undefined;
+              }
 
               if (!canReadFull) {
                 return (
-                  <div className="relative">
-                    {/* Render preview of story content with fade bottom */}
-                    <div className="relative overflow-hidden" style={{ maxHeight: "420px" }}>
-                      {renderStoryBody(story.content)}
-                      {/* Gradient fade to white at the bottom */}
-                      <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-[#F9FAFB] to-transparent pointer-events-none" />
-                    </div>
-                    {/* FreemiumPaywall anchored directly below preview */}
+                  <div className="relative space-y-6">
+                    {/* Render preview of story content with fade bottom if there is text content */}
+                    {contentToRender && (
+                      <div className="relative overflow-hidden" style={{ maxHeight: "380px" }}>
+                        {renderStoryBody(contentToRender)}
+                        {/* Gradient fade to background at the bottom */}
+                        <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-[#F9FAFB] to-transparent pointer-events-none" />
+                      </div>
+                    )}
+                    {/* FreemiumPaywall anchored directly below */}
                     <FreemiumPaywall
                       visible={true}
                       isLoggedIn={!!user}
@@ -776,17 +1189,22 @@ export default function WorkDetailPage() {
                         await refreshSubscription();
                         await fetchStoryData(false);
                       }}
+                      onStudentApply={() => setStudentModalOpen(true)}
                     />
                   </div>
                 );
               }
 
-              return renderStoryBody(story.content);
+              if (!contentToRender && story.submissionType === "PAINTING") {
+                return null;
+              }
+
+              return renderStoryBody(contentToRender);
             })()}
           </div>
 
           {/* Social Engagement Floating Pill Bar */}
-          <div className="max-w-3xl lg:max-w-4xl mx-auto mt-12 pt-8 border-t border-gray-200">
+          <div className="max-w-3xl mx-auto mt-12 pt-8 border-t border-gray-200">
             <div className="flex items-center justify-between bg-white border border-gray-200 rounded-2xl p-4 shadow-xs">
               <div className="flex items-center gap-3">
                 {/* Like Button */}
@@ -841,7 +1259,7 @@ export default function WorkDetailPage() {
 
           {/* Author Card Footer */}
           {story.authorBio && (
-            <div className="max-w-3xl lg:max-w-4xl mx-auto mt-10 bg-white border border-gray-200 rounded-3xl p-6 sm:p-8 flex items-start gap-4 shadow-xs">
+            <div className="max-w-3xl mx-auto mt-10 bg-white border border-gray-200 rounded-3xl p-6 sm:p-8 flex items-start gap-4 shadow-xs">
               <div className="w-14 h-14 rounded-full bg-gray-200 overflow-hidden relative shadow-xs shrink-0">
                 {story.authorAvatarUrl ? (
                   <Image
@@ -865,7 +1283,7 @@ export default function WorkDetailPage() {
           )}
 
           {/* Reader Discussion / Comments Section */}
-          <section id="comments-section" className="max-w-3xl lg:max-w-4xl mx-auto mt-14 pt-8 border-t border-gray-200">
+          <section id="comments-section" className="max-w-3xl mx-auto mt-14 pt-8 border-t border-gray-200">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-bold text-gray-950 flex items-center gap-2">
                 <MessageSquare className="w-5 h-5 text-gray-700" />
@@ -981,10 +1399,10 @@ export default function WorkDetailPage() {
           <div className="container px-4 mx-auto">
             <div className="flex items-center justify-between mb-8">
               <div>
-                <span className="text-[11px] font-bold tracking-wider uppercase text-gray-400 block mb-1">
+                <span className="text-[11px] font-semibold tracking-wider uppercase text-gray-400 block mb-1">
                   Keep Exploring
                 </span>
-                <h3 className="text-xl sm:text-2xl font-bold text-gray-950">
+                <h3 className="text-xl sm:text-2xl font-semibold text-gray-950">
                   {carouselTitle}
                 </h3>
               </div>
@@ -1020,7 +1438,7 @@ export default function WorkDetailPage() {
                 768: { slidesPerView: 3.2, spaceBetween: 24 },
                 1024: { slidesPerView: 4.2, spaceBetween: 28 },
               }}
-              className="w-full !pb-4 overflow-visible"
+              className="w-full !pb-4 overflow-visible [&_.swiper-wrapper]:items-stretch"
             >
               {relatedStories.map((otherStory) => {
                 const isVideo =
@@ -1048,12 +1466,12 @@ export default function WorkDetailPage() {
                 }
 
                 return (
-                  <SwiperSlide key={otherStory.id} className="h-auto">
+                  <SwiperSlide key={otherStory.id} className="!h-auto !flex !flex-col">
                     <Link
                       href={`/works/${otherStory.slug || otherStory.id}`}
-                      className="flex flex-col h-full bg-white border border-gray-200 rounded-2xl p-4 hover:shadow-md transition-all duration-300 group/card cursor-pointer shadow-xs"
+                      className="flex flex-col flex-1 h-full w-full bg-white border border-gray-200 rounded-2xl p-4 hover:shadow-md transition-all duration-300 group/card cursor-pointer shadow-xs"
                     >
-                      <div className="relative w-full aspect-[16/10] rounded-xl overflow-hidden bg-gray-100 mb-3 shadow-xs">
+                      <div className="relative w-full aspect-[16/10] rounded-xl overflow-hidden bg-gray-100 mb-3 shadow-xs shrink-0">
                         <Image
                           src={imageSource}
                           alt={otherStory.title}
@@ -1064,7 +1482,7 @@ export default function WorkDetailPage() {
 
                         <div className="absolute top-2 left-2 z-10">
                           <span className="bg-[#E4F953] text-[#040706] font-bold text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-lg shadow-xs">
-                            {(otherStory.category || "Story").toUpperCase()}
+                            {(isPainting ? "Visual Arts" : isVideo ? "Video" : (otherStory.category || "Article")).toUpperCase()}
                           </span>
                         </div>
 
@@ -1089,9 +1507,9 @@ export default function WorkDetailPage() {
                           </p>
                         </div>
 
-                        <div className="pt-2 border-t border-gray-100 flex items-center justify-end text-xs">
+                        <div className="pt-2 border-t border-gray-100 flex items-center justify-end text-xs mt-auto">
                           <span className="font-bold text-[11px] text-gray-900 group-hover/card:text-black flex items-center gap-1">
-                            {isVideo ? "Watch Video" : isPainting ? "View Artwork" : "Explore Work"}
+                            {isVideo ? "Watch Video" : isPainting ? "View Visual Arts" : "Explore Work"}
                             <ArrowRight className="w-3 h-3 transition-transform group-hover/card:translate-x-1" />
                           </span>
                         </div>
@@ -1205,6 +1623,104 @@ export default function WorkDetailPage() {
           fetchEngagement(story.id);
         }}
       />
+
+      {/* Student Verification Modal — page-level so it survives FreemiumPaywall unmount */}
+      {studentModalOpen && (
+        <StudentVerificationModal
+          isOpen={studentModalOpen}
+          onClose={() => setStudentModalOpen(false)}
+        />
+      )}
+
+      {/* ── Author Dispute Response / Clarification Modal ── */}
+      {disputeResponseModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs animate-in fade-in font-poppins"
+          onClick={() => setDisputeResponseModalOpen(false)}
+        >
+          <div
+            className="relative w-full max-w-xl bg-white rounded-3xl p-6 sm:p-7 shadow-2xl space-y-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3 pb-3 border-b border-gray-100">
+              <div className="flex items-start gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                  <AlertCircle className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-gray-950">Dispute Clarification</h3>
+                  <p className="text-xs text-gray-500 mt-0.5 line-clamp-1 font-medium">
+                    "{story.title}"
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDisputeResponseModalOpen(false)}
+                className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors cursor-pointer shrink-0"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-xs text-amber-950 space-y-2">
+              <p className="font-semibold text-amber-900 flex items-center gap-1.5">
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                Dispute Investigation Notice
+              </p>
+              <p className="text-amber-800 leading-relaxed">
+                Provide your clarification, context, or evidence supporting your original work. The editorial board will evaluate your submission during the review.
+              </p>
+              {story.disputeInfo?.editorialNote && (
+                <div className="mt-2 pt-2 border-t border-amber-200">
+                  <strong className="text-amber-950">Editor's Note:</strong>
+                  <p className="italic mt-0.5 text-amber-900">{story.disputeInfo.editorialNote}</p>
+                </div>
+              )}
+            </div>
+
+            <form onSubmit={handleSubmitDisputeClarification} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 mb-1.5">
+                  Your Explanation / Clarification <span className="text-rose-500">*</span>
+                </label>
+                <textarea
+                  rows={5}
+                  required
+                  placeholder="Provide detailed explanation, context, sources, or clarification verifying your authorship..."
+                  value={disputeResponseText}
+                  onChange={(e) => setDisputeResponseText(e.target.value)}
+                  className="w-full p-4 bg-gray-50 border border-gray-200 rounded-2xl text-xs sm:text-sm text-gray-900 outline-none focus:border-black focus:bg-white transition-all resize-y font-normal"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-gray-100">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  disabled={submittingDisputeResponse}
+                  onClick={() => setDisputeResponseModalOpen(false)}
+                  className="h-9 px-4 rounded-full text-xs font-semibold border border-gray-300 text-gray-700 hover:bg-gray-100 cursor-pointer shadow-xs"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  size="sm"
+                  disabled={submittingDisputeResponse || !disputeResponseText.trim()}
+                  className="h-9 px-5 rounded-full text-xs font-semibold shadow-xs cursor-pointer disabled:opacity-50"
+                  icon={<Send className="w-3.5 h-3.5" />}
+                  iconPosition="left"
+                >
+                  {submittingDisputeResponse ? "Submitting..." : "Submit Clarification"}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

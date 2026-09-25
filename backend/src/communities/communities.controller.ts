@@ -40,27 +40,27 @@ export class CommunitiesController {
 
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('EDITOR', 'ADMIN')
+  @Roles('EDITOR', 'ADMIN', 'MODERATOR')
   @ApiBearerAuth()
-  @ApiOperation({ summary: '[EDITOR/ADMIN] Create a new community' })
+  @ApiOperation({ summary: '[EDITOR/ADMIN/MODERATOR] Create a new community' })
   create(@Body() dto: CreateCommunityDto) {
     return this.communitiesService.create(dto);
   }
 
   @Patch(':slug')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('EDITOR', 'ADMIN')
+  @Roles('EDITOR', 'ADMIN', 'MODERATOR')
   @ApiBearerAuth()
-  @ApiOperation({ summary: '[EDITOR/ADMIN] Update a community' })
+  @ApiOperation({ summary: '[EDITOR/ADMIN/MODERATOR] Update a community' })
   update(@Param('slug') slug: string, @Body() dto: UpdateCommunityDto) {
     return this.communitiesService.update(slug, dto);
   }
 
   @Delete(':slug')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('EDITOR', 'ADMIN')
+  @Roles('EDITOR', 'ADMIN', 'MODERATOR')
   @ApiBearerAuth()
-  @ApiOperation({ summary: '[EDITOR/ADMIN] Delete a community' })
+  @ApiOperation({ summary: '[EDITOR/ADMIN/MODERATOR] Delete a community' })
   deleteCommunity(@Param('slug') slug: string) {
     return this.communitiesService.delete(slug);
   }

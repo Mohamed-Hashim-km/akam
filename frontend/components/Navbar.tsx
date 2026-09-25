@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import { Search, X, Bell, User, Menu, ChevronRight, CheckCheck, LogOut, Loader2, BookOpen, ArrowRight, Flag, AlertTriangle, CheckCircle2, ShieldAlert, Sparkles, Ban } from "lucide-react";
+import { Search, X, Bell, User, Menu, ChevronRight, CheckCheck, LogOut, Loader2, BookOpen, ArrowRight, Flag, AlertTriangle, CheckCircle2, ShieldAlert, Sparkles, Ban, GraduationCap, XCircle } from "lucide-react";
 import Button from "./ui/Button";
 import AuthModal from "./AuthModal";
 import { API_BASE_URL, apiFetch } from "@/lib/config";
@@ -29,6 +29,7 @@ interface SearchResultStory {
   title: string;
   slug: string;
   category?: string;
+  submissionType?: string | null;
   coverImageUrl?: string | null;
   authorName?: string | null;
   authorEmail?: string;
@@ -289,18 +290,23 @@ export const Navbar: React.FC<NavbarProps> = ({
     // If student verification application notification
     if (
       n.type === "STUDENT_APPLICATION_SUBMITTED" ||
+      n.type === "STUDENT_APPLICATION_APPROVED" ||
+      n.type === "STUDENT_APPLICATION_REJECTED" ||
       n.message?.includes("Student Scholar Pass") ||
       n.message?.includes("student verification")
     ) {
       if (user?.role === "EDITOR" || user?.role === "ADMIN") {
         router.push("/editorial?tab=subscriptions&subTab=verifications&page=1");
         return;
+      } else {
+        router.push("/profile");
+        return;
       }
     }
 
     // If report notification or editorial alert
     if (n.type === "CONTENT_REPORTED" || n.message?.includes("flagged for review") || n.message?.includes("reported")) {
-      if (user?.role === "EDITOR" || user?.role === "ADMIN") {
+      if (user?.role === "EDITOR" || user?.role === "ADMIN" || user?.role === "MODERATOR") {
         router.push("/editorial?tab=reports&page=1");
         return;
       }
@@ -308,7 +314,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
     // If subscription pass granted
     if (n.type === "SUBSCRIPTION_GRANTED" || n.message?.includes("Digital Pass") || n.message?.includes("Scholar Pass")) {
-      router.push("/emagazine");
+      router.push("/profile");
       return;
     }
 
@@ -341,13 +347,36 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   const renderNotificationText = (text: string) => {
     if (!text) return "";
-    const parts = text.split(/('.*?')/g);
+    const tokenRegex = /('.*?'|https?:\/\/[^\s]+)/g;
+    const parts = text.split(tokenRegex);
     return parts.map((part, index) => {
       if (part.startsWith("'") && part.endsWith("'")) {
         return (
           <span key={index} className="text-[#22B573] font-medium">
             {part}
           </span>
+        );
+      }
+      if (/^https?:\/\//i.test(part)) {
+        return (
+          <a
+            key={index}
+            href={part}
+            onClick={(e) => {
+              e.stopPropagation();
+              setNotificationsOpen(false);
+              if (part.includes("/profile")) {
+                router.push("/profile");
+              } else if (part.includes("/plans")) {
+                router.push("/plans");
+              } else if (part.includes("/library")) {
+                router.push("/library");
+              }
+            }}
+            className="text-[#22B573] font-semibold underline underline-offset-2 hover:text-[#1ca064] break-all inline-block"
+          >
+            {part}
+          </a>
         );
       }
       return part;
@@ -397,8 +426,9 @@ export const Navbar: React.FC<NavbarProps> = ({
     navLinks.splice(4, 0, { name: "Library", href: "/library" });
   }
 
-  if (user && ['EDITOR', 'ADMIN'].includes(user.role)) {
-    navLinks.push({ name: "Editorial", href: "/editorial" });
+  if (user && ['EDITOR', 'ADMIN', 'MODERATOR'].includes(user.role)) {
+    const href = user.role === 'MODERATOR' ? '/editorial?tab=reports&page=1' : '/editorial';
+    navLinks.push({ name: user.role === 'MODERATOR' ? 'Moderation' : 'Editorial', href });
   }
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -573,7 +603,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                                 {story.title}
                               </h5>
                               <p className="text-[10px] text-gray-500 truncate mt-0.5">
-                                By {story.authorName || story.authorEmail || "Author"} &bull; {story.category || "Story"}
+                                By {story.authorName || story.authorEmail || "Author"} &bull; {story.submissionType === "PAINTING" ? "Visual Arts" : story.submissionType === "VIDEO" ? "Video" : (story.category || "Article")}
                               </p>
                             </div>
                             <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-gray-900 shrink-0 transition-transform group-hover:translate-x-0.5" />
@@ -693,7 +723,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             ) : (
               <button
                 onClick={() => handleOpenSignIn("/profile")}
-                className="text-sm font-medium text-gray-900 bg-white border border-gray-200 px-5 py-2 rounded-full hover:bg-gray-50 transition-colors shadow-2xs cursor-pointer"
+                className="text-sm font-medium text-gray-900 bg-white border border-gray-200 px-6 py-2.5 rounded-full hover:bg-gray-50 transition-colors shadow-xs cursor-pointer"
               >
                 Sign in
               </button>
@@ -838,7 +868,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                               {story.title}
                             </h5>
                             <p className="text-[10px] text-gray-500 truncate mt-0.5">
-                              By {story.authorName || story.authorEmail || "Author"} &bull; {story.category || "Story"}
+                              By {story.authorName || story.authorEmail || "Author"} &bull; {story.submissionType === "PAINTING" ? "Visual Arts" : story.submissionType === "VIDEO" ? "Video" : (story.category || "Article")}
                             </p>
                           </div>
                           <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-gray-900 shrink-0 transition-transform group-hover:translate-x-0.5" />
@@ -924,6 +954,16 @@ export const Navbar: React.FC<NavbarProps> = ({
                           {isDismissedType && (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-gray-100 text-gray-700">
                               Reviewed
+                            </span>
+                          )}
+                          {n.type === "STUDENT_APPLICATION_APPROVED" && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                              <GraduationCap className="w-2.5 h-2.5 text-emerald-600" /> Scholar Pass Approved
+                            </span>
+                          )}
+                          {n.type === "STUDENT_APPLICATION_REJECTED" && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800">
+                              <XCircle className="w-2.5 h-2.5 text-rose-600" /> Pass Rejected
                             </span>
                           )}
                           {n.type === "SUBSCRIPTION_GRANTED" && (

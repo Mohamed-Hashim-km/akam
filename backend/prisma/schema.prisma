@@ -15,6 +15,7 @@ enum Role {
   AUTHOR
   EDITOR
   ADMIN
+  MODERATOR
 }
 
 enum StoryStatus {
@@ -24,6 +25,8 @@ enum StoryStatus {
   REJECTED
   APPROVED_EMAGAZINE
   PUBLISHED_EMAGAZINE
+  UNPUBLISHED
+  DISPUTED
 }
 
 enum SubmissionType {
@@ -42,6 +45,12 @@ enum NotificationType {
   REPORT_RESOLVED
   REPORT_DISMISSED
   CONTENT_REMOVED
+  CONTENT_DISPUTED
+  STUDENT_APPLICATION_SUBMITTED
+  STUDENT_APPLICATION_APPROVED
+  STUDENT_APPLICATION_REJECTED
+  SUBSCRIPTION_GRANTED
+  SUBSCRIPTION_CANCELLED
 }
 
 model User {
@@ -53,6 +62,7 @@ model User {
   role        Role     @default(READER)
   isFeatured  Boolean  @default(false)
   sortOrder   Int      @default(0)
+  isShadowBanned Boolean @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -155,15 +165,20 @@ model StoryComment {
 }
 
 model StoryReport {
-  id         String   @id @default(uuid())
-  storyId    String?
-  commentId  String?
-  reporterId String
-  reason     String
-  details    String?
-  status     String   @default("PENDING")
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id                String    @id @default(uuid())
+  storyId           String?
+  commentId         String?
+  reporterId        String
+  reason            String
+  details           String?
+  status            String    @default("PENDING")
+  authorResponse    String?
+  authorRespondedAt DateTime?
+  disputeExpiresAt  DateTime?
+  disputedAt        DateTime?
+  editorialNote     String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   story    Story?        @relation(fields: [storyId], references: [id], onDelete: Cascade)
   comment  StoryComment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
@@ -383,6 +398,7 @@ enum EventType {
   WORKSHOP
   EXHIBITION
   FILM_SCREENING
+  OTHER
   PAST_ARCHIVE
 }
 
@@ -444,7 +460,7 @@ model MediaVideo {
   id          String   @id @default(uuid())
   title       String
   description String   @db.Text
-  category    String   // 'interviews' | 'conversations' | 'cultural' | 'recordings'
+  category    String   // 'interviews' | 'discussions' | 'cultural' | 'recordings' | 'conversations'
   youtubeUrl  String
   youtubeId   String
   isPublished Boolean  @default(true)

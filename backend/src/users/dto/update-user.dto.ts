@@ -27,7 +27,7 @@ export class UpdateUserDto {
 
   @IsString()
   @IsOptional()
-  @IsIn(['READER', 'AUTHOR', 'EDITOR'])
+  @IsIn(['READER', 'AUTHOR', 'EDITOR', 'MODERATOR'])
   role?: string;
 
   @IsBoolean()
@@ -37,4 +37,8 @@ export class UpdateUserDto {
   @IsNumber()
   @IsOptional()
   sortOrder?: number;
+
+  @IsBoolean()
+  @IsOptional()
+  isShadowBanned?: boolean;
 }

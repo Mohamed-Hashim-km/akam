@@ -17,4 +17,10 @@ export class UpdateStudentStatusDto {
   @IsOptional()
   @IsString()
   reviewedBy?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  endDate?: string;
 }
+

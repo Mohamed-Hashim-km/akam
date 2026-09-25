@@ -23,8 +23,6 @@ export interface StudentApplicationRecord {
   referenceId: string;
   fullName: string;
   institution: string;
-  studentIdNumber: string;
-  course: string;
   email: string;
   idCardUrl: string;
   idCardName?: string;
@@ -33,6 +31,7 @@ export interface StudentApplicationRecord {
   reviewedAt?: string;
   reviewedBy?: string;
   reviewNotes?: string;
+  endDate?: string;
 }
 
 @Injectable()
@@ -112,68 +111,59 @@ export class SettingsService {
     if (row && row.value !== undefined && row.value !== null) {
       const list = typeof row.value === 'string' ? JSON.parse(row.value) : row.value;
       if (Array.isArray(list)) {
-        return list;
+        let hasLegacyFields = false;
+        const cleaned = list.map((item: any) => {
+          if (item.studentIdNumber !== undefined || item.course !== undefined) {
+            hasLegacyFields = true;
+          }
+          const { studentIdNumber, course, ...clean } = item;
+          return clean as StudentApplicationRecord;
+        });
+
+        if (hasLegacyFields) {
+          this.prisma
+            .execute(
+              `UPDATE site_setting SET value = $1::jsonb, "updatedAt" = now() WHERE key = 'student_applications'`,
+              [JSON.stringify(cleaned)],
+            )
+            .catch((e) =>
+              this.logger.warn(`Could not persist cleaned student applications: ${e.message}`),
+            );
+        }
+
+        // Enrich approved records with active subscription endDate if missing
+        try {
+          const subs = await this.prisma.query<{ email: string; endDate: string }>(
+            `SELECT LOWER(u.email) as email, s."endDate"
+             FROM subscription s
+             JOIN "user" u ON s."userId" = u.id
+             WHERE s.status = 'ACTIVE'`,
+          );
+          if (subs && subs.length > 0) {
+            const subMap = new Map<string, string>();
+            subs.forEach((s) => {
+              if (s.email && s.endDate) {
+                subMap.set(s.email.toLowerCase().trim(), new Date(s.endDate).toISOString());
+              }
+            });
+            cleaned.forEach((item) => {
+              if (item.status === 'APPROVED' && !item.endDate && item.email) {
+                const foundEnd = subMap.get(item.email.toLowerCase().trim());
+                if (foundEnd) {
+                  item.endDate = foundEnd;
+                }
+              }
+            });
+          }
+        } catch {
+          // ignore query error
+        }
+
+        return cleaned;
       }
     }
 
-    // Seed default verified and pending student applications for editorial review
-    const initialRecords: StudentApplicationRecord[] = [
-      {
-        id: 'AKAM-STU-2026-91024',
-        referenceId: 'AKAM-STU-2026-91024',
-        fullName: 'Devika Madhavan',
-        institution: "Maharaja's College, Ernakulam",
-        studentIdNumber: '2024MAL5581',
-        course: 'MA Malayalam Literature, 1st Year',
-        email: 'devika.m@maharajas.ac.in',
-        idCardUrl: '/images/home/aboutDigital.png',
-        idCardName: 'Devika_College_ID.png',
-        submittedAt: new Date(Date.now() - 3600000 * 3).toISOString(),
-        status: 'PENDING_APPROVAL',
-      },
-      {
-        id: 'AKAM-STU-2026-72419',
-        referenceId: 'AKAM-STU-2026-72419',
-        fullName: 'Arjun Radhakrishnan',
-        institution: 'University of Calicut, Thenhipalam',
-        studentIdNumber: '2023ENG8841',
-        course: 'BA English & Comparative Literature',
-        email: 'arjun.radha@uoc.ac.in',
-        idCardUrl: '/images/home/aboutDigital.png',
-        idCardName: 'Arjun_Student_Pass.jpg',
-        submittedAt: new Date(Date.now() - 3600000 * 24).toISOString(),
-        status: 'APPROVED',
-        reviewedAt: new Date(Date.now() - 3600000 * 18).toISOString(),
-        reviewedBy: 'Akam Editorial Board',
-        reviewNotes: 'Credentials verified with Calicut University student database.',
-      },
-      {
-        id: 'AKAM-STU-2026-44012',
-        referenceId: 'AKAM-STU-2026-44012',
-        fullName: 'Rahul Menon',
-        institution: 'NSS College, Ottapalam',
-        studentIdNumber: '2022HST1092',
-        course: 'BA History, Final Year',
-        email: 'rahul.menon99@gmail.com',
-        idCardUrl: '/images/home/aboutDigital.png',
-        idCardName: 'Menon_ID_Scan.png',
-        submittedAt: new Date(Date.now() - 3600000 * 48).toISOString(),
-        status: 'REJECTED',
-        reviewedAt: new Date(Date.now() - 3600000 * 40).toISOString(),
-        reviewedBy: 'Akam Editorial Board',
-        reviewNotes: 'ID card expired in June 2024. Please upload an active year identity card.',
-      },
-    ];
-
-    await this.prisma.execute(
-      `INSERT INTO site_setting (key, value, "updatedAt")
-       VALUES ('student_applications', $1::jsonb, now())
-       ON CONFLICT (key) DO UPDATE
-       SET value = EXCLUDED.value, "updatedAt" = now()`,
-      [JSON.stringify(initialRecords)],
-    );
-
-    return initialRecords;
+    return [];
   }
 
   async getStudentApplicationsPaginated(params: {
@@ -215,10 +205,8 @@ export class SettingsService {
         (a) =>
           a.fullName?.toLowerCase().includes(q) ||
           a.institution?.toLowerCase().includes(q) ||
-          a.studentIdNumber?.toLowerCase().includes(q) ||
           a.email?.toLowerCase().includes(q) ||
-          a.referenceId?.toLowerCase().includes(q) ||
-          a.course?.toLowerCase().includes(q),
+          a.referenceId?.toLowerCase().includes(q),
       );
     }
 
@@ -247,10 +235,8 @@ export class SettingsService {
   async submitStudentApplication(dto: {
     fullName: string;
     institution: string;
-    studentIdNumber: string;
-    course: string;
     email: string;
-    idCardUrl: string;
+    idCardUrl?: string;
     idCardName?: string;
     referenceId?: string;
   }): Promise<StudentApplicationRecord> {
@@ -264,11 +250,9 @@ export class SettingsService {
       referenceId: refId,
       fullName: dto.fullName,
       institution: dto.institution,
-      studentIdNumber: dto.studentIdNumber,
-      course: dto.course,
       email: dto.email,
-      idCardUrl: dto.idCardUrl,
-      idCardName: dto.idCardName || 'Student_ID.jpg',
+      idCardUrl: dto.idCardUrl || '',
+      idCardName: dto.idCardName || '',
       submittedAt: new Date().toISOString(),
       status: 'PENDING_APPROVAL',
     };
@@ -276,8 +260,7 @@ export class SettingsService {
     const existingIndex = list.findIndex(
       (item) =>
         item.referenceId === refId ||
-        (item.email && dto.email && item.email.trim().toLowerCase() === dto.email.trim().toLowerCase()) ||
-        (item.email === dto.email && item.studentIdNumber === dto.studentIdNumber),
+        (item.email && dto.email && item.email.trim().toLowerCase() === dto.email.trim().toLowerCase()),
     );
 
     if (existingIndex >= 0) {
@@ -330,13 +313,16 @@ export class SettingsService {
       dto.referenceId ||
       `AKAM-STU-${new Date().getFullYear()}-${Math.floor(10000 + Math.random() * 90000)}`;
 
+    const targetEndDate =
+      dto.endDate && !isNaN(new Date(dto.endDate).getTime())
+        ? new Date(dto.endDate).toISOString()
+        : new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString();
+
     const newRecord: StudentApplicationRecord = {
       id: refId,
       referenceId: refId,
       fullName: dto.fullName.trim(),
       institution: dto.institution.trim(),
-      studentIdNumber: dto.studentIdNumber.trim(),
-      course: dto.course.trim(),
       email: dto.email.trim(),
       idCardUrl: dto.idCardUrl || '/images/home/aboutDigital.png',
       idCardName: dto.idCardName || 'Direct_Editorial_Grant.png',
@@ -345,6 +331,7 @@ export class SettingsService {
       reviewedAt: new Date().toISOString(),
       reviewedBy: dto.reviewedBy || reviewerName || 'Akam Editorial Board',
       reviewNotes: dto.reviewNotes || 'Direct scholar pass granted by Akam Editorial Board.',
+      endDate: targetEndDate,
     };
 
     const existingIndex = list.findIndex(
@@ -370,8 +357,8 @@ export class SettingsService {
       [JSON.stringify(list)],
     );
 
-    // Grant free 6-month subscription to the actual student's email
-    await this.grantStudentSubscription(newRecord.email).catch((err) =>
+    // Grant free student subscription to the actual student's email with specified endDate
+    await this.grantStudentSubscription(newRecord.email, targetEndDate).catch((err) =>
       this.logger.error(`Failed to grant student subscription: ${err.message}`),
     );
 
@@ -389,6 +376,7 @@ export class SettingsService {
     status: 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED',
     reviewNotes?: string,
     reviewedBy?: string,
+    endDate?: string,
   ): Promise<StudentApplicationRecord | null> {
     const list = await this.getStudentApplications();
     const index = list.findIndex((item) => item.referenceId === refId || item.id === refId);
@@ -405,6 +393,20 @@ export class SettingsService {
     }
     if (reviewedBy) {
       list[index].reviewedBy = reviewedBy;
+    }
+
+    let targetEndDate: string | undefined;
+    if (status === 'APPROVED') {
+      if (endDate && !isNaN(new Date(endDate).getTime())) {
+        targetEndDate = new Date(endDate).toISOString();
+      } else if (list[index].endDate) {
+        targetEndDate = list[index].endDate;
+      } else {
+        targetEndDate = new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString();
+      }
+      list[index].endDate = targetEndDate;
+    } else {
+      delete list[index].endDate;
     }
 
     await this.prisma.execute(
@@ -424,16 +426,16 @@ export class SettingsService {
       );
     }
 
-    // Grant free 6-month subscription when student is approved
+    // Grant free student subscription when student is approved
     if (status === 'APPROVED' && updated.email) {
-      this.grantStudentSubscription(updated.email).catch((err) =>
+      this.grantStudentSubscription(updated.email, targetEndDate).catch((err) =>
         this.logger.error(`Failed to grant student subscription: ${err.message}`),
       );
     }
 
     // Cancel/revoke subscription when student is rejected
     if (status === 'REJECTED' && updated.email) {
-      this.revokeStudentSubscription(updated.email).catch((err) =>
+      this.revokeStudentSubscription(updated.email, reviewNotes).catch((err) =>
         this.logger.error(`Failed to revoke student subscription: ${err.message}`),
       );
     }
@@ -442,7 +444,7 @@ export class SettingsService {
   }
 
   /** Looks up user by email and creates/extends their free student subscription */
-  private async grantStudentSubscription(email: string): Promise<void> {
+  private async grantStudentSubscription(email: string, customEndDate?: string): Promise<void> {
     const cleanEmail = email.trim().toLowerCase();
     let user = await this.prisma.queryOne<{ id: string }>(
       `SELECT id FROM "user" WHERE LOWER(email) = $1`,
@@ -461,30 +463,40 @@ export class SettingsService {
       this.logger.warn(`[StudentSub] Could not ensure user record for email ${cleanEmail}`);
       return;
     }
+
+    let targetDate: Date;
+    if (customEndDate && !isNaN(new Date(customEndDate).getTime())) {
+      targetDate = new Date(customEndDate);
+    } else {
+      targetDate = new Date(Date.now() + 180 * 24 * 60 * 60 * 1000);
+    }
+
     await this.prisma.execute(
       `INSERT INTO subscription (id, "userId", "planType", status, "startDate", "endDate", "isStudent", "txnId", "createdAt", "updatedAt")
-       VALUES (gen_random_uuid()::text, $1, 'SIX_MONTH', 'ACTIVE', now(), now() + interval '6 months', true, 'STUDENT_EDITORIAL_GRANT', now(), now())
+       VALUES (gen_random_uuid()::text, $1, 'SIX_MONTH', 'ACTIVE', now(), $2, true, 'STUDENT_EDITORIAL_GRANT', now(), now())
        ON CONFLICT ("userId") DO UPDATE
          SET status      = 'ACTIVE',
              "startDate" = now(),
-             "endDate"   = now() + interval '6 months',
+             "endDate"   = $2,
              "isStudent" = true,
              "txnId"     = 'STUDENT_EDITORIAL_GRANT',
              "updatedAt" = now()`,
-      [user.id],
+      [user.id, targetDate.toISOString()],
     );
-    this.logger.log(`[StudentSub] ✅ Free 6-month subscription granted to userId=${user.id} (${cleanEmail})`);
+    this.logger.log(`[StudentSub] ✅ Free student subscription granted to userId=${user.id} (${cleanEmail}) until ${targetDate.toISOString()}`);
 
     // Dispatch in-app notification
     try {
-      await this.notificationsService.notifySubscriptionGranted(user.id, 6, true);
+      const days = Math.round((targetDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+      const months = Math.max(1, Math.round(days / 30));
+      await this.notificationsService.notifyStudentApplicationApproved(user.id, months, targetDate);
     } catch (notifErr: any) {
       this.logger.warn(`Failed to dispatch in-app notification: ${notifErr.message}`);
     }
   }
 
-  /** Revokes active subscription for a rejected/cancelled student */
-  private async revokeStudentSubscription(email: string): Promise<void> {
+  /** Revokes active subscription and notifies a rejected student */
+  private async revokeStudentSubscription(email: string, reason?: string): Promise<void> {
     const cleanEmail = email.trim().toLowerCase();
     const user = await this.prisma.queryOne<{ id: string }>(
       `SELECT id FROM "user" WHERE LOWER(email) = $1`,
@@ -500,9 +512,9 @@ export class SettingsService {
 
     if (user?.id) {
       try {
-        await this.notificationsService.notifySubscriptionCancelled(user.id);
+        await this.notificationsService.notifyStudentApplicationRejected(user.id, reason);
       } catch (notifErr: any) {
-        this.logger.warn(`Failed to dispatch cancellation notification: ${notifErr.message}`);
+        this.logger.warn(`Failed to dispatch student rejection notification: ${notifErr.message}`);
       }
     }
   }
@@ -787,18 +799,10 @@ export class SettingsService {
                 </tr>
                 <tr>
                   <td style="padding: 13px 18px; border-bottom: 1px solid #1E2D27; font-size: 12px; color: #6B7280;">
-                    Student Roll / ID
-                  </td>
-                  <td style="padding: 13px 18px; border-bottom: 1px solid #1E2D27; font-size: 12px; font-weight: 600; color: #E5E7EB; font-family: monospace;">
-                    ${record.studentIdNumber}
-                  </td>
-                </tr>
-                <tr>
-                  <td style="padding: 13px 18px; border-bottom: 1px solid #1E2D27; font-size: 12px; color: #6B7280;">
-                    Course of Study
+                    Email
                   </td>
                   <td style="padding: 13px 18px; border-bottom: 1px solid #1E2D27; font-size: 12px; font-weight: 600; color: #E5E7EB;">
-                    ${record.course}
+                    ${record.email}
                   </td>
                 </tr>
                 <tr>
@@ -809,6 +813,30 @@ export class SettingsService {
                     ${record.referenceId || record.id}
                   </td>
                 </tr>
+                ${
+                  isApproved && record.endDate
+                    ? `<tr>
+                  <td style="padding: 13px 18px; border-bottom: 1px solid #1E2D27; font-size: 12px; color: #6B7280;">
+                    Pass Duration
+                  </td>
+                  <td style="padding: 13px 18px; border-bottom: 1px solid #1E2D27; font-size: 12px; font-weight: 700; color: #FFFFFF;">
+                    ${Math.max(1, Math.round(Math.max(1, (new Date(record.endDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)) / 30))} Months
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding: 13px 18px; border-bottom: 1px solid #1E2D27; font-size: 12px; color: #6B7280;">
+                    Access Valid Until
+                  </td>
+                  <td style="padding: 13px 18px; border-bottom: 1px solid #1E2D27; font-size: 12px; font-weight: 700; color: #34D399;">
+                    ${new Date(record.endDate).toLocaleDateString('en-IN', {
+                      day: 'numeric',
+                      month: 'short',
+                      year: 'numeric',
+                    })}
+                  </td>
+                </tr>`
+                    : ''
+                }
                 <tr>
                   <td style="padding: 13px 18px; font-size: 12px; color: #6B7280;">
                     Current Status
@@ -843,7 +871,7 @@ export class SettingsService {
               <p style="font-size: 11px; color: #6B7280; margin: 16px 0 0 0; line-height: 1.5;">
                 ${
                   isApproved
-                    ? 'Log in using your registered email to immediately access all digital issues.'
+                    ? `Log in using your registered email to immediately access all digital issues. You can view your pass details anytime at <a href="${frontendUrl}/profile" style="color: #0FA975; text-decoration: underline;">${frontendUrl}/profile</a>.`
                     : 'Need assistance? You can directly reply to this email to reach our editorial desk.'
                 }
               </p>
@@ -900,8 +928,6 @@ export class SettingsService {
         <div style="background: #0A120E; border: 1px solid #16382B; border-radius: 12px; padding: 18px; margin-bottom: 24px; font-size: 13px;">
           <div style="margin-bottom: 8px;"><strong style="color: #E4F953;">Applicant:</strong> <span style="color: #ffffff;">${record.fullName}</span></div>
           <div style="margin-bottom: 8px;"><strong style="color: #E4F953;">Institution:</strong> <span style="color: #ffffff;">${record.institution}</span></div>
-          <div style="margin-bottom: 8px;"><strong style="color: #E4F953;">Course / Year:</strong> <span style="color: #ffffff;">${record.course}</span></div>
-          <div style="margin-bottom: 8px;"><strong style="color: #E4F953;">Student ID:</strong> <span style="color: #ffffff;">${record.studentIdNumber}</span></div>
           <div style="margin-bottom: 8px;"><strong style="color: #E4F953;">Email:</strong> <span style="color: #ffffff;">${record.email}</span></div>
           <div><strong style="color: #E4F953;">Reference ID:</strong> <span style="color: #ffffff;">${record.referenceId}</span></div>
         </div>

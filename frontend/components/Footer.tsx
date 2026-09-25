@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, PenTool } from "lucide-react";
+import { ArrowRight, PenTool, Heart } from "lucide-react";
 import AuthModal from "./AuthModal";
 
 export interface FooterProps {
@@ -172,9 +172,11 @@ export const Footer: React.FC<FooterProps> = ({
             href="https://megamind.studio/"
             target="_blank"
             rel="noopener noreferrer"
-            className="hover:text-white hover:underline transition-colors text-center shrink-0 text-white/90 font-medium px-2"
+            className="hover:text-white hover:underline transition-colors text-center shrink-0 text-white/90 font-medium px-2 flex items-center justify-center gap-1.5"
           >
-            Made with by <span className="font-sans">♥</span> Megamind Studios
+            <span>Made with</span>
+            <Heart fill="white" className="w-3.5 h-3.5 text-white inline" />
+            <span>by Megamind Studios</span>
           </a>
 
           <div className="flex flex-wrap  justify-center md:justify-end gap-5 sm:gap-6 font-medium shrink-0">

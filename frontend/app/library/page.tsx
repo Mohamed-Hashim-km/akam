@@ -276,7 +276,7 @@ export default function LibraryPage() {
                 My Library
               </h1>
               <p className="text-gray-500 text-sm sm:text-base mt-1.5 max-w-2xl leading-relaxed">
-                Revisit your bookmarked articles, paintings, and stories, track your reading progress, and explore your liked creative works.
+                Revisit your bookmarked articles, visual arts, and stories, track your reading progress, and explore your liked creative works.
               </p>
             </div>
           </div>
@@ -416,7 +416,7 @@ export default function LibraryPage() {
               Sign in to Access Your Library
             </h2>
             <p className="text-sm text-gray-500 mb-6 leading-relaxed">
-              Sign in to save your favorite articles, stories, paintings, and videos, track your reading progress, and build your personal collection.
+              Sign in to save your favorite articles, stories, visual arts, and videos, track your reading progress, and build your personal collection.
             </p>
             <Button
               variant="primary"
@@ -445,9 +445,9 @@ export default function LibraryPage() {
               {activeTab === "inProgress" &&
                 "Start reading articles and stories or exploring works, and your progress will automatically show up here."}
               {activeTab === "bookmarked" &&
-                "Click the bookmark icon on any article, painting, or story to save it to your personal collection."}
+                "Click the bookmark icon on any article, visual arts piece, or story to save it to your personal collection."}
               {activeTab === "liked" &&
-                "Show appreciation for articles, paintings, and creative works by liking them to view them here later."}
+                "Show appreciation for articles, visual arts, and creative works by liking them to view them here later."}
               {activeTab === "completed" &&
                 "Finish reading stories and articles completely to add them to your completed collection."}
             </p>
@@ -525,7 +525,7 @@ export default function LibraryPage() {
                           {/* Category badge shows for all cards */}
                           <span className="bg-[#E4F953] text-[#040706] font-bold text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-lg flex items-center gap-1 shadow-xs">
                             <BookOpen className="w-2.5 h-2.5" />
-                            {(item.category || "Story").toUpperCase()}
+                            {(isPainting ? "Visual Arts" : isVideo ? "Video" : (item.category || "Article")).toUpperCase()}
                           </span>
                         </div>
 
@@ -624,7 +624,7 @@ export default function LibraryPage() {
                           className="text-xs font-semibold py-1.5 px-3.5 shadow-xs cursor-pointer rounded-full"
                         >
                           {isPainting
-                            ? "View Artwork"
+                            ? "View Visual Arts"
                             : isVideo
                             ? "Watch Video"
                             : activeTab === "inProgress"

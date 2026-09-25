@@ -2,7 +2,8 @@
 
 import React, { useEffect, useState } from "react";
 import Image from "next/image";
-import { Loader2, X, Sparkles } from "lucide-react";
+import Link from "next/link";
+import { X, Sparkles, ArrowRight } from "lucide-react";
 import { API_BASE_URL, apiFetch } from "@/lib/config";
 
 export interface AuthorItem {
@@ -17,17 +18,23 @@ export interface AuthorsOfAkamProps {
   title?: string;
   subtitle?: string;
   authors?: AuthorItem[];
+  limit?: number;
+  showViewMore?: boolean;
+  viewMoreHref?: string;
 }
 
 export const AuthorsOfAkam: React.FC<AuthorsOfAkamProps> = ({
   title = "Authors Of Akam",
   subtitle = "The voices, minds, and storytellers behind our archives.",
   authors: propAuthors,
+  limit = 8,
+  showViewMore = true,
+  viewMoreHref = "/authors",
 }) => {
-  const [displayAuthors, setDisplayAuthors] = useState<AuthorItem[]>(propAuthors || []);
+  const [displayAuthors, setDisplayAuthors] = useState<AuthorItem[]>(
+    propAuthors ? propAuthors.slice(0, limit) : []
+  );
   const [loading, setLoading] = useState(!propAuthors || propAuthors.length === 0);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
 
   // Author Profile Modal State
@@ -45,7 +52,8 @@ export const AuthorsOfAkam: React.FC<AuthorsOfAkamProps> = ({
 
   useEffect(() => {
     if (propAuthors && propAuthors.length > 0) {
-      setDisplayAuthors(propAuthors);
+      setDisplayAuthors(propAuthors.slice(0, limit));
+      setHasMore(propAuthors.length > limit);
       setLoading(false);
       return;
     }
@@ -53,7 +61,7 @@ export const AuthorsOfAkam: React.FC<AuthorsOfAkamProps> = ({
     const fetchInitialAuthors = async () => {
       setLoading(true);
       try {
-        const res = await apiFetch(`${API_BASE_URL}/users/public-authors?page=1&limit=4`);
+        const res = await apiFetch(`${API_BASE_URL}/users/public-authors?page=1&limit=${limit}`);
         if (res.ok) {
           const json = await res.json();
           const authorsData = json.data ? json.data : (Array.isArray(json) ? json : []);
@@ -62,7 +70,7 @@ export const AuthorsOfAkam: React.FC<AuthorsOfAkamProps> = ({
           if (authorsData.length > 0) {
             const mapped = mapUserToAuthorItem(authorsData);
             setDisplayAuthors(mapped);
-            setHasMore(meta.hasMore ?? false);
+            setHasMore(meta.hasMore ?? (meta.total > limit));
           } else {
             setDisplayAuthors([]);
             setHasMore(false);
@@ -81,38 +89,7 @@ export const AuthorsOfAkam: React.FC<AuthorsOfAkamProps> = ({
     };
 
     fetchInitialAuthors();
-  }, [propAuthors]);
-
-  const handleLoadMore = async () => {
-    if (loadingMore || !hasMore) return;
-    setLoadingMore(true);
-    const nextPage = page + 1;
-    try {
-      const res = await apiFetch(`${API_BASE_URL}/users/public-authors?page=${nextPage}&limit=4`);
-      if (res.ok) {
-        const json = await res.json();
-        const authorsData = json.data ? json.data : (Array.isArray(json) ? json : []);
-        const meta = json.meta || {};
-
-        if (authorsData.length > 0) {
-          const mapped = mapUserToAuthorItem(authorsData);
-          setDisplayAuthors((prev) => {
-            const existingIds = new Set(prev.map((a) => a.id));
-            const newItems = mapped.filter((a) => !existingIds.has(a.id));
-            return [...prev, ...newItems];
-          });
-          setPage(nextPage);
-          setHasMore(meta.hasMore ?? false);
-        } else {
-          setHasMore(false);
-        }
-      }
-    } catch (err) {
-      console.error("Failed to load more authors", err);
-    } finally {
-      setLoadingMore(false);
-    }
-  };
+  }, [propAuthors, limit]);
 
   if (loading) {
     return (
@@ -127,7 +104,7 @@ export const AuthorsOfAkam: React.FC<AuthorsOfAkamProps> = ({
             </p>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-8 sm:gap-10 lg:gap-12 mx-auto justify-items-center">
-            {[1, 2, 3, 4].map((i) => (
+            {Array.from({ length: limit }).map((_, i) => (
               <div key={i} className="flex flex-col items-center text-center animate-pulse w-full">
                 <div className="w-36 h-36 sm:w-44 sm:h-44 rounded-full bg-gray-200 mb-5" />
                 <div className="h-5 bg-gray-200 rounded w-28 mb-2" />
@@ -209,24 +186,16 @@ export const AuthorsOfAkam: React.FC<AuthorsOfAkamProps> = ({
           ))}
         </div>
 
-        {/* View More Button (Matching ExploreByInterest styling) */}
-        {hasMore && (
+        {/* View More Button - Navigates to dedicated /authors page */}
+        {showViewMore && hasMore && (
           <div className="flex justify-center mt-12 sm:mt-16">
-            <button
-              type="button"
-              onClick={handleLoadMore}
-              disabled={loadingMore}
-              className="px-8 py-2.5 rounded-full border border-dark-bg text-dark-bg hover:bg-dark-bg hover:text-white transition-all text-sm font-medium shadow-2xs cursor-pointer disabled:opacity-50 inline-flex items-center gap-2"
+            <Link
+              href={viewMoreHref}
+              className="px-8 py-2.5 rounded-full border border-dark-bg text-dark-bg hover:bg-dark-bg hover:text-white transition-all text-sm font-medium shadow-2xs cursor-pointer inline-flex items-center gap-2 group"
             >
-              {loadingMore ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Loading...</span>
-                </>
-              ) : (
-                <span>View more</span>
-              )}
-            </button>
+              <span>View more</span>
+              <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
+            </Link>
           </div>
         )}
 
