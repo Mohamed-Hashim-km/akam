@@ -160,7 +160,7 @@ function CommentItem({
 
   const authorLetter = (comment.authorName || "A")[0].toUpperCase();
   const isCommentAuthor = user && user.id === comment.authorId;
-  const canDelete = isCommentAuthor || (user && ["EDITOR", "ADMIN"].includes(user.role));
+  const canDelete = isCommentAuthor || (user && ["EDITOR", "ADMIN", "MODERATOR"].includes(user.role));
 
   return (
     <div className="bg-white border border-gray-200/90 rounded-2xl p-4 sm:p-5 shadow-xs hover:border-gray-300 transition-colors">

@@ -220,6 +220,13 @@
                   "kind": "scalar"
                 }
               },
+              "category": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
               "content": {
                 "nullable": false,
                 "type": {
@@ -241,8 +248,22 @@
                   "kind": "scalar"
                 }
               },
+              "description": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
               "id": {
                 "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "mediaUrl": {
+                "nullable": true,
                 "type": {
                   "codecId": "pg/text@1",
                   "kind": "scalar"
@@ -269,6 +290,16 @@
                   "kind": "scalar",
                   "typeParams": {
                     "typeName": "StoryStatus"
+                  }
+                }
+              },
+              "submissionType": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/enum@1",
+                  "kind": "scalar",
+                  "typeParams": {
+                    "typeName": "SubmissionType"
                   }
                 }
               },
@@ -324,6 +355,9 @@
                 "authorId": {
                   "column": "authorId"
                 },
+                "category": {
+                  "column": "category"
+                },
                 "content": {
                   "column": "content"
                 },
@@ -333,8 +367,14 @@
                 "createdAt": {
                   "column": "createdAt"
                 },
+                "description": {
+                  "column": "description"
+                },
                 "id": {
                   "column": "id"
+                },
+                "mediaUrl": {
+                  "column": "mediaUrl"
                 },
                 "rejectionNote": {
                   "column": "rejectionNote"
@@ -344,6 +384,9 @@
                 },
                 "status": {
                   "column": "status"
+                },
+                "submissionType": {
+                  "column": "submissionType"
                 },
                 "title": {
                   "column": "title"
@@ -505,7 +548,8 @@
                 "READER",
                 "AUTHOR",
                 "EDITOR",
-                "ADMIN"
+                "ADMIN",
+                "MODERATOR"
               ],
               "typeName": "Role"
             },
@@ -518,6 +562,15 @@
                 "REJECTED"
               ],
               "typeName": "StoryStatus"
+            },
+            "SubmissionType": {
+              "kind": "postgres-enum",
+              "members": [
+                "STORY",
+                "PAINTING",
+                "VIDEO"
+              ],
+              "typeName": "SubmissionType"
             }
           },
           "table": {
@@ -714,8 +767,17 @@
                   "nativeType": "text",
                   "nullable": false
                 },
+                "category": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
                 "content": {
                   "codecId": "pg/text@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": ""
+                  },
                   "nativeType": "text",
                   "nullable": false
                 },
@@ -733,6 +795,11 @@
                   "nativeType": "timestamptz",
                   "nullable": false
                 },
+                "description": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
                 "id": {
                   "codecId": "pg/text@1",
                   "default": {
@@ -741,6 +808,11 @@
                   },
                   "nativeType": "text",
                   "nullable": false
+                },
+                "mediaUrl": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
                 },
                 "rejectionNote": {
                   "codecId": "pg/text@1",
@@ -766,6 +838,24 @@
                   "valueSet": {
                     "entityKind": "valueSet",
                     "entityName": "StoryStatus",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                },
+                "submissionType": {
+                  "codecId": "pg/enum@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": "STORY"
+                  },
+                  "nativeType": "SubmissionType",
+                  "nullable": false,
+                  "typeParams": {
+                    "typeName": "SubmissionType"
+                  },
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "SubmissionType",
                     "namespaceId": "public",
                     "plane": "storage"
                   }
@@ -826,6 +916,13 @@
                     "status"
                   ],
                   "name": "Story_status_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "submissionType"
+                  ],
+                  "name": "Story_submissionType_idx",
                   "unique": false
                 }
               ],
@@ -930,7 +1027,8 @@
                 "READER",
                 "AUTHOR",
                 "EDITOR",
-                "ADMIN"
+                "ADMIN",
+                "MODERATOR"
               ]
             },
             "StoryStatus": {
@@ -941,6 +1039,14 @@
                 "APPROVED",
                 "REJECTED"
               ]
+            },
+            "SubmissionType": {
+              "kind": "valueSet",
+              "values": [
+                "STORY",
+                "PAINTING",
+                "VIDEO"
+              ]
             }
           }
         },
@@ -948,7 +1054,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "6832ce80673054978eb60d4609f70723dad10b5d11557a29b44e59e8f3be54cc"
+    "storageHash": "9539f27d815a824ead5b89dc0cefb2e34234d13db646ec9afdfdf280b1372b1e"
   },
   "capabilities": {
     "postgres": {

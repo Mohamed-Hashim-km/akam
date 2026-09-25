@@ -30,6 +30,15 @@ async function main() {
   );
   console.log('✅ Admin Account:', adminRes.rows[0]);
 
+  // 3. Upsert Moderator account
+  const modRes = await pool.query(
+    `INSERT INTO "user" (id, email, name, role, "createdAt", "updatedAt") 
+     VALUES (gen_random_uuid()::text, 'moderator@akamdigital.com', 'Community Moderator', 'MODERATOR'::"Role", NOW(), NOW())
+     ON CONFLICT (email) DO UPDATE SET role = 'MODERATOR'::"Role", name = COALESCE("user".name, 'Community Moderator'), "updatedAt" = NOW()
+     RETURNING id, email, name, role;`
+  );
+  console.log('✅ Moderator Account:', modRes.rows[0]);
+
   // 3. List all users with non-reader roles
   const allUsers = await pool.query(`SELECT id, email, name, role FROM "user" ORDER BY email ASC;`);
   console.log('\n--- All Database Users ---');

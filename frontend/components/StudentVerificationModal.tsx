@@ -15,6 +15,7 @@ import {
   UploadCloud,
   Camera,
   Trash2,
+  Calendar,
 } from "lucide-react";
 import { API_BASE_URL, apiFetch, formatAssetUrl } from "@/lib/config";
 
@@ -30,6 +31,7 @@ export interface StudentApplicationData {
   reviewedAt?: string;
   reviewedBy?: string;
   reviewNotes?: string;
+  endDate?: string;
 }
 
 export interface StudentVerificationModalProps {
@@ -124,15 +126,20 @@ export const StudentVerificationModal: React.FC<StudentVerificationModalProps> =
               reviewNotes: data.reviewNotes || currentApp?.reviewNotes,
               reviewedAt: data.reviewedAt || currentApp?.reviewedAt,
               reviewedBy: data.reviewedBy || currentApp?.reviewedBy,
+              endDate: data.endDate || currentApp?.endDate,
             };
             setExistingApplication(synced);
             localStorage.setItem("akam_student_application", JSON.stringify(synced));
             if (data.status === "APPROVED") {
               localStorage.setItem("akam_masika_pass", "true");
               localStorage.setItem("akam_pass_type", "Student Special Pass (100% Free)");
+              if (data.endDate) {
+                localStorage.setItem("akam_subscription_end_date", data.endDate);
+              }
             } else if (data.status === "REJECTED") {
               localStorage.removeItem("akam_masika_pass");
               localStorage.removeItem("akam_pass_type");
+              localStorage.removeItem("akam_subscription_end_date");
             }
             if (onStatusChange) {
               onStatusChange(data.status);
@@ -378,6 +385,19 @@ export const StudentVerificationModal: React.FC<StudentVerificationModalProps> =
                     <p className="text-xs text-emerald-800 leading-relaxed">
                       The Editorial Board has verified your student credentials. You now have complimentary all-access to every monthly Masika edition and archive downloads.
                     </p>
+                    {existingApplication.endDate && (
+                      <div className="pt-1 flex items-center gap-1.5 text-xs font-semibold text-emerald-950">
+                        <Calendar className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                        <span>Pass Valid Until:</span>
+                        <span className="font-bold underline decoration-emerald-500">
+                          {new Date(existingApplication.endDate).toLocaleDateString("en-IN", {
+                            day: "numeric",
+                            month: "short",
+                            year: "numeric",
+                          })}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
               ) : existingApplication.status === "REJECTED" ? (
@@ -444,6 +464,21 @@ export const StudentVerificationModal: React.FC<StudentVerificationModalProps> =
                   <span className="text-gray-500">Email:</span>
                   <span className="text-gray-900">{existingApplication.email}</span>
                 </div>
+                {existingApplication.endDate && (
+                  <div className="flex justify-between items-center text-emerald-800 bg-emerald-50/70 p-2.5 rounded-xl border border-emerald-200/80">
+                    <span className="font-semibold flex items-center gap-1.5">
+                      <Calendar className="w-3.5 h-3.5 text-emerald-600" />
+                      Pass Valid Until:
+                    </span>
+                    <span className="font-bold text-gray-950">
+                      {new Date(existingApplication.endDate).toLocaleDateString("en-IN", {
+                        day: "numeric",
+                        month: "short",
+                        year: "numeric",
+                      })}
+                    </span>
+                  </div>
+                )}
 
                 {existingApplication.idCardUrl && (
                   <div className="pt-2 border-t border-gray-200">

@@ -86,12 +86,15 @@ export class PostsService {
         JOIN community c ON c.id = p."communityId"
         WHERE p."communityId" = $1
           AND p.status != 'REMOVED'
+          AND (u."isShadowBanned" IS NOT TRUE ${userId ? `OR p."authorId" = '${userId}'` : ''})
         ORDER BY ${orderByClause[sort]}
         LIMIT $2 OFFSET $3
       `, [community.id, limit, offset]),
       this.prisma.queryOne<{ count: string }>(`
-        SELECT COUNT(*) AS count FROM community_post
-        WHERE "communityId" = $1 AND status != 'REMOVED'
+        SELECT COUNT(*) AS count FROM community_post p
+        JOIN "user" u ON u.id = p."authorId"
+        WHERE p."communityId" = $1 AND p.status != 'REMOVED'
+          AND (u."isShadowBanned" IS NOT TRUE ${userId ? `OR p."authorId" = '${userId}'` : ''})
       `, [community.id]),
     ]);
 
@@ -124,12 +127,13 @@ export class PostsService {
 
   // ─── Single Post ─────────────────────────────────────────────────────
   async findOne(postId: string, userId?: string): Promise<PostRow> {
-    const post = await this.prisma.queryOne<PostRow>(`
+    const post = await this.prisma.queryOne<PostRow & { authorIsShadowBanned?: boolean }>(`
       SELECT
         p.id, p."communityId", c.slug AS "communitySlug", c.name AS "communityName",
         p."authorId",
         u.name AS "authorName",
         u."avatarUrl" AS "authorAvatarUrl",
+        u."isShadowBanned" AS "authorIsShadowBanned",
         p.title, p.body, p."imageUrl", p."linkUrl",
         p.flair, p.status,
         p.upvotes, p.downvotes, (p.upvotes - p.downvotes) AS score,
@@ -143,7 +147,9 @@ export class PostsService {
       WHERE p.id = $1 AND p.status != 'REMOVED'
     `, [postId]);
 
-    if (!post) throw new NotFoundException('Post not found');
+    if (!post || (post.authorIsShadowBanned && post.authorId !== userId)) {
+      throw new NotFoundException('Post not found');
+    }
 
     if (userId) {
       const vote = await this.prisma.queryOne<{ value: string }>(
