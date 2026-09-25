@@ -41,9 +41,9 @@ export class SubscriptionController {
     const isActive = sub.status === 'ACTIVE' && new Date(sub.endDate) > new Date();
     return {
       isActive,
-      endDate: sub.endDate,
-      planType: sub.planType,
-      isStudent: sub.isStudent,
+      endDate: isActive ? sub.endDate : null,
+      planType: isActive ? sub.planType : null,
+      isStudent: Boolean(isActive && sub.isStudent),
     };
   }
 

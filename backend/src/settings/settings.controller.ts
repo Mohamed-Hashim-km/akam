@@ -99,6 +99,7 @@ export class SettingsController {
       dto.status,
       dto.reviewNotes,
       dto.reviewedBy,
+      dto.endDate,
     );
   }
 

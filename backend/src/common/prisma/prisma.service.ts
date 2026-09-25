@@ -29,6 +29,7 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
       await client.query('SELECT 1');
       await client.query('ALTER TABLE story ADD COLUMN IF NOT EXISTS description TEXT;');
       await client.query('ALTER TABLE story ADD COLUMN IF NOT EXISTS category TEXT DEFAULT \'Fiction\';');
+      await client.query('ALTER TABLE story ALTER COLUMN category DROP NOT NULL;');
       await client.query('ALTER TABLE story ADD COLUMN IF NOT EXISTS "isFeatured" BOOLEAN DEFAULT false;');
       await client.query(`ALTER TYPE "EventType" ADD VALUE IF NOT EXISTS 'EXHIBITION';`);
       await client.query(`ALTER TYPE "EventType" ADD VALUE IF NOT EXISTS 'FILM_SCREENING';`);
@@ -36,6 +37,7 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
       await client.query(`ALTER TYPE "StoryStatus" ADD VALUE IF NOT EXISTS 'APPROVED_EMAGAZINE';`);
       await client.query(`ALTER TYPE "StoryStatus" ADD VALUE IF NOT EXISTS 'PUBLISHED_EMAGAZINE';`);
       await client.query(`ALTER TYPE "StoryStatus" ADD VALUE IF NOT EXISTS 'UNPUBLISHED';`);
+      await client.query(`ALTER TYPE "StoryStatus" ADD VALUE IF NOT EXISTS 'DISPUTED';`);
       await client.query(`ALTER TYPE "NotificationType" ADD VALUE IF NOT EXISTS 'STORY_APPROVED_EMAGAZINE';`);
       await client.query(`ALTER TYPE "NotificationType" ADD VALUE IF NOT EXISTS 'STORY_PUBLISHED_EMAGAZINE';`);
       await client.query(`ALTER TYPE "NotificationType" ADD VALUE IF NOT EXISTS 'CONTENT_REPORTED';`);
@@ -43,6 +45,16 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
       await client.query(`ALTER TYPE "NotificationType" ADD VALUE IF NOT EXISTS 'REPORT_DISMISSED';`);
       await client.query(`ALTER TYPE "NotificationType" ADD VALUE IF NOT EXISTS 'CONTENT_REMOVED';`);
       await client.query(`ALTER TYPE "NotificationType" ADD VALUE IF NOT EXISTS 'STUDENT_APPLICATION_SUBMITTED';`);
+      await client.query(`ALTER TYPE "NotificationType" ADD VALUE IF NOT EXISTS 'STUDENT_APPLICATION_APPROVED';`);
+      await client.query(`ALTER TYPE "NotificationType" ADD VALUE IF NOT EXISTS 'STUDENT_APPLICATION_REJECTED';`);
+      await client.query(`ALTER TYPE "NotificationType" ADD VALUE IF NOT EXISTS 'SUBSCRIPTION_GRANTED';`);
+      await client.query(`ALTER TYPE "NotificationType" ADD VALUE IF NOT EXISTS 'SUBSCRIPTION_CANCELLED';`);
+      await client.query(`ALTER TYPE "NotificationType" ADD VALUE IF NOT EXISTS 'CONTENT_DISPUTED';`);
+      await client.query(`ALTER TABLE story_report ADD COLUMN IF NOT EXISTS "authorResponse" TEXT;`);
+      await client.query(`ALTER TABLE story_report ADD COLUMN IF NOT EXISTS "authorRespondedAt" TIMESTAMP WITH TIME ZONE;`);
+      await client.query(`ALTER TABLE story_report ADD COLUMN IF NOT EXISTS "disputeExpiresAt" TIMESTAMP WITH TIME ZONE;`);
+      await client.query(`ALTER TABLE story_report ADD COLUMN IF NOT EXISTS "disputedAt" TIMESTAMP WITH TIME ZONE;`);
+      await client.query(`ALTER TABLE story_report ADD COLUMN IF NOT EXISTS "editorialNote" TEXT;`);
       await client.query(`CREATE TABLE IF NOT EXISTS site_setting (key TEXT PRIMARY KEY, value JSONB, "updatedAt" TIMESTAMP DEFAULT now());`);
       // Subscription table
       await client.query(`

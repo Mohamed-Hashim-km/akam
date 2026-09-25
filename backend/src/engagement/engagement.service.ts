@@ -283,12 +283,12 @@ export class EngagementService {
     );
     if (!comment) throw new NotFoundException('Comment not found');
 
-    if (comment.userId !== userId && !['EDITOR', 'ADMIN'].includes(userRole)) {
+    if (comment.userId !== userId && !['EDITOR', 'ADMIN', 'MODERATOR'].includes(userRole)) {
       throw new ForbiddenException('Not authorized to delete this comment');
     }
 
     // If removed by editor/moderator, notify the author
-    if (comment.userId !== userId && ['EDITOR', 'ADMIN'].includes(userRole)) {
+    if (comment.userId !== userId && ['EDITOR', 'ADMIN', 'MODERATOR'].includes(userRole)) {
       try {
         const story = await this.prisma.queryOne<{ title: string }>(
           `SELECT title FROM story WHERE id = $1`,

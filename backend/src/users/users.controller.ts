@@ -143,6 +143,14 @@ export class UsersController {
     return this.usersService.updateSortOrder(id, isNaN(val) ? 0 : val);
   }
 
+  @Patch(':id/toggle-shadow-ban')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('EDITOR', 'ADMIN')
+  @ApiOperation({ summary: '[Editor/Admin] Toggle user/author shadow ban status' })
+  async toggleShadowBan(@Param('id') id: string) {
+    return this.usersService.toggleShadowBan(id);
+  }
+
   @Post('create-author')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('EDITOR', 'ADMIN')

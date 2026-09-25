@@ -33,7 +33,7 @@ import type {
 } from '@prisma/orm-postgres/contract/types';
 
 export type StorageHash =
-  StorageHashBase<'6832ce80673054978eb60d4609f70723dad10b5d11557a29b44e59e8f3be54cc'>;
+  StorageHashBase<'9539f27d815a824ead5b89dc0cefb2e34234d13db646ec9afdfdf280b1372b1e'>;
 export type ExecutionHash = ExecutionHashBase<string>;
 export type ProfileHash =
   ProfileHashBase<'3916f444a8a17ad749191acf9e08dad97d1a327b88c2f1d45d12f240296aa8b2'>;
@@ -261,8 +261,12 @@ export type FieldOutputTypes = {
       readonly id: CodecTypes['pg/text@1']['output'];
       readonly title: CodecTypes['pg/text@1']['output'];
       readonly slug: CodecTypes['pg/text@1']['output'];
+      readonly description: CodecTypes['pg/text@1']['output'] | null;
       readonly content: CodecTypes['pg/text@1']['output'];
       readonly coverImageUrl: CodecTypes['pg/text@1']['output'] | null;
+      readonly submissionType: 'STORY' | 'PAINTING' | 'VIDEO';
+      readonly mediaUrl: CodecTypes['pg/text@1']['output'] | null;
+      readonly category: CodecTypes['pg/text@1']['output'] | null;
       readonly status: 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED';
       readonly rejectionNote: CodecTypes['pg/text@1']['output'] | null;
       readonly authorId: CodecTypes['pg/text@1']['output'];
@@ -277,7 +281,7 @@ export type FieldOutputTypes = {
       readonly updatedAt: CodecTypes['pg/timestamptz-temporal@1']['output'];
       readonly bio: CodecTypes['pg/text@1']['output'] | null;
       readonly avatarUrl: CodecTypes['pg/text@1']['output'] | null;
-      readonly role: 'READER' | 'AUTHOR' | 'EDITOR' | 'ADMIN';
+      readonly role: 'READER' | 'AUTHOR' | 'EDITOR' | 'ADMIN' | 'MODERATOR';
     };
   };
 };
@@ -304,8 +308,12 @@ export type FieldInputTypes = {
       readonly id: CodecTypes['pg/text@1']['input'];
       readonly title: CodecTypes['pg/text@1']['input'];
       readonly slug: CodecTypes['pg/text@1']['input'];
+      readonly description: CodecTypes['pg/text@1']['input'] | null;
       readonly content: CodecTypes['pg/text@1']['input'];
       readonly coverImageUrl: CodecTypes['pg/text@1']['input'] | null;
+      readonly submissionType: 'STORY' | 'PAINTING' | 'VIDEO';
+      readonly mediaUrl: CodecTypes['pg/text@1']['input'] | null;
+      readonly category: CodecTypes['pg/text@1']['input'] | null;
       readonly status: 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED';
       readonly rejectionNote: CodecTypes['pg/text@1']['input'] | null;
       readonly authorId: CodecTypes['pg/text@1']['input'];
@@ -320,7 +328,7 @@ export type FieldInputTypes = {
       readonly updatedAt: CodecTypes['pg/timestamptz-temporal@1']['input'];
       readonly bio: CodecTypes['pg/text@1']['input'] | null;
       readonly avatarUrl: CodecTypes['pg/text@1']['input'] | null;
-      readonly role: 'READER' | 'AUTHOR' | 'EDITOR' | 'ADMIN';
+      readonly role: 'READER' | 'AUTHOR' | 'EDITOR' | 'ADMIN' | 'MODERATOR';
     };
   };
 };
@@ -345,13 +353,17 @@ export type StorageColumnTypes = {
     };
     readonly story: {
       readonly authorId: CodecTypes['pg/text@1']['output'];
+      readonly category: CodecTypes['pg/text@1']['output'] | null;
       readonly content: CodecTypes['pg/text@1']['output'];
       readonly coverImageUrl: CodecTypes['pg/text@1']['output'] | null;
       readonly createdAt: CodecTypes['pg/timestamptz-temporal@1']['output'];
+      readonly description: CodecTypes['pg/text@1']['output'] | null;
       readonly id: CodecTypes['pg/text@1']['output'];
+      readonly mediaUrl: CodecTypes['pg/text@1']['output'] | null;
       readonly rejectionNote: CodecTypes['pg/text@1']['output'] | null;
       readonly slug: CodecTypes['pg/text@1']['output'];
       readonly status: 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED';
+      readonly submissionType: 'STORY' | 'PAINTING' | 'VIDEO';
       readonly title: CodecTypes['pg/text@1']['output'];
       readonly updatedAt: CodecTypes['pg/timestamptz-temporal@1']['output'];
     };
@@ -362,7 +374,7 @@ export type StorageColumnTypes = {
       readonly email: CodecTypes['pg/text@1']['output'];
       readonly id: CodecTypes['pg/text@1']['output'];
       readonly name: CodecTypes['pg/text@1']['output'] | null;
-      readonly role: 'READER' | 'AUTHOR' | 'EDITOR' | 'ADMIN';
+      readonly role: 'READER' | 'AUTHOR' | 'EDITOR' | 'ADMIN' | 'MODERATOR';
       readonly updatedAt: CodecTypes['pg/timestamptz-temporal@1']['output'];
     };
   };
@@ -388,13 +400,17 @@ export type StorageColumnInputTypes = {
     };
     readonly story: {
       readonly authorId: CodecTypes['pg/text@1']['input'];
+      readonly category: CodecTypes['pg/text@1']['input'] | null;
       readonly content: CodecTypes['pg/text@1']['input'];
       readonly coverImageUrl: CodecTypes['pg/text@1']['input'] | null;
       readonly createdAt: CodecTypes['pg/timestamptz-temporal@1']['input'];
+      readonly description: CodecTypes['pg/text@1']['input'] | null;
       readonly id: CodecTypes['pg/text@1']['input'];
+      readonly mediaUrl: CodecTypes['pg/text@1']['input'] | null;
       readonly rejectionNote: CodecTypes['pg/text@1']['input'] | null;
       readonly slug: CodecTypes['pg/text@1']['input'];
       readonly status: 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED';
+      readonly submissionType: 'STORY' | 'PAINTING' | 'VIDEO';
       readonly title: CodecTypes['pg/text@1']['input'];
       readonly updatedAt: CodecTypes['pg/timestamptz-temporal@1']['input'];
     };
@@ -405,7 +421,7 @@ export type StorageColumnInputTypes = {
       readonly email: CodecTypes['pg/text@1']['input'];
       readonly id: CodecTypes['pg/text@1']['input'];
       readonly name: CodecTypes['pg/text@1']['input'] | null;
-      readonly role: 'READER' | 'AUTHOR' | 'EDITOR' | 'ADMIN';
+      readonly role: 'READER' | 'AUTHOR' | 'EDITOR' | 'ADMIN' | 'MODERATOR';
       readonly updatedAt: CodecTypes['pg/timestamptz-temporal@1']['input'];
     };
   };
@@ -593,12 +609,41 @@ type ContractBase = Omit<
                   readonly codecId: 'pg/text@1';
                   readonly nullable: false;
                 };
+                readonly description: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
                 readonly content: {
                   readonly nativeType: 'text';
                   readonly codecId: 'pg/text@1';
                   readonly nullable: false;
+                  readonly default: {
+                    readonly kind: 'literal';
+                    readonly value: DefaultLiteralValue<'pg/text@1', ''>;
+                  };
                 };
                 readonly coverImageUrl: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
+                readonly submissionType: {
+                  readonly nativeType: 'SubmissionType';
+                  readonly codecId: 'pg/enum@1';
+                  readonly nullable: false;
+                  readonly default: {
+                    readonly kind: 'literal';
+                    readonly value: DefaultLiteralValue<'pg/enum@1', 'STORY'>;
+                  };
+                  readonly typeParams: { readonly typeName: 'SubmissionType' };
+                };
+                readonly mediaUrl: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
+                readonly category: {
                   readonly nativeType: 'text';
                   readonly codecId: 'pg/text@1';
                   readonly nullable: true;
@@ -652,6 +697,11 @@ type ContractBase = Omit<
                 {
                   readonly name: 'Story_status_idx';
                   readonly columns: readonly ['status'];
+                  readonly unique: false;
+                },
+                {
+                  readonly name: 'Story_submissionType_idx';
+                  readonly columns: readonly ['submissionType'];
                   readonly unique: false;
                 },
               ];
@@ -735,11 +785,15 @@ type ContractBase = Omit<
             };
             readonly Role: {
               readonly kind: 'valueSet';
-              readonly values: readonly ['READER', 'AUTHOR', 'EDITOR', 'ADMIN'];
+              readonly values: readonly ['READER', 'AUTHOR', 'EDITOR', 'ADMIN', 'MODERATOR'];
             };
             readonly StoryStatus: {
               readonly kind: 'valueSet';
               readonly values: readonly ['DRAFT', 'PENDING', 'APPROVED', 'REJECTED'];
+            };
+            readonly SubmissionType: {
+              readonly kind: 'valueSet';
+              readonly values: readonly ['STORY', 'PAINTING', 'VIDEO'];
             };
           };
         };
@@ -898,11 +952,31 @@ type ContractBase = Omit<
                 readonly nullable: false;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
+              readonly description: {
+                readonly nullable: true;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
               readonly content: {
                 readonly nullable: false;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
               readonly coverImageUrl: {
+                readonly nullable: true;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly submissionType: {
+                readonly nullable: false;
+                readonly type: {
+                  readonly kind: 'scalar';
+                  readonly codecId: 'pg/enum@1';
+                  readonly typeParams: { readonly typeName: 'SubmissionType' };
+                };
+              };
+              readonly mediaUrl: {
+                readonly nullable: true;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly category: {
                 readonly nullable: true;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
@@ -965,8 +1039,12 @@ type ContractBase = Omit<
                 readonly id: { readonly column: 'id' };
                 readonly title: { readonly column: 'title' };
                 readonly slug: { readonly column: 'slug' };
+                readonly description: { readonly column: 'description' };
                 readonly content: { readonly column: 'content' };
                 readonly coverImageUrl: { readonly column: 'coverImageUrl' };
+                readonly submissionType: { readonly column: 'submissionType' };
+                readonly mediaUrl: { readonly column: 'mediaUrl' };
+                readonly category: { readonly column: 'category' };
                 readonly status: { readonly column: 'status' };
                 readonly rejectionNote: { readonly column: 'rejectionNote' };
                 readonly authorId: { readonly column: 'authorId' };

@@ -25,6 +25,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
 import type { AuthUser } from '../auth/decorators/current-user.decorator.js';
 import { StoriesService } from './stories.service.js';
 import { UploadsService } from '../uploads/uploads.service.js';
+import { ModerationService } from '../moderation/moderation.service.js';
 import { CreateStoryDto } from './dto/create-story.dto.js';
 import { UpdateStoryDto } from './dto/update-story.dto.js';
 import { ReviewStoryDto } from './dto/review-story.dto.js';
@@ -35,6 +36,7 @@ export class StoriesController {
   constructor(
     private readonly storiesService: StoriesService,
     private readonly uploadsService: UploadsService,
+    private readonly moderationService: ModerationService,
   ) {}
 
   // ─── Public endpoints ───────────────────────────────────────────────────
@@ -47,7 +49,9 @@ export class StoriesController {
   @ApiQuery({ name: 'search', required: false, description: 'Search term' })
   @ApiQuery({ name: 'category', required: false, description: 'Category filter' })
   @ApiQuery({ name: 'authorId', required: false, description: 'Filter by authorId' })
-  @ApiQuery({ name: 'featured', required: false, description: 'Filter by featured flag (true/false)' })
+  @ApiQuery({ name: 'submissionType', required: false, description: 'Filter by submissionType (STORY, PAINTING, VIDEO)' })
+  @ApiQuery({ name: 'type', required: false, description: 'Alias for submissionType' })
+  @ApiQuery({ name: 'sortBy', required: false, description: 'Sort by (newest, oldest, featured, title_asc)' })
   async findAll(
     @Query('status') status?: string,
     @Query('page') page?: string,
@@ -56,10 +60,14 @@ export class StoriesController {
     @Query('category') category?: string,
     @Query('authorId') authorId?: string,
     @Query('featured') featured?: string,
+    @Query('submissionType') submissionType?: string,
+    @Query('type') type?: string,
+    @Query('sortBy') sortBy?: string,
   ) {
     const pageNum = page ? parseInt(page, 10) : undefined;
     const limitNum = limit ? parseInt(limit, 10) : undefined;
-    return this.storiesService.findAll(status, pageNum, limitNum, search, category, authorId, featured);
+    const targetType = submissionType || type;
+    return this.storiesService.findAll(status, pageNum, limitNum, search, category, authorId, featured, targetType, sortBy);
   }
 
   @Get('published')
@@ -69,7 +77,9 @@ export class StoriesController {
   @ApiQuery({ name: 'search', required: false, description: 'Search term' })
   @ApiQuery({ name: 'category', required: false, description: 'Category filter' })
   @ApiQuery({ name: 'authorId', required: false, description: 'Filter by authorId' })
-  @ApiQuery({ name: 'featured', required: false, description: 'Filter by featured flag (true/false)' })
+  @ApiQuery({ name: 'submissionType', required: false, description: 'Filter by submissionType (STORY, PAINTING, VIDEO)' })
+  @ApiQuery({ name: 'type', required: false, description: 'Alias for submissionType' })
+  @ApiQuery({ name: 'sortBy', required: false, description: 'Sort by (newest, oldest, featured, title_asc)' })
   async findPublished(
     @Query('page') page?: string,
     @Query('limit') limit?: string,
@@ -77,10 +87,14 @@ export class StoriesController {
     @Query('category') category?: string,
     @Query('authorId') authorId?: string,
     @Query('featured') featured?: string,
+    @Query('submissionType') submissionType?: string,
+    @Query('type') type?: string,
+    @Query('sortBy') sortBy?: string,
   ) {
     const pageNum = page ? parseInt(page, 10) : undefined;
     const limitNum = limit ? parseInt(limit, 10) : undefined;
-    return this.storiesService.findAll('APPROVED', pageNum, limitNum, search, category, authorId, featured);
+    const targetType = submissionType || type;
+    return this.storiesService.findAll('APPROVED', pageNum, limitNum, search, category, authorId, featured, targetType, sortBy);
   }
 
   @Get(':id')
@@ -152,6 +166,19 @@ export class StoriesController {
   @ApiOperation({ summary: 'Delete a story (author or editor)' })
   async delete(@Param('id') id: string, @CurrentUser() user: AuthUser) {
     return this.storiesService.delete(id, user.id, user.role);
+  }
+
+  @Post(':id/dispute-response')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Submit author clarification/response to an active dispute' })
+  async submitDisputeResponse(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthUser,
+    @Body() dto: { response: string },
+  ) {
+    return this.moderationService.submitAuthorDisputeResponse(user.id, id, dto.response);
   }
 
   // ─── Editorial endpoints ──────────────────────────────────────────────────

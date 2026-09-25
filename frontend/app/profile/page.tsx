@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { User, Edit2, Upload, BookOpen, Clock, FileCheck, Shield, ChevronRight, LogOut, Send, FileText, CheckCircle2, Filter, Trash2, X, Eye, XCircle, Palette, Video, Play, GraduationCap, AlertCircle } from "lucide-react";
+import { User, Edit2, Upload, BookOpen, Clock, FileCheck, Shield, ChevronRight, LogOut, Send, FileText, CheckCircle2, Filter, Trash2, X, Eye, XCircle, Palette, Video, Play, GraduationCap, AlertCircle, Calendar, Sparkles } from "lucide-react";
 import Button from "@/components/ui/Button";
 import { API_BASE_URL, apiFetch, formatAssetUrl } from "@/lib/config";
 import type { StudentApplicationData } from "@/components/StudentVerificationModal";
@@ -33,7 +33,7 @@ interface AuthorStory {
   submissionType?: string | null;
   authorName?: string | null;
   authorEmail?: string | null;
-  status: "DRAFT" | "PENDING" | "APPROVED" | "REJECTED" | "APPROVED_EMAGAZINE" | "PUBLISHED_EMAGAZINE";
+  status: "DRAFT" | "PENDING" | "APPROVED" | "REJECTED" | "APPROVED_EMAGAZINE" | "PUBLISHED_EMAGAZINE" | "UNPUBLISHED";
   createdAt: string;
   updatedAt: string;
 }
@@ -79,10 +79,18 @@ export default function ProfilePage() {
   const closePreview = () => setPreviewStory(null);
 
   const getAddSubmissionVideoEmbed = (url: string) => {
-    const ytMatch = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
-    if (ytMatch) return { type: "youtube" as const, id: ytMatch[1] };
-    const vimeoMatch = url.match(/vimeo\.com\/(?:video\/)?(\d+)/);
-    if (vimeoMatch) return { type: "vimeo" as const, id: vimeoMatch[1] };
+    const clean = url.trim();
+    const ytMatch = clean.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/|live\/))([\w-]{11})/);
+    if (ytMatch) return { type: "youtube" as const, id: ytMatch[1], embedUrl: `https://www.youtube-nocookie.com/embed/${ytMatch[1]}` };
+    const vimeoMatch = clean.match(/vimeo\.com\/(?:video\/)?(\d+)/);
+    if (vimeoMatch) return { type: "vimeo" as const, id: vimeoMatch[1], embedUrl: `https://player.vimeo.com/video/${vimeoMatch[1]}` };
+    const dmMatch = clean.match(/(?:dailymotion\.com\/(?:video|embed\/video)\/|dai\.ly\/)([a-zA-Z0-9]+)/);
+    if (dmMatch) return { type: "dailymotion" as const, id: dmMatch[1], embedUrl: `https://www.dailymotion.com/embed/video/${dmMatch[1]}` };
+    const gdMatch = clean.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/);
+    if (gdMatch) return { type: "googledrive" as const, id: gdMatch[1], embedUrl: `https://drive.google.com/file/d/${gdMatch[1]}/preview` };
+    if (/\.(mp4|webm|ogg|mov)(\?.*)?$/i.test(clean) || clean.startsWith("blob:") || /^https?:\/\/.*\/uploads\/.*video/i.test(clean)) {
+      return { type: "direct" as const, directUrl: clean };
+    }
     return null;
   };
 
@@ -216,6 +224,11 @@ export default function ProfilePage() {
         if (data && data.status && data.status !== "NONE") {
           setStudentApp(data);
           localStorage.setItem("akam_student_application", JSON.stringify(data));
+          if (data.status === "REJECTED") {
+            localStorage.removeItem("akam_masika_pass");
+            localStorage.removeItem("akam_pass_type");
+            localStorage.removeItem("akam_subscription_end_date");
+          }
           return;
         }
       }
@@ -390,6 +403,43 @@ export default function ProfilePage() {
   const pendingCount = stories.filter((s) => s.status === "PENDING").length;
   const approvedCount = stories.filter((s) => s.status === "APPROVED").length;
   const emagazineCount = stories.filter((s) => s.status === "APPROVED_EMAGAZINE" || s.status === "PUBLISHED_EMAGAZINE").length;
+  const unpublishedCount = stories.filter((s) => s.status === "UNPUBLISHED").length;
+
+  // Subscription / Student Pass details calculations
+  const studentPassEndDate = studentApp?.endDate || profile?.subscriptionEndDate;
+  const studentPassEndObj = studentPassEndDate ? new Date(studentPassEndDate) : null;
+  const isStudentPassValidDate = studentPassEndObj ? !isNaN(studentPassEndObj.getTime()) : false;
+  const studentPassDaysRemaining = isStudentPassValidDate
+    ? Math.ceil((studentPassEndObj!.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+    : null;
+  const isStudentPassExpired = studentPassDaysRemaining !== null && studentPassDaysRemaining <= 0;
+  const studentPassDurationMonths = studentPassDaysRemaining !== null
+    ? Math.max(1, Math.round(studentPassDaysRemaining / 30))
+    : null;
+  const formattedStudentPassEndDate = isStudentPassValidDate
+    ? studentPassEndObj!.toLocaleDateString("en-IN", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      })
+    : null;
+
+  const subEndDate = profile?.subscriptionEndDate ? new Date(profile.subscriptionEndDate) : null;
+  const isSubValidDate = subEndDate ? !isNaN(subEndDate.getTime()) : false;
+  const subDaysRemaining = isSubValidDate
+    ? Math.ceil((subEndDate!.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+    : null;
+  const isSubExpired = subDaysRemaining !== null && subDaysRemaining <= 0;
+  const subDurationMonths = subDaysRemaining !== null
+    ? Math.max(1, Math.round(subDaysRemaining / 30))
+    : null;
+  const formattedSubEndDate = isSubValidDate
+    ? subEndDate!.toLocaleDateString("en-IN", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      })
+    : null;
 
   if (loading) {
     return (
@@ -447,6 +497,16 @@ export default function ProfilePage() {
                   <span className="bg-[#E4F953] text-[#040706] font-bold text-[10px] uppercase tracking-wider px-3 py-1 rounded-full">
                     {profile.role}
                   </span>
+                  {((profile.isStudent && profile.subscriptionStatus === "ACTIVE") || studentApp?.status === "APPROVED") && studentApp?.status !== "REJECTED" && (
+                    <span className="bg-emerald-100 text-emerald-800 font-bold text-[10px] uppercase tracking-wider px-3 py-1 rounded-full flex items-center gap-1 border border-emerald-200">
+                      <GraduationCap className="w-3 h-3 text-emerald-600" /> Scholar Pass
+                    </span>
+                  )}
+                  {profile.subscriptionStatus === "ACTIVE" && !profile.isStudent && studentApp?.status !== "APPROVED" && (
+                    <span className="bg-purple-100 text-purple-800 font-bold text-[10px] uppercase tracking-wider px-3 py-1 rounded-full flex items-center gap-1 border border-purple-200">
+                      <Sparkles className="w-3 h-3 text-purple-600" /> Digital Pass
+                    </span>
+                  )}
                 </div>
                 <p className="text-xs text-gray-500 mb-3">{profile.email}</p>
                 <p className="text-sm text-[#646464] max-w-2xl leading-relaxed">
@@ -553,7 +613,7 @@ export default function ProfilePage() {
                 {studentApp.referenceId && (
                   <div className="sm:text-right shrink-0 bg-amber-100/70 border border-amber-200/80 rounded-xl px-3.5 py-2">
                     <p className="text-[10px] uppercase tracking-wider font-semibold text-amber-800">Application Ref</p>
-                    <p className="font-mono text-xs sm:text-sm font-bold text-amber-950">{studentApp.referenceId}</p>
+                    <p className=" text-xs sm:text-sm font-bold text-amber-950">{studentApp.referenceId}</p>
                   </div>
                 )}
               </div>
@@ -574,7 +634,7 @@ export default function ProfilePage() {
             </div>
           )}
 
-          {((studentApp && studentApp.status === "APPROVED") || profile?.isStudent) && (
+          {((studentApp && studentApp.status === "APPROVED") || (profile?.isStudent && profile.subscriptionStatus === "ACTIVE" && studentApp?.status !== "REJECTED" && studentApp?.status !== "PENDING_APPROVAL")) && (
             <div className="bg-gradient-to-r from-emerald-50/90 via-emerald-50/30 to-white border border-emerald-200/90 rounded-[24px] p-5 sm:p-6 mb-10 shadow-xs">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="flex items-start gap-4">
@@ -594,26 +654,116 @@ export default function ProfilePage() {
                     </p>
                   </div>
                 </div>
-                {studentApp?.referenceId && (
-                  <div className="sm:text-right shrink-0 bg-emerald-100/70 border border-emerald-200/80 rounded-xl px-3.5 py-2">
-                    <p className="text-[10px] uppercase tracking-wider font-semibold text-emerald-800">Pass Ref</p>
-                    <p className="font-mono text-xs sm:text-sm font-bold text-emerald-950">{studentApp.referenceId}</p>
-                  </div>
-                )}
+                <div className="flex flex-col sm:items-end gap-2 shrink-0">
+                  {studentApp?.referenceId && (
+                    <div className="sm:text-right bg-emerald-100/70 border border-emerald-200/80 rounded-xl px-3.5 py-1.5">
+                      <p className="text-[10px] uppercase tracking-wider font-semibold text-emerald-800">Pass Ref</p>
+                      <p className=" text-xs font-bold text-emerald-950">{studentApp.referenceId}</p>
+                    </div>
+                  )}
+                  {formattedStudentPassEndDate && (
+                    <div className={`sm:text-right px-3.5 py-1.5 rounded-xl border ${
+                      isStudentPassExpired
+                        ? 'bg-rose-50 border-rose-200 text-rose-900'
+                        : 'bg-emerald-500/10 border-emerald-300 text-emerald-950'
+                    }`}>
+                      <p className="text-[10px] uppercase tracking-wider font-bold text-emerald-800 flex items-center sm:justify-end gap-1">
+                        <Calendar className="w-3 h-3 text-emerald-700" /> Pass Valid Until
+                      </p>
+                      <p className="text-xs sm:text-sm font-extrabold text-emerald-950">
+                        {formattedStudentPassEndDate}
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
-              <div className="mt-4 pt-3 border-t border-emerald-200/60 flex flex-wrap gap-x-6 gap-y-2 text-xs text-emerald-950/80">
-                {(studentApp?.fullName || profile?.name) && (
-                  <span><strong className="font-semibold text-emerald-950">Student:</strong> {studentApp?.fullName || profile?.name}</span>
-                )}
-                {studentApp?.institution && (
-                  <span><strong className="font-semibold text-emerald-950">College:</strong> {studentApp.institution}</span>
-                )}
-                {(studentApp?.email || profile?.email) && (
-                  <span><strong className="font-semibold text-emerald-950">Email:</strong> {studentApp?.email || profile?.email}</span>
-                )}
+              <div className="mt-4 pt-3 border-t border-emerald-200/60 flex flex-wrap items-center justify-between gap-x-6 gap-y-2 text-xs text-emerald-950/80">
+                <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+                  {(studentApp?.fullName || profile?.name) && (
+                    <span><strong className="font-semibold text-emerald-950">Student:</strong> {studentApp?.fullName || profile?.name}</span>
+                  )}
+                  {studentApp?.institution && (
+                    <span><strong className="font-semibold text-emerald-950">College:</strong> {studentApp.institution}</span>
+                  )}
+                  {(studentApp?.email || profile?.email) && (
+                    <span><strong className="font-semibold text-emerald-950">Email:</strong> {studentApp?.email || profile?.email}</span>
+                  )}
+                  {formattedStudentPassEndDate && (
+                    <span className="inline-flex items-center gap-1.5 bg-emerald-100/90 text-emerald-900 font-medium px-2.5 py-1 rounded-lg border border-emerald-200">
+                      <Clock className="w-3.5 h-3.5 text-emerald-700" />
+                      <strong className="font-semibold text-emerald-950">Duration:</strong> {studentPassDurationMonths} Month{studentPassDurationMonths === 1 ? '' : 's'} ({isStudentPassExpired ? 'Expired' : `~${studentPassDaysRemaining} days remaining`})
+                    </span>
+                  )}
+                </div>
+                <Link
+                  href="/emagazine"
+                  className="inline-flex items-center gap-1 font-semibold text-emerald-800 hover:text-emerald-950 hover:underline"
+                >
+                  Access E-Magazine →
+                </Link>
               </div>
             </div>
           )}
+
+          {/* ── Active Paid / Granted Subscription Card (For non-student subscribers) ── */}
+          {profile && !profile.isStudent && profile.subscriptionStatus === "ACTIVE" && (
+            <div className="bg-gradient-to-r from-purple-50/90 via-indigo-50/30 to-white border border-purple-200/90 rounded-[24px] p-5 sm:p-6 mb-10 shadow-xs">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-start gap-4">
+                  <div className="w-12 h-12 rounded-2xl bg-purple-100 text-purple-700 flex items-center justify-center shrink-0 shadow-2xs mt-0.5">
+                    <Sparkles className="w-6 h-6" />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="text-base sm:text-lg font-bold text-gray-900">Akam Digital Reading Pass</h3>
+                      <span className="bg-purple-100 text-purple-800 font-bold text-[10px] uppercase tracking-wider px-3 py-1 rounded-full flex items-center gap-1.5 border border-purple-200">
+                        <CheckCircle2 className="w-3 h-3 text-purple-600" />
+                        Active Subscription
+                      </span>
+                    </div>
+                    <p className="text-xs sm:text-sm text-gray-600 leading-relaxed max-w-2xl">
+                      Full digital access active. Enjoy unlimited reading access to all monthly editions, exclusive stories, and archival literature across the platform.
+                    </p>
+                  </div>
+                </div>
+                {formattedSubEndDate && (
+                  <div className={`sm:text-right shrink-0 px-4 py-2 rounded-xl border ${
+                    isSubExpired
+                      ? 'bg-rose-50 border-rose-200 text-rose-900'
+                      : 'bg-purple-500/10 border-purple-300 text-purple-950'
+                  }`}>
+                    <p className="text-[10px] uppercase tracking-wider font-bold text-purple-800 flex items-center sm:justify-end gap-1">
+                      <Calendar className="w-3 h-3 text-purple-700" /> Pass Valid Until
+                    </p>
+                    <p className="text-sm font-extrabold text-purple-950">
+                      {formattedSubEndDate}
+                    </p>
+                    <p className="text-[10px] font-semibold text-purple-700">
+                      {isSubExpired ? "Expired" : `~${subDaysRemaining} days remaining`}
+                    </p>
+                  </div>
+                )}
+              </div>
+              <div className="mt-4 pt-3 border-t border-purple-200/60 flex flex-wrap items-center justify-between gap-x-6 gap-y-2 text-xs text-purple-950/80">
+                <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+                  <span><strong className="font-semibold text-purple-950">Subscriber:</strong> {profile.name || profile.email}</span>
+                  {formattedSubEndDate && (
+                    <span className="inline-flex items-center gap-1.5 bg-purple-100/90 text-purple-900 font-medium px-2.5 py-1 rounded-lg border border-purple-200">
+                      <Clock className="w-3.5 h-3.5 text-purple-700" />
+                      <strong className="font-semibold text-purple-950">Duration:</strong> {subDurationMonths} Month{subDurationMonths === 1 ? '' : 's'} ({isSubExpired ? 'Expired' : `Valid until ${formattedSubEndDate}`})
+                    </span>
+                  )}
+                </div>
+                <Link
+                  href="/emagazine"
+                  className="inline-flex items-center gap-1 font-semibold text-purple-700 hover:text-purple-900 hover:underline"
+                >
+                  Explore E-Magazine →
+                </Link>
+              </div>
+            </div>
+          )}
+
 
           {studentApp && studentApp.status === "REJECTED" && (
             <div className="bg-gradient-to-r from-rose-50/90 via-rose-50/30 to-white border border-rose-200/90 rounded-[24px] p-5 sm:p-6 mb-10 shadow-xs">
@@ -640,7 +790,7 @@ export default function ProfilePage() {
                 {studentApp.referenceId && (
                   <div className="sm:text-right shrink-0 bg-rose-100/70 border border-rose-200/80 rounded-xl px-3.5 py-2">
                     <p className="text-[10px] uppercase tracking-wider font-semibold text-rose-800">Application Ref</p>
-                    <p className="font-mono text-xs sm:text-sm font-bold text-rose-950">{studentApp.referenceId}</p>
+                    <p className=" text-xs sm:text-sm font-bold text-rose-950">{studentApp.referenceId}</p>
                   </div>
                 )}
               </div>
@@ -686,46 +836,66 @@ export default function ProfilePage() {
                 >
                   All Works ({stories.length})
                 </button>
-                <button
-                  onClick={() => setStatusFilter("DRAFT")}
-                  className={`h-9 px-4 rounded-full text-xs font-semibold transition-all cursor-pointer whitespace-nowrap inline-flex items-center justify-center ${
-                    statusFilter === "DRAFT"
-                      ? "bg-black text-white shadow-xs"
-                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                  }`}
-                >
-                  Drafts ({draftCount})
-                </button>
-                <button
-                  onClick={() => setStatusFilter("PENDING")}
-                  className={`h-9 px-4 rounded-full text-xs font-semibold transition-all cursor-pointer whitespace-nowrap inline-flex items-center justify-center ${
-                    statusFilter === "PENDING"
-                      ? "bg-black text-white shadow-xs"
-                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                  }`}
-                >
-                  Pending Queue ({pendingCount})
-                </button>
-                <button
-                  onClick={() => setStatusFilter("APPROVED")}
-                  className={`h-9 px-4 rounded-full text-xs font-semibold transition-all cursor-pointer whitespace-nowrap inline-flex items-center justify-center ${
-                    statusFilter === "APPROVED"
-                      ? "bg-black text-white shadow-xs"
-                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                  }`}
-                >
-                  Published ({approvedCount})
-                </button>
-                <button
-                  onClick={() => setStatusFilter("APPROVED_EMAGAZINE")}
-                  className={`h-9 px-4 rounded-full text-xs font-semibold transition-all cursor-pointer whitespace-nowrap inline-flex items-center justify-center ${
-                    statusFilter === "APPROVED_EMAGAZINE"
-                      ? "bg-black text-white shadow-xs"
-                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                  }`}
-                >
-                  E-Magazine ({emagazineCount})
-                </button>
+                {draftCount > 0 && (
+                  <button
+                    onClick={() => setStatusFilter("DRAFT")}
+                    className={`h-9 px-4 rounded-full text-xs font-semibold transition-all cursor-pointer whitespace-nowrap inline-flex items-center justify-center ${
+                      statusFilter === "DRAFT"
+                        ? "bg-black text-white shadow-xs"
+                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    }`}
+                  >
+                    Drafts ({draftCount})
+                  </button>
+                )}
+                {pendingCount > 0 && (
+                  <button
+                    onClick={() => setStatusFilter("PENDING")}
+                    className={`h-9 px-4 rounded-full text-xs font-semibold transition-all cursor-pointer whitespace-nowrap inline-flex items-center justify-center ${
+                      statusFilter === "PENDING"
+                        ? "bg-black text-white shadow-xs"
+                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    }`}
+                  >
+                    Pending Queue ({pendingCount})
+                  </button>
+                )}
+                {approvedCount > 0 && (
+                  <button
+                    onClick={() => setStatusFilter("APPROVED")}
+                    className={`h-9 px-4 rounded-full text-xs font-semibold transition-all cursor-pointer whitespace-nowrap inline-flex items-center justify-center ${
+                      statusFilter === "APPROVED"
+                        ? "bg-black text-white shadow-xs"
+                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    }`}
+                  >
+                    Published ({approvedCount})
+                  </button>
+                )}
+                {emagazineCount > 0 && (
+                  <button
+                    onClick={() => setStatusFilter("APPROVED_EMAGAZINE")}
+                    className={`h-9 px-4 rounded-full text-xs font-semibold transition-all cursor-pointer whitespace-nowrap inline-flex items-center justify-center ${
+                      statusFilter === "APPROVED_EMAGAZINE"
+                        ? "bg-black text-white shadow-xs"
+                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    }`}
+                  >
+                    E-Magazine ({emagazineCount})
+                  </button>
+                )}
+                {unpublishedCount > 0 && (
+                  <button
+                    onClick={() => setStatusFilter("UNPUBLISHED")}
+                    className={`h-9 px-4 rounded-full text-xs font-semibold transition-all cursor-pointer whitespace-nowrap inline-flex items-center justify-center ${
+                      statusFilter === "UNPUBLISHED"
+                        ? "bg-black text-white shadow-xs"
+                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    }`}
+                  >
+                    Unpublished ({unpublishedCount})
+                  </button>
+                )}
               </div>
 
               {/* Mobile & Tablet Filter Select Dropdown (< 768px) */}
@@ -738,10 +908,11 @@ export default function ProfilePage() {
                     className="w-full bg-transparent text-xs font-semibold text-gray-900 outline-none cursor-pointer"
                   >
                     <option value="ALL">All Works ({stories.length})</option>
-                    <option value="DRAFT">Drafts ({draftCount})</option>
-                    <option value="PENDING">Pending Queue ({pendingCount})</option>
-                    <option value="APPROVED">Published ({approvedCount})</option>
-                    <option value="APPROVED_EMAGAZINE">E-Magazine ({emagazineCount})</option>
+                    {draftCount > 0 && <option value="DRAFT">Drafts ({draftCount})</option>}
+                    {pendingCount > 0 && <option value="PENDING">Pending Queue ({pendingCount})</option>}
+                    {approvedCount > 0 && <option value="APPROVED">Published ({approvedCount})</option>}
+                    {emagazineCount > 0 && <option value="APPROVED_EMAGAZINE">E-Magazine ({emagazineCount})</option>}
+                    {unpublishedCount > 0 && <option value="UNPUBLISHED">Unpublished ({unpublishedCount})</option>}
                   </select>
                 </div>
               </div>
@@ -792,6 +963,8 @@ export default function ProfilePage() {
                             ? "bg-amber-100 text-amber-800"
                             : story.status === "REJECTED"
                             ? "bg-rose-100 text-rose-800"
+                            : story.status === "UNPUBLISHED"
+                            ? "bg-orange-100 text-orange-800 border border-orange-200"
                             : "bg-gray-200 text-gray-800"
                         }`}
                       >
@@ -799,6 +972,16 @@ export default function ProfilePage() {
                           ? "E-Magazine (Published)"
                           : story.status === "APPROVED_EMAGAZINE"
                           ? "E-Magazine (Pending)"
+                          : story.status === "APPROVED"
+                          ? "Published"
+                          : story.status === "UNPUBLISHED"
+                          ? "Unpublished"
+                          : story.status === "PENDING"
+                          ? "In Review"
+                          : story.status === "DRAFT"
+                          ? "Draft"
+                          : story.status === "REJECTED"
+                          ? "Rejected"
                           : story.status}
                       </span>
                     </div>
@@ -863,6 +1046,50 @@ export default function ProfilePage() {
                               View on Works
                             </Button>
                           </Link>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Unpublished Actions Bar */}
+                    {story.status === "UNPUBLISHED" && (
+                      <div className="pt-3 border-t border-orange-100 flex items-center justify-between gap-2 flex-wrap text-xs">
+                        <span className="text-orange-700 font-medium flex items-center gap-1.5">
+                          <AlertCircle className="w-3.5 h-3.5 text-orange-600 shrink-0" />
+                          <span>Unpublished by editorial</span>
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <Link href={`/submit?id=${story.id}`}>
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              icon={<Edit2 className="w-3.5 h-3.5" />}
+                              iconPosition="left"
+                              className="h-9 px-4 text-xs font-semibold rounded-full cursor-pointer border border-gray-300 shadow-xs"
+                            >
+                              Edit
+                            </Button>
+                          </Link>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            icon={<Trash2 className="w-3.5 h-3.5" />}
+                            iconPosition="left"
+                            onClick={() => setStoryToDelete(story)}
+                            className="h-9 px-4 text-xs font-semibold rounded-full cursor-pointer text-rose-600 border border-rose-200 hover:bg-rose-50 shadow-xs"
+                          >
+                            Delete
+                          </Button>
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            icon={<Send className="w-3.5 h-3.5" />}
+                            iconPosition="left"
+                            disabled={actionLoadingId === story.id}
+                            onClick={() => handleSubmitDraftForReview(story.id)}
+                            className="h-9 px-4 text-xs font-semibold rounded-full cursor-pointer shadow-xs"
+                          >
+                            {actionLoadingId === story.id ? "Submitting..." : "Re-submit for Review"}
+                          </Button>
                         </div>
                       </div>
                     )}
@@ -948,7 +1175,7 @@ export default function ProfilePage() {
                               onClick={() => handleSubmitDraftForReview(story.id)}
                               className="h-9 px-4 text-xs font-semibold rounded-full cursor-pointer shadow-xs"
                             >
-                              {actionLoadingId === story.id ? "Submitting..." : "Submit to Queue"}
+                              {actionLoadingId === story.id ? "Submitting..." : "Submit for Review"}
                             </Button>
                           )}
                         </div>
@@ -1057,14 +1284,14 @@ export default function ProfilePage() {
                       : previewStory.status === "APPROVED_EMAGAZINE"
                       ? "E-MAGAZINE (PENDING)"
                       : previewStory.status === "APPROVED"
-                      ? "PUBLISHED STORY"
+                      ? "PUBLISHED WORK"
                       : previewStory.status === "DRAFT"
                       ? "DRAFT PREVIEW"
                       : "SUBMISSION PREVIEW"}
                   </span>
                   {previewStory.submissionType === "PAINTING" && (
                     <span className="bg-purple-700 text-white font-bold text-[10px] uppercase tracking-wider px-2.5 py-1 rounded-xl shadow-xs flex items-center gap-1">
-                      <Palette className="w-3 h-3" /> Painting
+                      <Palette className="w-3 h-3" /> Visual Arts
                     </span>
                   )}
                   {previewStory.submissionType === "VIDEO" && (
@@ -1072,7 +1299,7 @@ export default function ProfilePage() {
                       <Video className="w-3 h-3" /> Video
                     </span>
                   )}
-                  {previewStory.category && (
+                  {previewStory.submissionType !== "PAINTING" && previewStory.submissionType !== "VIDEO" && previewStory.category && (
                     <span className="bg-black text-white font-bold text-[10px] uppercase tracking-wider px-2.5 py-1 rounded-xl shadow-xs">
                       Category: {previewStory.category}
                     </span>
@@ -1104,22 +1331,21 @@ export default function ProfilePage() {
               <div className="w-full max-w-3xl mx-auto mb-8 shrink-0 rounded-[24px] overflow-hidden shadow-md aspect-video bg-black relative flex items-center justify-center">
                 {(() => {
                   const embed = previewStory.mediaUrl ? getAddSubmissionVideoEmbed(previewStory.mediaUrl) : null;
-                  if (embed?.type === "youtube") {
+                  if (embed?.type === "direct") {
                     return (
-                      <iframe
-                        src={`https://www.youtube-nocookie.com/embed/${embed.id}`}
-                        title="Video Preview"
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                        allowFullScreen
-                        className="w-full h-full border-0"
+                      <video
+                        src={formatAssetUrl(embed.directUrl)}
+                        controls
+                        playsInline
+                        className="w-full h-full object-contain"
                       />
                     );
-                  } else if (embed?.type === "vimeo") {
+                  } else if (embed?.embedUrl) {
                     return (
                       <iframe
-                        src={`https://player.vimeo.com/video/${embed.id}`}
+                        src={embed.embedUrl}
                         title="Video Preview"
-                        allow="autoplay; fullscreen; picture-in-picture"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
                         allowFullScreen
                         className="w-full h-full border-0"
                       />
@@ -1168,23 +1394,67 @@ export default function ProfilePage() {
               </div>
             )}
 
-            {/* Painting Artwork Display */}
-            {previewStory.submissionType === "PAINTING" && (previewStory.mediaUrl || previewStory.coverImageUrl) && (
-              <div className="relative w-full max-w-3xl mx-auto mb-8 shrink-0 rounded-[24px] overflow-hidden bg-[#0A0D0C] border border-gray-200/80 shadow-sm flex items-center justify-center p-3 sm:p-4 group">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={formatAssetUrl(previewStory.mediaUrl || previewStory.coverImageUrl || "")}
-                  alt={previewStory.title || "Painting Artwork"}
-                  className="w-full max-h-[550px] object-contain rounded-xl block"
-                />
-                <div className="absolute bottom-3 right-3 z-10 bg-black/80 backdrop-blur-md text-white text-[11px] font-semibold px-3 py-1 rounded-xl flex items-center gap-1.5 shadow-xs pointer-events-none">
-                  <Palette className="w-3.5 h-3.5 text-purple-300" />
-                  <span>Original Artwork</span>
-                </div>
-              </div>
-            )}
+            {/* Visual Arts Display */}
+            {previewStory.submissionType === "PAINTING" && (() => {
+              const galleryImages: Array<{ src: string; alt: string }> = [];
+              const seen = new Set<string>();
 
-            {/* Article / Story Cover Image (Card style matching LatestStories) */}
+              if (previewStory.content) {
+                const imgRegex = /!\[(.*?)\]\((.*?)\)/g;
+                let match;
+                while ((match = imgRegex.exec(previewStory.content)) !== null) {
+                  const url = match[2]?.trim();
+                  if (url && !seen.has(url)) {
+                    seen.add(url);
+                    galleryImages.push({ src: url, alt: match[1] || previewStory.title || "Visual Arts" });
+                  }
+                }
+              }
+
+              if (previewStory.mediaUrl && !seen.has(previewStory.mediaUrl.trim())) {
+                seen.add(previewStory.mediaUrl.trim());
+                galleryImages.unshift({ src: previewStory.mediaUrl.trim(), alt: previewStory.title || "Primary Artwork" });
+              }
+
+              if (galleryImages.length === 0 && previewStory.coverImageUrl && !seen.has(previewStory.coverImageUrl.trim())) {
+                galleryImages.push({ src: previewStory.coverImageUrl.trim(), alt: previewStory.title || "Cover Artwork" });
+              }
+
+              if (galleryImages.length === 0) return null;
+
+              return (
+                <div className="w-full max-w-3xl mx-auto mb-8 space-y-3">
+                  <div className="relative w-full rounded-[24px] overflow-hidden bg-[#0A0D0C] border border-gray-200/80 shadow-sm flex items-center justify-center p-3 sm:p-4 group">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={formatAssetUrl(galleryImages[0].src)}
+                      alt={galleryImages[0].alt}
+                      className="w-full max-h-[550px] object-contain rounded-xl block"
+                    />
+                    <div className="absolute bottom-3 right-3 z-10 bg-black/80 backdrop-blur-md text-white text-[11px] font-semibold px-3 py-1 rounded-xl flex items-center gap-1.5 shadow-xs pointer-events-none">
+                      <Palette className="w-3.5 h-3.5 text-purple-300" />
+                      <span>{galleryImages.length > 1 ? `${galleryImages.length} Images in Gallery` : "Original Artwork"}</span>
+                    </div>
+                  </div>
+
+                  {galleryImages.length > 1 && (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                      {galleryImages.map((img, idx) => (
+                        <div key={idx} className="relative rounded-xl overflow-hidden border border-gray-200 aspect-[4/3] bg-gray-900">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={formatAssetUrl(img.src)} alt={img.alt} className="w-full h-full object-cover" />
+                          <span className="absolute bottom-1 left-1 bg-black/75 text-white text-[9px] font-bold px-1.5 py-0.5 rounded">
+                            #{idx + 1} {idx === 0 ? "(Cover)" : ""}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* Article Cover Image (Card style matching LatestStories) */}
             {previewStory.submissionType !== "VIDEO" && previewStory.submissionType !== "PAINTING" && (previewStory.coverImageUrl || previewStory.mediaUrl) && (
               <div className="relative w-64 sm:w-72 md:w-80 aspect-square mx-auto mb-8 shrink-0 rounded-[22px] overflow-hidden bg-gray-100 border border-gray-200/80 shadow-md">
                 <Image
@@ -1205,11 +1475,9 @@ export default function ProfilePage() {
                   <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-400" />
                   <span className="text-sm font-medium">Loading content...</span>
                 </div>
-              ) : previewStory.content ? (
+              ) : previewStory.content && (
                 renderStoryContent(previewStory.content)
-              ) : (
-                <p className="text-sm text-gray-400 italic text-center py-6">No content available for preview.</p>
-              )}
+              ) }
             </div>
 
             {/* Bottom Actions Row */}

@@ -8,10 +8,13 @@ export type NotificationType =
   | 'STORY_APPROVED_EMAGAZINE'
   | 'STORY_PUBLISHED_EMAGAZINE'
   | 'CONTENT_REPORTED'
+  | 'CONTENT_DISPUTED'
   | 'REPORT_RESOLVED'
   | 'REPORT_DISMISSED'
   | 'CONTENT_REMOVED'
   | 'STUDENT_APPLICATION_SUBMITTED'
+  | 'STUDENT_APPLICATION_APPROVED'
+  | 'STUDENT_APPLICATION_REJECTED'
   | 'SUBSCRIPTION_GRANTED'
   | 'SUBSCRIPTION_CANCELLED';
 
@@ -121,7 +124,7 @@ export class NotificationsService {
 
   async notifyEditorsOfReport(targetTitle: string, reason: string, storyId?: string): Promise<void> {
     const editors = await this.prisma.query<{ id: string }>(
-      `SELECT id FROM "user" WHERE role IN ('EDITOR', 'ADMIN')`,
+      `SELECT id FROM "user" WHERE role IN ('EDITOR', 'ADMIN', 'MODERATOR')`,
     );
 
     for (const editor of editors) {
@@ -147,6 +150,52 @@ export class NotificationsService {
         : `Your report regarding "${storyTitle}" was reviewed and resolved by our editorial team. Appropriate action has been taken.`;
 
     await this.createNotification(reporterId, type, message, storyId);
+  }
+
+  async notifyAuthorOfDispute(
+    authorId: string,
+    storyTitle: string,
+    reason: string,
+    storyId?: string,
+  ): Promise<void> {
+    await this.createNotification(
+      authorId,
+      'CONTENT_DISPUTED',
+      `A content dispute has been submitted regarding your work "${storyTitle}". Our editorial team is currently reviewing it.`,
+      storyId,
+    );
+  }
+
+  async notifyReporterOfDisputeSubmission(
+    reporterId: string,
+    storyTitle: string,
+    storyId?: string,
+  ): Promise<void> {
+    await this.createNotification(
+      reporterId,
+      'CONTENT_DISPUTED',
+      `Your dispute regarding "${storyTitle}" has been received. Our editorial team will review the claim shortly.`,
+      storyId,
+    );
+  }
+
+  async notifyAuthorOfDisputeResolution(
+    authorId: string,
+    storyTitle: string,
+    status: 'RESOLVED' | 'DISMISSED',
+    storyId?: string,
+  ): Promise<void> {
+    const message =
+      status === 'DISMISSED'
+        ? `The dispute regarding your work "${storyTitle}" has been reviewed and dismissed by the editorial team.`
+        : `The dispute regarding your work "${storyTitle}" has been resolved by our editorial team.`;
+
+    await this.createNotification(
+      authorId,
+      status === 'DISMISSED' ? 'REPORT_DISMISSED' : 'REPORT_RESOLVED',
+      message,
+      storyId,
+    );
   }
 
   async notifyAuthorOfContentRemoval(
@@ -190,12 +239,15 @@ export class NotificationsService {
   }
 
   async notifyAuthorOfRejection(authorId: string, storyTitle: string, storyId: string, note?: string): Promise<void> {
-    const isUnpublish = note?.toLowerCase().includes('unpublish');
-    const msg = isUnpublish
-      ? `Your story "${storyTitle}" was unpublished from the public catalog: "${note}"`
-      : note
-        ? `Your story "${storyTitle}" was rejected with note: "${note}"`
-        : `Your story "${storyTitle}" was rejected by editorial.`;
+    const isUnpublish = note?.toLowerCase().includes('unpublish') || note?.toLowerCase() === 'unpublish';
+    const hasReason = note && note.toLowerCase() !== 'unpublish';
+    const msg = isUnpublish && !hasReason
+      ? `Your story "${storyTitle}" has been unpublished from the public catalog by the editorial team.`
+      : isUnpublish || (note && hasReason)
+        ? `Your story "${storyTitle}" has been unpublished from the public catalog. Reason: "${hasReason ? note : note}"`
+        : note
+          ? `Your story "${storyTitle}" was rejected with note: "${note}"`
+          : `Your story "${storyTitle}" was rejected by editorial.`;
     await this.createNotification(
       authorId,
       'STORY_REJECTED',
@@ -226,16 +278,61 @@ export class NotificationsService {
     userId: string,
     durationMonths: number,
     isStudent: boolean,
+    endDate?: string | Date | null,
   ): Promise<void> {
+    const durationText = `${durationMonths} Month${durationMonths === 1 ? '' : 's'}`;
+    let validityText = '';
+
+    if (endDate) {
+      const end = new Date(endDate);
+      if (!isNaN(end.getTime())) {
+        const formattedDate = end.toLocaleDateString('en-IN', {
+          day: 'numeric',
+          month: 'short',
+          year: 'numeric',
+        });
+        validityText = ` (valid until ${formattedDate})`;
+      }
+    }
+
     const planName = isStudent
-      ? 'Complimentary Student / Scholar Pass'
-      : `${durationMonths}-Month Akam Digital Pass`;
-    const message = `🎉 Congratulations! Your ${planName} is active. You now have unlimited access to our digital library and literature archive.`;
+      ? 'Student Scholar Pass'
+      : `${durationMonths}-Month Digital Pass`;
+
+    const message = `🎉 Your ${planName} is active for ${durationText}${validityText}.`;
+
     await this.createNotification(userId, 'SUBSCRIPTION_GRANTED', message);
   }
 
+  async notifyStudentApplicationApproved(
+    userId: string,
+    durationMonths: number = 6,
+    endDate?: string | Date | null,
+  ): Promise<void> {
+    let validityText = '';
+    if (endDate) {
+      const end = new Date(endDate);
+      if (!isNaN(end.getTime())) {
+        const formattedDate = end.toLocaleDateString('en-IN', {
+          day: 'numeric',
+          month: 'short',
+          year: 'numeric',
+        });
+        validityText = ` (valid until ${formattedDate})`;
+      }
+    }
+    const message = `🎓 Congratulations! Your Student Scholar Pass application has been approved${validityText}. You have full complimentary access to the digital catalog.`;
+    await this.createNotification(userId, 'STUDENT_APPLICATION_APPROVED', message);
+  }
+
+  async notifyStudentApplicationRejected(userId: string, reason?: string): Promise<void> {
+    const reasonText = reason?.trim() ? ` Reason: "${reason.trim()}"` : '';
+    const message = `Your Student Scholar Pass application was not approved by the editorial team.${reasonText} You can review guidelines and resubmit with updated credentials.`;
+    await this.createNotification(userId, 'STUDENT_APPLICATION_REJECTED', message);
+  }
+
   async notifySubscriptionCancelled(userId: string): Promise<void> {
-    const message = `Your Akam Digital subscription pass has been cancelled. If you believe this is an error, please reach out to the editorial desk.`;
+    const message = `Your Akam Digital subscription pass has been cancelled.`;
     await this.createNotification(userId, 'SUBSCRIPTION_CANCELLED', message);
   }
 }

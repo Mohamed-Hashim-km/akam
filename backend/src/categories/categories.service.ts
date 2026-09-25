@@ -5,7 +5,6 @@ import { CreateCategoryDto } from './dto/create-category.dto.js';
 export type CategoryRow = {
   id: string;
   name: string;
-  malName: string | null;
   description: string | null;
   createdAt: string;
   workCount?: number;
@@ -18,13 +17,13 @@ export class CategoriesService {
   async findAll(pageVal?: number, limitVal?: number, search?: string) {
     const trimmedSearch = search?.trim();
     const searchFilter = trimmedSearch
-      ? `WHERE LOWER(c.name) LIKE LOWER($1) OR LOWER(COALESCE(c."malName", '')) LIKE LOWER($1) OR LOWER(COALESCE(c.description, '')) LIKE LOWER($1)`
+      ? `WHERE LOWER(c.name) LIKE LOWER($1) OR LOWER(COALESCE(c.description, '')) LIKE LOWER($1)`
       : '';
     const searchParam = trimmedSearch ? [`%${trimmedSearch}%`] : [];
 
     if (!pageVal && !limitVal) {
       return this.prisma.query<CategoryRow>(
-        `SELECT c.id, c.name, c."malName", c.description, c."createdAt",
+        `SELECT c.id, c.name, c.description, c."createdAt",
                 (SELECT COUNT(*)::int FROM story s WHERE LOWER(s.category) = LOWER(c.name) AND s.status = 'APPROVED') AS "workCount"
          FROM category c
          ${searchFilter}
@@ -47,7 +46,7 @@ export class CategoriesService {
     const total = parseInt(countRow?.count ?? '0', 10);
 
     const querySql = `
-      SELECT c.id, c.name, c."malName", c.description, c."createdAt",
+      SELECT c.id, c.name, c.description, c."createdAt",
              (SELECT COUNT(*)::int FROM story s WHERE LOWER(s.category) = LOWER(c.name) AND s.status = 'APPROVED') AS "workCount"
       FROM category c
       ${searchFilter}
@@ -81,10 +80,10 @@ export class CategoriesService {
     }
 
     const cat = await this.prisma.queryOne<CategoryRow>(
-      `INSERT INTO category (id, name, "malName", description, "createdAt")
-       VALUES (gen_random_uuid()::text, $1, $2, $3, now())
-       RETURNING id, name, "malName", description, "createdAt"`,
-      [dto.name.trim(), dto.malName?.trim() ?? null, dto.description?.trim() ?? null],
+      `INSERT INTO category (id, name, description, "createdAt")
+       VALUES (gen_random_uuid()::text, $1, $2, now())
+       RETURNING id, name, description, "createdAt"`,
+      [dto.name.trim(), dto.description?.trim() ?? null],
     );
     return cat!;
   }
