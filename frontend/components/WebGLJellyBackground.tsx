@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useMemo, useEffect } from "react";
+import React, { useRef, useMemo, useEffect } from "react";
 import * as THREE from "three";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 
@@ -249,16 +249,18 @@ const JellyBlobMesh: React.FC<JellyBlobMeshProps> = ({
   }, [distort, speed, frequency, shapeType]);
 
   useFrame((_, delta) => {
-    if (material.userData.uniforms) {
-      material.userData.uniforms.uTime.value += delta;
-      if (cursorPosRef.current) {
-        material.userData.uniforms.uMousePos.value.copy(cursorPosRef.current);
+    const mesh = meshRef.current;
+    if (mesh && mesh.material) {
+      const mat = mesh.material as THREE.MeshPhysicalMaterial;
+      if (mat.userData?.uniforms) {
+        mat.userData.uniforms.uTime.value += delta;
+        if (cursorPosRef.current) {
+          mat.userData.uniforms.uMousePos.value.copy(cursorPosRef.current);
+        }
       }
-    }
-    if (meshRef.current) {
       // Gentle subtle breathing rotation
-      meshRef.current.rotation.x += delta * 0.04;
-      meshRef.current.rotation.y += delta * 0.06;
+      mesh.rotation.x += delta * 0.04;
+      mesh.rotation.y += delta * 0.06;
     }
   });
 
@@ -411,7 +413,6 @@ export const WebGLJellyBackground: React.FC<WebGLJellyBackgroundProps> = ({
   className = "",
 }) => {
   const wrapperRef = useRef<HTMLDivElement>(null);
-  const [mounted, setMounted] = useState(false);
   const mouseNDC = useRef<{ x: number; y: number; active: boolean }>({
     x: 0,
     y: 0,
@@ -419,8 +420,6 @@ export const WebGLJellyBackground: React.FC<WebGLJellyBackgroundProps> = ({
   });
 
   useEffect(() => {
-    setMounted(true);
-
     // Disable mouse follower tracking on touch-only mobile devices
     if (typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches) {
       return;
@@ -462,14 +461,6 @@ export const WebGLJellyBackground: React.FC<WebGLJellyBackgroundProps> = ({
     };
   }, [containerRef]);
 
-  if (!mounted) {
-    return (
-      <div
-        className={`absolute inset-0 w-full h-full pointer-events-none overflow-hidden z-0 select-none ${className}`}
-        aria-hidden="true"
-      />
-    );
-  }
 
   return (
     <div
