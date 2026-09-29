@@ -8,8 +8,12 @@ import { motion } from "framer-motion";
 import { Swiper, SwiperSlide } from "swiper/react";
 import { Navigation, EffectCards } from "swiper/modules";
 import type { Swiper as SwiperClass } from "swiper";
+import dynamic from "next/dynamic";
 import { API_BASE_URL, apiFetch } from "@/lib/config";
-import WebGLJellyBackground from "./WebGLJellyBackground";
+
+const WebGLJellyBackground = dynamic(() => import("./WebGLJellyBackground"), {
+  ssr: false,
+});
 
 import "swiper/css";
 import "swiper/css/navigation";
