@@ -6853,9 +6853,19 @@ function EditorialDashboardContent() {
                   <div>
                     <label className="block text-xs font-semibold text-gray-700 mb-1.5">PDF Magazine *</label>
                     <div className="border-2 border-dashed border-gray-200 rounded-xl p-4 text-center">
-                      {editionFormPdfUrl ? (
+                      {uploadingEditionPdf ? (
+                        <div className="flex flex-col items-center justify-center py-3 gap-2">
+                          <RefreshCw className="w-6 h-6 text-violet-600 animate-spin" />
+                          <div className="text-center">
+                            <span className="text-xs font-semibold text-violet-800">
+                              {editionFormPdfUrl ? "Replacing & Uploading PDF…" : "Uploading PDF Magazine…"}
+                            </span>
+                            <p className="text-[10px] text-gray-400 mt-0.5">Please wait, this may take a few moments for large files</p>
+                          </div>
+                        </div>
+                      ) : editionFormPdfUrl ? (
                         <div className="flex items-center gap-3">
-                          <div className="flex-1 text-left">
+                          <div className="flex-1 text-left min-w-0">
                             <p className="text-xs font-semibold text-violet-700 truncate">✓ PDF uploaded</p>
                             <a
                               href={editionFormPdfUrl}
@@ -6866,7 +6876,7 @@ function EditorialDashboardContent() {
                               {editionFormPdfUrl.split("/").pop()}
                             </a>
                           </div>
-                          <label className="cursor-pointer px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs font-semibold text-gray-700 transition">
+                          <label className="cursor-pointer px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs font-semibold text-gray-700 transition shrink-0">
                             Replace
                             <input
                               type="file"
@@ -6879,18 +6889,9 @@ function EditorialDashboardContent() {
                         </div>
                       ) : (
                         <label className="cursor-pointer flex flex-col items-center gap-2">
-                          {uploadingEditionPdf ? (
-                            <>
-                              <RefreshCw className="w-6 h-6 text-violet-500 animate-spin" />
-                              <span className="text-xs text-gray-500">Uploading PDF…</span>
-                            </>
-                          ) : (
-                            <>
-                              <Archive className="w-6 h-6 text-gray-400" />
-                              <span className="text-xs font-semibold text-gray-600">Click to upload PDF</span>
-                              <span className="text-[10px] text-gray-400">Max 50MB</span>
-                            </>
-                          )}
+                          <Archive className="w-6 h-6 text-gray-400" />
+                          <span className="text-xs font-semibold text-gray-600">Click to upload PDF</span>
+                          <span className="text-[10px] text-gray-400">Max 50MB</span>
                           <input
                             type="file"
                             accept="application/pdf"
@@ -6909,7 +6910,17 @@ function EditorialDashboardContent() {
                       Cover Image *
                     </label>
                     <div className="border-2 border-dashed border-gray-200 rounded-xl p-4">
-                      {editionFormCoverImage ? (
+                      {uploadingEditionCover ? (
+                        <div className="flex flex-col items-center justify-center py-3 gap-2">
+                          <RefreshCw className="w-6 h-6 text-emerald-600 animate-spin" />
+                          <div className="text-center">
+                            <span className="text-xs font-semibold text-emerald-800">
+                              {editionFormCoverImage ? "Replacing Cover Image…" : "Uploading Cover Image…"}
+                            </span>
+                            <p className="text-[10px] text-gray-400 mt-0.5">Please wait…</p>
+                          </div>
+                        </div>
+                      ) : editionFormCoverImage ? (
                         <div className="flex items-center gap-3">
                           <img
                             src={editionFormCoverImage}
@@ -6939,18 +6950,9 @@ function EditorialDashboardContent() {
                         </div>
                       ) : (
                         <label className="cursor-pointer flex flex-col items-center gap-2">
-                          {uploadingEditionCover ? (
-                            <>
-                              <RefreshCw className="w-6 h-6 text-emerald-500 animate-spin" />
-                              <span className="text-xs text-gray-500">Uploading cover…</span>
-                            </>
-                          ) : (
-                            <>
-                              <BookOpen className="w-6 h-6 text-gray-400" />
-                              <span className="text-xs font-semibold text-gray-600">Click to upload cover image</span>
-                              <span className="text-[10px] text-gray-400">JPG, PNG, WebP</span>
-                            </>
-                          )}
+                          <BookOpen className="w-6 h-6 text-gray-400" />
+                          <span className="text-xs font-semibold text-gray-600">Click to upload cover image</span>
+                          <span className="text-[10px] text-gray-400">JPG, PNG, WebP</span>
                           <input
                             type="file"
                             accept="image/*"
@@ -7014,10 +7016,25 @@ function EditorialDashboardContent() {
                       type="submit"
                       variant="primary"
                       size="md"
-                      disabled={submittingEdition || !editionFormTitle.trim() || !editionFormPdfUrl.trim() || !editionFormCoverImage.trim()}
+                      disabled={
+                        submittingEdition ||
+                        uploadingEditionPdf ||
+                        uploadingEditionCover ||
+                        !editionFormTitle.trim() ||
+                        !editionFormPdfUrl.trim() ||
+                        !editionFormCoverImage.trim()
+                      }
                       className="w-full sm:w-auto flex-1 justify-center bg-black hover:bg-gray-800 text-white"
                     >
-                      {submittingEdition ? "Saving…" : editingEditionId ? "Update Edition" : "Save Edition"}
+                      {submittingEdition
+                        ? "Saving…"
+                        : uploadingEditionPdf
+                        ? "Uploading PDF…"
+                        : uploadingEditionCover
+                        ? "Uploading Cover…"
+                        : editingEditionId
+                        ? "Update Edition"
+                        : "Save Edition"}
                     </Button>
                   </div>
                 </form>

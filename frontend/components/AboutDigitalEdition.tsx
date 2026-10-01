@@ -70,7 +70,7 @@ export const AboutDigitalEdition: React.FC<AboutDigitalEditionProps> = ({
         
         {/* Left Side: About Text & Key Features */}
         <div className="lg:col-span-4 xl:col-span-4 space-y-6">
-          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-medium text-dark-text tracking-tight">
+          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-medium text-dark-text leading-[1.3] tracking-tight">
             {title}
           </h2>
 

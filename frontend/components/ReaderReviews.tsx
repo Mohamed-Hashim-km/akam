@@ -310,6 +310,8 @@ export const ReaderReviews: React.FC<ReaderReviewsProps> = ({
     initialReviews !== undefined ? initialReviews : []
   );
   const [swiperInstance, setSwiperInstance] = useState<SwiperClass | null>(null);
+  const [isBeginning, setIsBeginning] = useState<boolean>(true);
+  const [isEnd, setIsEnd] = useState<boolean>(false);
 
   useEffect(() => {
     if (initialReviews !== undefined) {
@@ -359,7 +361,19 @@ export const ReaderReviews: React.FC<ReaderReviewsProps> = ({
             <div className="w-full">
               <Swiper
                 modules={[Navigation, Autoplay]}
-                onSwiper={(s) => setSwiperInstance(s)}
+                onSwiper={(s) => {
+                  setSwiperInstance(s);
+                  setIsBeginning(s.isBeginning);
+                  setIsEnd(s.isEnd);
+                }}
+                onSlideChange={(s) => {
+                  setIsBeginning(s.isBeginning);
+                  setIsEnd(s.isEnd);
+                }}
+                onUpdate={(s) => {
+                  setIsBeginning(s.isBeginning);
+                  setIsEnd(s.isEnd);
+                }}
                 autoplay={{
                   delay: 6000,
                   disableOnInteraction: false,
@@ -425,7 +439,12 @@ export const ReaderReviews: React.FC<ReaderReviewsProps> = ({
               <button
                 type="button"
                 onClick={() => swiperInstance?.slidePrev()}
-                className="w-10 h-10 sm:w-11 sm:h-11 rounded-full border border-gray-300 bg-white flex items-center justify-center text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-all focus:outline-none cursor-pointer active:scale-95 shadow-2xs"
+                disabled={isBeginning}
+                className={`w-10 h-10 sm:w-11 sm:h-11 rounded-full border border-gray-300 bg-white flex items-center justify-center text-gray-700 transition-all focus:outline-none ${
+                  isBeginning
+                    ? "opacity-35 cursor-not-allowed pointer-events-none"
+                    : "hover:bg-gray-50 hover:border-gray-400 cursor-pointer active:scale-95 shadow-2xs"
+                }`}
                 aria-label="Previous Review"
               >
                 <ChevronLeft className="w-5 h-5" />
@@ -433,7 +452,12 @@ export const ReaderReviews: React.FC<ReaderReviewsProps> = ({
               <button
                 type="button"
                 onClick={() => swiperInstance?.slideNext()}
-                className="w-10 h-10 sm:w-11 sm:h-11 rounded-full border border-gray-300 bg-white flex items-center justify-center text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-all focus:outline-none cursor-pointer active:scale-95 shadow-2xs"
+                disabled={isEnd}
+                className={`w-10 h-10 sm:w-11 sm:h-11 rounded-full border border-gray-300 bg-white flex items-center justify-center text-gray-700 transition-all focus:outline-none ${
+                  isEnd
+                    ? "opacity-35 cursor-not-allowed pointer-events-none"
+                    : "hover:bg-gray-50 hover:border-gray-400 cursor-pointer active:scale-95 shadow-2xs"
+                }`}
                 aria-label="Next Review"
               >
                 <ChevronRight className="w-5 h-5" />

@@ -8,6 +8,7 @@ import { Navigation } from "swiper/modules";
 import type { Swiper as SwiperClass } from "swiper";
 import Button from "./ui/Button";
 import { API_BASE_URL } from "@/lib/config";
+import EventRegisterModal from "@/components/EventRegisterModal";
 
 // Swiper CSS imports
 import "swiper/css";
@@ -77,6 +78,9 @@ export const UpcomingEvents: React.FC<UpcomingEventsProps> = ({
   events: initialEvents,
 }) => {
   const [swiperInstance, setSwiperInstance] = useState<SwiperClass | null>(null);
+  const [isBeginning, setIsBeginning] = useState<boolean>(true);
+  const [isEnd, setIsEnd] = useState<boolean>(false);
+  const [selectedEventForReg, setSelectedEventForReg] = useState<EventItem | null>(null);
   const [fetchedEvents, setFetchedEvents] = useState<EventItem[]>([]);
   const [loading, setLoading] = useState<boolean>(initialEvents === undefined);
 
@@ -153,7 +157,19 @@ export const UpcomingEvents: React.FC<UpcomingEventsProps> = ({
         <div className="w-full overflow-hidden px-1">
           <Swiper
             modules={[Navigation]}
-            onSwiper={setSwiperInstance}
+            onSwiper={(swiper) => {
+              setSwiperInstance(swiper);
+              setIsBeginning(swiper.isBeginning);
+              setIsEnd(swiper.isEnd);
+            }}
+            onSlideChange={(swiper) => {
+              setIsBeginning(swiper.isBeginning);
+              setIsEnd(swiper.isEnd);
+            }}
+            onUpdate={(swiper) => {
+              setIsBeginning(swiper.isBeginning);
+              setIsEnd(swiper.isEnd);
+            }}
             spaceBetween={20}
             slidesPerView={1.2}
             breakpoints={{
@@ -169,8 +185,8 @@ export const UpcomingEvents: React.FC<UpcomingEventsProps> = ({
 
               return (
                 <SwiperSlide key={evt.id} className="flex flex-col">
-                  <Link
-                    href={viewAllHref || "/events"}
+                  <div
+                    onClick={() => setSelectedEventForReg(evt)}
                     className="group relative w-full h-[380px] sm:h-[420px] md:h-[450px] rounded-[26px] sm:rounded-[28px] overflow-hidden cursor-pointer shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col justify-end"
                   >
                     {/* Event Background Image from Backend */}
@@ -203,13 +219,20 @@ export const UpcomingEvents: React.FC<UpcomingEventsProps> = ({
                         </div>
 
                         {/* Register Now Pill */}
-                        <div className="px-4 py-2 bg-white text-[#111827] rounded-full text-xs font-semibold flex items-center gap-1.5 shadow-md group-hover:bg-gray-100 transition-all shrink-0">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedEventForReg(evt);
+                          }}
+                          className="px-4 py-2 bg-white text-[#111827] rounded-full text-xs font-semibold flex items-center gap-1.5 shadow-md hover:bg-gray-100 hover:shadow-lg transition-all shrink-0 cursor-pointer active:scale-95"
+                        >
                           <span>Register Now</span>
-                          <ArrowRight className="w-3.5 h-3.5" />
-                        </div>
+                          <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
+                        </button>
                       </div>
                     </div>
-                  </Link>
+                  </div>
                 </SwiperSlide>
               );
             })}
@@ -220,14 +243,24 @@ export const UpcomingEvents: React.FC<UpcomingEventsProps> = ({
         <div className="flex items-center justify-center gap-3 mt-8">
           <button
             onClick={() => swiperInstance?.slidePrev()}
-            className="w-10 h-10 rounded-full border border-gray-300 bg-white flex items-center justify-center text-gray-700 hover:border-gray-800 hover:text-gray-900 transition-all focus:outline-none shadow-xs cursor-pointer"
+            disabled={isBeginning}
+            className={`w-10 h-10 rounded-full border border-gray-300 bg-white flex items-center justify-center text-gray-700 transition-all focus:outline-none ${
+              isBeginning
+                ? "opacity-35 cursor-not-allowed pointer-events-none"
+                : "hover:border-gray-800 hover:text-gray-900 shadow-xs cursor-pointer active:scale-95"
+            }`}
             aria-label="Previous Event"
           >
             <ChevronLeft className="w-5 h-5" />
           </button>
           <button
             onClick={() => swiperInstance?.slideNext()}
-            className="w-10 h-10 rounded-full border border-gray-300 bg-white flex items-center justify-center text-gray-700 hover:border-gray-800 hover:text-gray-900 transition-all focus:outline-none shadow-xs cursor-pointer"
+            disabled={isEnd}
+            className={`w-10 h-10 rounded-full border border-gray-300 bg-white flex items-center justify-center text-gray-700 transition-all focus:outline-none ${
+              isEnd
+                ? "opacity-35 cursor-not-allowed pointer-events-none"
+                : "hover:border-gray-800 hover:text-gray-900 shadow-xs cursor-pointer active:scale-95"
+            }`}
             aria-label="Next Event"
           >
             <ChevronRight className="w-5 h-5" />
@@ -237,19 +270,25 @@ export const UpcomingEvents: React.FC<UpcomingEventsProps> = ({
         {/* View All Events Button (Centered Below Arrows) */}
         <div className="flex justify-center mt-6">
           <Link href={viewAllHref}>
-                 <Button
-                          variant="primary"
-                          size="md"
-                          icon={<ArrowRight className="w-4 h-4 ml-1 transition-transform group-hover:translate-x-1" />}
-                          iconPosition="right"
-                          className="group px-6 py-2.5 text-sm font-medium shadow-xs cursor-pointer"
-                        >
-                        
+            <Button
+              variant="primary"
+              size="md"
+              icon={<ArrowRight className="w-4 h-4 ml-1 transition-transform group-hover:translate-x-1" />}
+              iconPosition="right"
+              className="group px-6 py-2.5 text-sm font-medium shadow-xs cursor-pointer"
+            >
               View All Events
             </Button>
           </Link>
         </div>
       </div>
+
+      {/* Event Registration Modal */}
+      <EventRegisterModal
+        isOpen={!!selectedEventForReg}
+        onClose={() => setSelectedEventForReg(null)}
+        event={selectedEventForReg}
+      />
     </section>
   );
 };

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import Image from "next/image";
-import { ArrowRight, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { ArrowRight, ChevronLeft, ChevronRight } from "lucide-react";
 import { Swiper, SwiperSlide } from "swiper/react";
 import { Navigation } from "swiper/modules";
 import type { Swiper as SwiperClass } from "swiper";
@@ -141,8 +141,11 @@ const PAGE_LIMIT = 6;
 
 export const EventSessions: React.FC<EventSessionsProps> = ({
   sessions: initialSessions,
+  isLoading: initialLoading = false,
 }) => {
   const [swiperInstance, setSwiperInstance] = useState<SwiperClass | null>(null);
+  const [isBeginning, setIsBeginning] = useState<boolean>(true);
+  const [isEnd, setIsEnd] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<SessionItem["category"]>("all");
   const [selectedEventForReg, setSelectedEventForReg] = useState<SessionItem | null>(null);
 
@@ -150,18 +153,22 @@ export const EventSessions: React.FC<EventSessionsProps> = ({
   const [tabCache, setTabCache] = useState<Partial<Record<SessionItem["category"], SessionItem[]>>>({});
   const [tabPages, setTabPages] = useState<Partial<Record<SessionItem["category"], number>>>({});
   const [tabHasMore, setTabHasMore] = useState<Partial<Record<SessionItem["category"], boolean>>>({});
-  const [tabLoading, setTabLoading] = useState(false);
+  const [tabLoading, setTabLoading] = useState<boolean>(initialSessions === undefined || initialLoading);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [displaySessions, setDisplaySessions] = useState<SessionItem[]>([]);
 
   // ── server-side initial fetch per tab (Page 1) ──────────────────────────────
   const fetchTab = useCallback(async (tab: SessionItem["category"]) => {
     // Use initialSessions prop path if provided (SSR-seed mode)
-    if (initialSessions !== undefined) return;
+    if (initialSessions !== undefined) {
+      setTabLoading(false);
+      return;
+    }
 
     // Serve from cache first
     if (tabCache[tab] !== undefined) {
       setDisplaySessions(tabCache[tab]!);
+      setTabLoading(false);
       return;
     }
 
@@ -174,7 +181,10 @@ export const EventSessions: React.FC<EventSessionsProps> = ({
       const url = `${API_BASE_URL}/events?${typeQuery}page=1&limit=${PAGE_LIMIT}&upcoming=true`;
 
       const res = await fetch(url);
-      if (!res.ok) return;
+      if (!res.ok) {
+        setDisplaySessions([]);
+        return;
+      }
       const json = await res.json();
       const raw: any[] = json.data ?? (Array.isArray(json) ? json : []);
       const meta = json.meta;
@@ -193,6 +203,7 @@ export const EventSessions: React.FC<EventSessionsProps> = ({
       setDisplaySessions(mapped);
     } catch (err) {
       console.error("EventSessions: failed to fetch tab", tabConfig.id, err);
+      setDisplaySessions([]);
     } finally {
       setTabLoading(false);
     }
@@ -269,6 +280,7 @@ export const EventSessions: React.FC<EventSessionsProps> = ({
           ? initialSessions
           : initialSessions.filter((s) => s.category === activeTab)
       );
+      setTabLoading(false);
       return;
     }
     fetchTab(activeTab);
@@ -278,30 +290,14 @@ export const EventSessions: React.FC<EventSessionsProps> = ({
     if (tab === activeTab) return;
     setActiveTab(tab);
     setSwiperInstance(null);
+    if (tabCache[tab] !== undefined) {
+      setDisplaySessions(tabCache[tab]!);
+      setTabLoading(false);
+    } else {
+      setDisplaySessions([]);
+      setTabLoading(true);
+    }
   };
-
-  // ── initial skeleton (first ever load) ────────────────────────────────────
-  const isInitialLoad = tabLoading && displaySessions.length === 0 && !tabCache[activeTab];
-
-  if (isInitialLoad) {
-    return (
-      <section className="relative w-full bg-[#E6F4FB] py-14 sm:py-18 lg:py-22 font-poppins overflow-hidden">
-        <div className="container px-4 mx-auto relative z-10">
-          <div className="flex justify-center mb-10">
-            <div className="w-80 h-12 bg-white/70 rounded-full animate-pulse" />
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 mx-auto">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="bg-white/80 rounded-[28px] p-6 border border-gray-100 animate-pulse h-[400px] flex flex-col justify-end">
-                <div className="h-6 bg-gray-200 rounded-md w-3/4 mb-3" />
-                <div className="h-4 bg-gray-200 rounded-md w-1/2" />
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-    );
-  }
 
   return (
     <section className="relative w-full bg-[#E6F4FB] py-10 sm:py-16 font-poppins overflow-hidden">
@@ -316,8 +312,7 @@ export const EventSessions: React.FC<EventSessionsProps> = ({
                 <button
                   key={tab.id}
                   onClick={() => handleTabChange(tab.id)}
-                  disabled={tabLoading}
-                  className={`px-5 sm:px-6 py-2 sm:py-2.5 rounded-full text-xs sm:text-sm font-semibold transition-all cursor-pointer disabled:opacity-60 ${
+                  className={`px-5 sm:px-6 py-2 sm:py-2.5 rounded-full text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
                     isActive
                       ? "bg-[#4EB2E4] text-white shadow-xs"
                       : "text-gray-700 hover:text-gray-950 hover:bg-gray-100/60"
@@ -330,11 +325,42 @@ export const EventSessions: React.FC<EventSessionsProps> = ({
           </div>
         </div>
 
-        {/* Per-tab loading spinner */}
+        {/* Per-tab loading skeleton cards */}
         {tabLoading ? (
-          <div className="w-full py-16 flex items-center justify-center gap-3 text-gray-400">
-            <Loader2 className="w-6 h-6 animate-spin" />
-            <span className="text-sm font-medium">Loading events…</span>
+          <div className="w-full relative">
+            <div className="flex gap-5 lg:gap-6 overflow-hidden w-full !pb-4">
+              {[1, 2, 3, 4].map((i) => (
+                <div
+                  key={i}
+                  className="w-[85%] sm:w-[70%] md:w-[46%] lg:w-[35%] xl:w-[31%] shrink-0 relative h-[380px] sm:h-[420px] rounded-[28px] overflow-hidden flex flex-col justify-end p-6 sm:p-7 bg-slate-900 border border-white/20 shadow-md animate-pulse"
+                >
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/45 to-black/10" />
+                  <div className="relative z-10 flex flex-col justify-end h-full">
+                    <div className="flex flex-col gap-2.5 mb-4">
+                      <div className="h-6 w-4/5 bg-white/20 rounded-xl" />
+                      <div className="h-4 w-3/5 bg-white/15 rounded-lg" />
+                    </div>
+                    <div className="flex items-end justify-between gap-3 pt-2">
+                      <div className="flex flex-col gap-1.5">
+                        <div className="h-7 w-12 bg-white/25 rounded-md" />
+                        <div className="h-3 w-16 bg-white/15 rounded-sm" />
+                      </div>
+                      <div className="h-9 w-28 bg-white/90 rounded-full" />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Carousel Nav Arrows placeholder to match exact height */}
+            <div className="flex items-center justify-end gap-3 mt-6 sm:mt-8 pr-1">
+              <div className="w-10 h-10 rounded-full border border-gray-400/20 bg-white/50 backdrop-blur-xs flex items-center justify-center text-gray-400 opacity-40">
+                <ChevronLeft className="w-5 h-5" />
+              </div>
+              <div className="w-10 h-10 rounded-full border border-gray-400/20 bg-white/50 backdrop-blur-xs flex items-center justify-center text-gray-400 opacity-40">
+                <ChevronRight className="w-5 h-5" />
+              </div>
+            </div>
           </div>
         ) : (
           /* Event Cards Swiper Carousel or Empty State */
@@ -344,7 +370,28 @@ export const EventSessions: React.FC<EventSessionsProps> = ({
                 <Swiper
                   key={activeTab}
                   modules={[Navigation]}
-                  onSwiper={setSwiperInstance}
+                  onSwiper={(swiper) => {
+                    setSwiperInstance(swiper);
+                    setIsBeginning(swiper.isBeginning);
+                    setIsEnd(swiper.isEnd);
+                  }}
+                  onSlideChange={(swiper) => {
+                    setIsBeginning(swiper.isBeginning);
+                    setIsEnd(swiper.isEnd);
+                    // If user is within 2 slides of the end, prefetch next page
+                    if (tabHasMore[activeTab] && !isLoadingMore && swiper.activeIndex >= displaySessions.length - 2) {
+                      loadNextPage();
+                    }
+                  }}
+                  onUpdate={(swiper) => {
+                    setIsBeginning(swiper.isBeginning);
+                    setIsEnd(swiper.isEnd);
+                  }}
+                  onReachEnd={() => {
+                    if (tabHasMore[activeTab] && !isLoadingMore) {
+                      loadNextPage();
+                    }
+                  }}
                   spaceBetween={20}
                   slidesPerView={1.15}
                   breakpoints={{
@@ -352,17 +399,6 @@ export const EventSessions: React.FC<EventSessionsProps> = ({
                     768: { slidesPerView: 2.1, spaceBetween: 24 },
                     1024: { slidesPerView: 2.7, spaceBetween: 24 },
                     1280: { slidesPerView: 3.1, spaceBetween: 24 },
-                  }}
-                  onSlideChange={(swiper) => {
-                    // If user is within 2 slides of the end, prefetch next page
-                    if (tabHasMore[activeTab] && !isLoadingMore && swiper.activeIndex >= displaySessions.length - 2) {
-                      loadNextPage();
-                    }
-                  }}
-                  onReachEnd={() => {
-                    if (tabHasMore[activeTab] && !isLoadingMore) {
-                      loadNextPage();
-                    }
                   }}
                   className="w-full !pb-4 [&_.swiper-wrapper]:!items-stretch"
                 >
@@ -414,12 +450,24 @@ export const EventSessions: React.FC<EventSessionsProps> = ({
                     );
                   })}
 
-                  {/* Loading slide for next page */}
+                  {/* Loading skeleton slide for next page */}
                   {isLoadingMore && (
                     <SwiperSlide key="loading-slide" className="flex flex-col">
-                      <div className="relative h-[380px] sm:h-[420px] rounded-[28px] overflow-hidden flex flex-col items-center justify-center p-6 bg-white/70 backdrop-blur-xs border border-white/50 shadow-sm animate-pulse">
-                        <Loader2 className="w-8 h-8 text-[#4EB2E4] animate-spin mb-3" />
-                        <span className="text-xs font-semibold text-gray-600">Loading more events…</span>
+                      <div className="relative h-[380px] sm:h-[420px] rounded-[28px] overflow-hidden flex flex-col justify-end p-6 sm:p-7 bg-slate-900 border border-white/20 shadow-md animate-pulse">
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/45 to-black/10" />
+                        <div className="relative z-10 flex flex-col justify-end h-full">
+                          <div className="flex flex-col gap-2.5 mb-4">
+                            <div className="h-6 w-4/5 bg-white/20 rounded-xl" />
+                            <div className="h-4 w-3/5 bg-white/15 rounded-lg" />
+                          </div>
+                          <div className="flex items-end justify-between gap-3 pt-2">
+                            <div className="flex flex-col gap-1.5">
+                              <div className="h-7 w-12 bg-white/25 rounded-md" />
+                              <div className="h-3 w-16 bg-white/15 rounded-sm" />
+                            </div>
+                            <div className="h-9 w-28 bg-white/90 rounded-full" />
+                          </div>
+                        </div>
                       </div>
                     </SwiperSlide>
                   )}
@@ -429,7 +477,12 @@ export const EventSessions: React.FC<EventSessionsProps> = ({
                 <div className="flex items-center justify-end gap-3 mt-6 sm:mt-8 pr-1">
                   <button
                     onClick={() => swiperInstance?.slidePrev()}
-                    className="w-10 h-10 rounded-full border border-gray-400/40 bg-white/80 backdrop-blur-xs flex items-center justify-center text-gray-700 hover:bg-white hover:text-black transition-all focus:outline-none cursor-pointer shadow-2xs"
+                    disabled={isBeginning}
+                    className={`w-10 h-10 rounded-full border border-gray-400/40 bg-white/80 backdrop-blur-xs flex items-center justify-center text-gray-700 transition-all focus:outline-none ${
+                      isBeginning
+                        ? "opacity-35 cursor-not-allowed pointer-events-none"
+                        : "hover:bg-white hover:text-black shadow-2xs cursor-pointer active:scale-95"
+                    }`}
                     aria-label="Previous slide"
                   >
                     <ChevronLeft className="w-5 h-5" />
@@ -444,15 +497,15 @@ export const EventSessions: React.FC<EventSessionsProps> = ({
                         }
                       }
                     }}
-                    disabled={isLoadingMore}
-                    className="w-10 h-10 rounded-full border border-gray-400/40 bg-white/80 backdrop-blur-xs flex items-center justify-center text-gray-700 hover:bg-white hover:text-black transition-all focus:outline-none cursor-pointer shadow-2xs disabled:opacity-60"
+                    disabled={isEnd && !tabHasMore[activeTab]}
+                    className={`w-10 h-10 rounded-full border border-gray-400/40 bg-white/80 backdrop-blur-xs flex items-center justify-center text-gray-700 transition-all focus:outline-none ${
+                      isEnd && !tabHasMore[activeTab]
+                        ? "opacity-35 cursor-not-allowed pointer-events-none"
+                        : "hover:bg-white hover:text-black shadow-2xs cursor-pointer active:scale-95"
+                    }`}
                     aria-label="Next slide"
                   >
-                    {isLoadingMore ? (
-                      <Loader2 className="w-4 h-4 animate-spin text-[#4EB2E4]" />
-                    ) : (
-                      <ChevronRight className="w-5 h-5" />
-                    )}
+                    <ChevronRight className="w-5 h-5" />
                   </button>
                 </div>
               </>

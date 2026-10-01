@@ -118,6 +118,8 @@ export const LatestStories: React.FC<LatestStoriesProps> = ({
   stories: propStories,
 }) => {
   const [swiperInstance, setSwiperInstance] = useState<SwiperClass | null>(null);
+  const [isBeginning, setIsBeginning] = useState<boolean>(true);
+  const [isEnd, setIsEnd] = useState<boolean>(false);
 
   const [stories, setStories] = useState<Story[]>(() => {
     if (propStories !== undefined && propStories.length > 0) {
@@ -240,7 +242,19 @@ export const LatestStories: React.FC<LatestStoriesProps> = ({
           <div className="w-full overflow-visible">
             <Swiper
               modules={[Navigation]}
-              onSwiper={setSwiperInstance}
+              onSwiper={(swiper) => {
+                setSwiperInstance(swiper);
+                setIsBeginning(swiper.isBeginning);
+                setIsEnd(swiper.isEnd);
+              }}
+              onSlideChange={(swiper) => {
+                setIsBeginning(swiper.isBeginning);
+                setIsEnd(swiper.isEnd);
+              }}
+              onUpdate={(swiper) => {
+                setIsBeginning(swiper.isBeginning);
+                setIsEnd(swiper.isEnd);
+              }}
               spaceBetween={24}
               slidesPerView={1.15}
               breakpoints={{
@@ -321,14 +335,24 @@ export const LatestStories: React.FC<LatestStoriesProps> = ({
           <div className="flex items-center justify-end gap-3 pt-5 sm:pt-7">
             <button
               onClick={() => swiperInstance?.slidePrev()}
-              className="w-10 h-10 sm:w-11 sm:h-11 rounded-full border border-gray-200 bg-white flex items-center justify-center text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-all focus:outline-none cursor-pointer shadow-xs"
+              disabled={isBeginning}
+              className={`w-10 h-10 sm:w-11 sm:h-11 rounded-full border border-gray-200 bg-white flex items-center justify-center text-gray-600 transition-all focus:outline-none ${
+                isBeginning
+                  ? "opacity-35 cursor-not-allowed pointer-events-none"
+                  : "cursor-pointer hover:bg-gray-50 hover:border-gray-300 shadow-xs active:scale-95"
+              }`}
               aria-label="Previous Story"
             >
               <ChevronLeft className="w-5 h-5" />
             </button>
             <button
               onClick={() => swiperInstance?.slideNext()}
-              className="w-10 h-10 sm:w-11 sm:h-11 rounded-full border border-gray-200 bg-white flex items-center justify-center text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-all focus:outline-none cursor-pointer shadow-xs"
+              disabled={isEnd}
+              className={`w-10 h-10 sm:w-11 sm:h-11 rounded-full border border-gray-200 bg-white flex items-center justify-center text-gray-600 transition-all focus:outline-none ${
+                isEnd
+                  ? "opacity-35 cursor-not-allowed pointer-events-none"
+                  : "cursor-pointer hover:bg-gray-50 hover:border-gray-300 shadow-xs active:scale-95"
+              }`}
               aria-label="Next Story"
             >
               <ChevronRight className="w-5 h-5" />

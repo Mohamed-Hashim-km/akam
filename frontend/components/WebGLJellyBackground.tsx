@@ -217,7 +217,7 @@ const JellyBlobMesh: React.FC<JellyBlobMeshProps> = ({
         if (mDist < uMouseRadius) {
           float q = 1.0 - (mDist / uMouseRadius);
           float factor = q * q * (3.0 - 2.0 * q);
-          disp += factor * uMouseStrength * (0.75 + 0.35 * sin(uTime * 4.5 - mDist * 7.0));
+          disp += factor * uMouseStrength * (0.75 + 0.35 * sin(uTime * 2.2 - mDist * 4.0));
         }
 
         transformed = p + norm * disp;
@@ -277,8 +277,8 @@ const JellyBlobMesh: React.FC<JellyBlobMeshProps> = ({
         }
       }
       // Gentle subtle breathing rotation
-      mesh.rotation.x += delta * 0.04;
-      mesh.rotation.y += delta * 0.06;
+      mesh.rotation.x += delta * 0.018;
+      mesh.rotation.y += delta * 0.025;
     }
   });
 
@@ -315,7 +315,7 @@ const JellyScene: React.FC<{
       raycaster.setFromCamera(pointerVec, camera);
       raycaster.ray.intersectPlane(plane, intersectionPoint);
 
-      const lerpFactor = 1.0 - Math.pow(0.018, delta);
+      const lerpFactor = 1.0 - Math.pow(0.005, delta);
       cursorPosRef.current.x = THREE.MathUtils.lerp(
         cursorPosRef.current.x,
         intersectionPoint.x,
@@ -334,21 +334,26 @@ const JellyScene: React.FC<{
 
   // 1. Top-Right Bean-Shaped Jelly Blob (Matching the designer's exact top-right SVG graphic)
   const topRightPos = useMemo<[number, number, number]>(() => {
-    return [viewport.width * 0.45, viewport.height * 0.40, -0.6];
+    const safeW = THREE.MathUtils.clamp(viewport.width || 10, 5, 16);
+    const safeH = THREE.MathUtils.clamp(viewport.height || 7, 4, 12);
+    return [safeW * 0.45, safeH * 0.40, -0.6];
   }, [viewport.width, viewport.height]);
 
   const topRightScale = useMemo<[number, number, number]>(() => {
-    const s = Math.min(viewport.width * 0.13, 1.45);
+    const safeW = THREE.MathUtils.clamp(viewport.width || 10, 5, 16);
+    const s = Math.min(safeW * 0.13, 1.45);
     return [s * 1.35, s * 0.95, s * 1.1];
   }, [viewport.width]);
 
   // 2. Left Undulating Fluid Jelly Blob (Middle-left, partially off-screen)
   const leftPos = useMemo<[number, number, number]>(() => {
-    return [-viewport.width * 0.47, 0.0, -0.6];
+    const safeW = THREE.MathUtils.clamp(viewport.width || 10, 5, 16);
+    return [-safeW * 0.47, 0.0, -0.6];
   }, [viewport.width]);
 
   const leftScale = useMemo<[number, number, number]>(() => {
-    const s = Math.min(viewport.width * 0.14, 1.50);
+    const safeW = THREE.MathUtils.clamp(viewport.width || 10, 5, 16);
+    const s = Math.min(safeW * 0.14, 1.50);
     return [s * 0.95, s * 1.35, s * 1.05];
   }, [viewport.width]);
 
@@ -365,9 +370,9 @@ const JellyScene: React.FC<{
         scale={topRightScale}
         rotation={[-0.1, 0.2, -0.42]}
         shapeType="bean"
-        distort={0.42}
-        speed={0.22}
-        frequency={0.65}
+        distort={0.36}
+        speed={0.12}
+        frequency={0.55}
         cursorPosRef={cursorPosRef}
       />
 
@@ -377,9 +382,9 @@ const JellyScene: React.FC<{
         scale={leftScale}
         rotation={[0.15, -0.2, 0.25]}
         shapeType="left-blob"
-        distort={0.45}
-        speed={0.20}
-        frequency={0.60}
+        distort={0.38}
+        speed={0.10}
+        frequency={0.50}
         cursorPosRef={cursorPosRef}
       />
     </>
@@ -392,6 +397,7 @@ export const WebGLJellyBackground: React.FC<WebGLJellyBackgroundProps> = ({
   className = "",
 }) => {
   const [mounted, setMounted] = useState(false);
+  const [isReady, setIsReady] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const mouseNDC = useRef<{ x: number; y: number; active: boolean }>({
     x: 0,
@@ -450,10 +456,13 @@ export const WebGLJellyBackground: React.FC<WebGLJellyBackgroundProps> = ({
   return (
     <div
       ref={wrapperRef}
-      className={`absolute inset-0 w-full h-full pointer-events-none overflow-hidden z-0 select-none ${className}`}
+      className={`absolute inset-0 w-full h-full pointer-events-none overflow-hidden z-0 select-none transition-opacity duration-700 ease-out ${
+        isReady ? "opacity-100" : "opacity-0"
+      } ${className}`}
       aria-hidden="true"
     >
       <Canvas
+        onCreated={() => setIsReady(true)}
         className="gl w-full h-full pointer-events-none"
         gl={{
           alpha: true,
