@@ -88,6 +88,8 @@ export const UpcomingBookReleases: React.FC<UpcomingBookReleasesProps> = ({
     initialReleases !== undefined ? initialReleases : []
   );
   const [swiperInstance, setSwiperInstance] = useState<SwiperClass | null>(null);
+  const [isBeginning, setIsBeginning] = useState<boolean>(true);
+  const [isEnd, setIsEnd] = useState<boolean>(false);
 
   useEffect(() => {
     if (initialReleases !== undefined) {
@@ -132,6 +134,8 @@ export const UpcomingBookReleases: React.FC<UpcomingBookReleasesProps> = ({
 
           <a
             href={viewAllHref}
+            target="_blank"
+            rel="noopener noreferrer"
            >
               <Button
                           variant="primary"
@@ -149,7 +153,19 @@ export const UpcomingBookReleases: React.FC<UpcomingBookReleasesProps> = ({
         <div className="w-full">
           <Swiper
             modules={[Navigation]}
-            onSwiper={(swiper) => setSwiperInstance(swiper)}
+            onSwiper={(swiper) => {
+              setSwiperInstance(swiper);
+              setIsBeginning(swiper.isBeginning);
+              setIsEnd(swiper.isEnd);
+            }}
+            onSlideChange={(swiper) => {
+              setIsBeginning(swiper.isBeginning);
+              setIsEnd(swiper.isEnd);
+            }}
+            onUpdate={(swiper) => {
+              setIsBeginning(swiper.isBeginning);
+              setIsEnd(swiper.isEnd);
+            }}
             spaceBetween={20}
             slidesPerView={1.25}
             breakpoints={{
@@ -172,7 +188,12 @@ export const UpcomingBookReleases: React.FC<UpcomingBookReleasesProps> = ({
             <button
               type="button"
               onClick={() => swiperInstance?.slidePrev()}
-              className="w-10 h-10 rounded-full border border-black/30 bg-transparent flex items-center justify-center text-gray-900 hover:bg-black/10 transition-all focus:outline-none cursor-pointer active:scale-95"
+              disabled={isBeginning}
+              className={`w-10 h-10 rounded-full border border-black/30 bg-transparent flex items-center justify-center text-gray-900 transition-all focus:outline-none ${
+                isBeginning
+                  ? "opacity-35 cursor-not-allowed pointer-events-none"
+                  : "hover:bg-black/10 cursor-pointer active:scale-95"
+              }`}
               aria-label="Previous Release"
             >
               <ChevronLeft className="w-5 h-5" />
@@ -180,7 +201,12 @@ export const UpcomingBookReleases: React.FC<UpcomingBookReleasesProps> = ({
             <button
               type="button"
               onClick={() => swiperInstance?.slideNext()}
-              className="w-10 h-10 rounded-full border border-black/30 bg-transparent flex items-center justify-center text-gray-900 hover:bg-black/10 transition-all focus:outline-none cursor-pointer active:scale-95"
+              disabled={isEnd}
+              className={`w-10 h-10 rounded-full border border-black/30 bg-transparent flex items-center justify-center text-gray-900 transition-all focus:outline-none ${
+                isEnd
+                  ? "opacity-35 cursor-not-allowed pointer-events-none"
+                  : "hover:bg-black/10 cursor-pointer active:scale-95"
+              }`}
               aria-label="Next Release"
             >
               <ChevronRight className="w-5 h-5" />

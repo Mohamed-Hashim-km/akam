@@ -178,22 +178,22 @@ const LEFT_FLUID_CONFIG: FluidConfig = {
   rest: LEFT_REST,
   normals: LEFT_META.normals,
   angles: LEFT_META.angles,
-  amplitude: 70,
-  timeScale: 0.00038,
+  amplitude: 55,
+  timeScale: 0.00020,
   phase: 0,
   interactionRadius: 420,
-  pushStrength: 75,
+  pushStrength: 50,
 };
 
 const RIGHT_FLUID_CONFIG: FluidConfig = {
   rest: RIGHT_REST,
   normals: RIGHT_META.normals,
   angles: RIGHT_META.angles,
-  amplitude: 64,
-  timeScale: 0.00032,
+  amplitude: 48,
+  timeScale: 0.00018,
   phase: 43.2,
   interactionRadius: 380,
-  pushStrength: 65,
+  pushStrength: 45,
 };
 
 /**
@@ -284,7 +284,7 @@ function useInteractiveFluidBlob(cfg: FluidConfig) {
           smoothMouseX = targetMouseX;
           smoothMouseY = targetMouseY;
         } else {
-          const lerpFactor = 1 - Math.exp(-dt * 9.0);
+          const lerpFactor = 1 - Math.exp(-dt * 4.5);
           smoothMouseX += (targetMouseX - smoothMouseX) * lerpFactor;
           smoothMouseY += (targetMouseY - smoothMouseY) * lerpFactor;
         }
@@ -294,15 +294,15 @@ function useInteractiveFluidBlob(cfg: FluidConfig) {
       }
 
       // Smooth decay for velocity
-      mouseVx *= Math.exp(-dt * 5.0);
-      mouseVy *= Math.exp(-dt * 5.0);
+      mouseVx *= Math.exp(-dt * 3.5);
+      mouseVy *= Math.exp(-dt * 3.5);
 
       const pts: [number, number][] = new Array(n);
 
       // Viscous spring-mass constants with strong surface tension coupling
-      const kSpring = 12.5;
-      const cDamping = 5.8;
-      const cCoupling = 22.0;
+      const kSpring = 8.5;
+      const cDamping = 6.2;
+      const cCoupling = 26.0;
 
       for (let i = 0; i < n; i++) {
         const [x0, y0] = rest[i];
@@ -311,24 +311,24 @@ function useInteractiveFluidBlob(cfg: FluidConfig) {
 
         // 1. Slow, Graceful, Living Liquid Swell & Bubble Motion
         const n1 = noise3D(
-          Math.cos(angle + t * 0.35) * 1.25 + phase,
-          Math.sin(angle + t * 0.35) * 1.25 + phase,
-          t * 0.45
+          Math.cos(angle + t * 0.2) * 1.25 + phase,
+          Math.sin(angle + t * 0.2) * 1.25 + phase,
+          t * 0.25
         );
         const n2 = noise3D(
-          Math.cos(2 * angle - t * 0.22) * 1.75 + phase + 8.0,
-          Math.sin(2 * angle - t * 0.22) * 1.75 + phase + 8.0,
-          t * 0.65
+          Math.cos(2 * angle - t * 0.12) * 1.75 + phase + 8.0,
+          Math.sin(2 * angle - t * 0.12) * 1.75 + phase + 8.0,
+          t * 0.35
         );
         const n3 = noise3D(
-          Math.cos(3 * angle + t * 0.15) * 2.2,
-          Math.sin(3 * angle + t * 0.15) * 2.2,
-          t * 0.25
+          Math.cos(3 * angle + t * 0.08) * 2.2,
+          Math.sin(3 * angle + t * 0.08) * 2.2,
+          t * 0.15
         );
         // Soft continuous organic bubbling swells
         const bubbleLobe =
-          Math.sin(angle * 2.0 + t * 0.40) * 0.28 +
-          Math.sin(angle * 3.0 - t * 0.28) * 0.20;
+          Math.sin(angle * 2.0 + t * 0.22) * 0.22 +
+          Math.sin(angle * 3.0 - t * 0.15) * 0.15;
 
         const noiseDisp = (n1 * 0.48 + n2 * 0.26 + n3 * 0.10 + bubbleLobe * 0.32) * amplitude;
 
@@ -355,13 +355,13 @@ function useInteractiveFluidBlob(cfg: FluidConfig) {
             targetPush = normalAlignment * w * pushStrength;
 
             // Velocity wake momentum transferred to fluid
-            const dotVel = (mouseVx * nx + mouseVy * ny) * 0.012;
-            impulse = dotVel * w * 14.0;
+            const dotVel = (mouseVx * nx + mouseVy * ny) * 0.008;
+            impulse = dotVel * w * 9.0;
           }
         }
 
         // Viscous relaxation towards target push
-        cursorTension[i] += (targetPush - cursorTension[i]) * Math.min(1, dt * 10.0);
+        cursorTension[i] += (targetPush - cursorTension[i]) * Math.min(1, dt * 5.0);
 
         // 3. Fluid Surface Wave Simulation (Laplacian Neighbor Coupling)
         const prevDisp = displacements[(i - 1 + n) % n];
@@ -526,7 +526,7 @@ export const ExploreByInterest: React.FC<ExploreByInterestProps> = ({
         <div
           key={cat.id}
           onClick={() => router.push(cat.href || `/communities/${slug}`)}
-          className="relative rounded-[22px] p-5 sm:p-6 flex flex-col justify-between transition-all duration-300 border border-black/[0.06] shadow-[0_8px_20px_-6px_rgba(0,0,0,0.08)] group-hover:shadow-[0_22px_40px_-8px_rgba(0,0,0,0.2)] cursor-pointer w-full min-h-[210px] h-full"
+          className="relative rounded-[22px] p-5 sm:p-6 flex flex-col justify-between transition-all duration-500 ease-out border border-black/[0.06] shadow-[0_8px_20px_-6px_rgba(0,0,0,0.08)] group-hover:shadow-[0_22px_40px_-8px_rgba(0,0,0,0.2)] cursor-pointer w-full min-h-[210px] h-full"
           style={{ backgroundColor: bgColor }}
         >
           <div>
@@ -540,10 +540,10 @@ export const ExploreByInterest: React.FC<ExploreByInterestProps> = ({
 
           <Link
             href={cat.href || `/communities/${slug}`}
-            className="w-full bg-white text-gray-950 rounded-full px-4 py-2 flex items-center justify-between text-xs font-semibold shadow-xs hover:shadow-md transition-all cursor-pointer group-hover:bg-white/95"
+            className="w-full bg-white text-gray-950 rounded-full px-4 py-2 flex items-center justify-between text-xs font-semibold shadow-xs hover:shadow-md transition-all duration-300 cursor-pointer group-hover:bg-white/95"
           >
             <span>Explore</span>
-            <ArrowRight className="w-3.5 h-3.5 text-gray-800 transition-transform group-hover:translate-x-1" />
+            <ArrowRight className="w-3.5 h-3.5 text-gray-800 transition-transform duration-500 ease-out group-hover:translate-x-1.5" />
           </Link>
         </div>
       </div>
@@ -575,10 +575,10 @@ export const ExploreByInterest: React.FC<ExploreByInterestProps> = ({
       <div className="container px-6 mx-auto relative z-10 ">
         {/* Section Headline */}
         <motion.h2
-          initial={{ opacity: 0, y: 25 }}
+          initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
-          transition={{ duration: 0.6, ease: "easeOut" }}
+          transition={{ duration: 0.85, ease: [0.22, 1, 0.36, 1] }}
           className="text-3xl sm:text-4xl lg:text-5xl font-medium text-center text-dark-text tracking-tight mb-12 sm:mb-16 font-poppins"
         >
           {title}
@@ -586,13 +586,21 @@ export const ExploreByInterest: React.FC<ExploreByInterestProps> = ({
 
         {/* Loading Skeleton */}
         {loading && categoriesList.length === 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-5 lg:gap-6 w-full">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div
-                key={i}
-                className="rounded-[22px] bg-gray-100 animate-pulse min-h-[210px] p-6"
-              />
-            ))}
+          <div className="hidden md:grid md:grid-cols-4 gap-5 lg:gap-12 md:auto-rows-[95px] lg:auto-rows-[105px] w-full items-start pb-10 lg:pb-14">
+            {Array.from({ length: 7 }).map((_, i) => {
+              const colIndex = getSnakeColumnIndex(i);
+              return (
+                <div
+                  key={i}
+                  className="rounded-[22px] bg-gray-100/70 animate-pulse min-h-[210px] p-6 w-full"
+                  style={{
+                    gridColumnStart: colIndex + 1,
+                    gridRowStart: i + 1,
+                    gridRowEnd: "span 2",
+                  }}
+                />
+              );
+            })}
           </div>
         ) : (
           <>
@@ -605,9 +613,9 @@ export const ExploreByInterest: React.FC<ExploreByInterestProps> = ({
                     key={cat.id}
                     initial={{
                       opacity: 0,
-                      y: 70,
-                      scale: 0.9,
-                      rotate: index % 2 === 0 ? -2.5 : 2.5,
+                      y: 45,
+                      scale: 0.95,
+                      rotate: index % 2 === 0 ? -1.5 : 1.5,
                     }}
                     whileInView={{
                       opacity: 1,
@@ -617,15 +625,15 @@ export const ExploreByInterest: React.FC<ExploreByInterestProps> = ({
                     }}
                     viewport={{ once: true, amount: 0.15 }}
                     transition={{
-                      duration: 0.6,
-                      delay: (index % 4) * 0.1 + Math.floor(index / 4) * 0.08,
-                      ease: [0.16, 1, 0.3, 1],
+                      duration: 0.9,
+                      delay: (index % 4) * 0.12 + Math.floor(index / 4) * 0.09,
+                      ease: [0.22, 1, 0.36, 1],
                     }}
                     whileHover={{
-                      y: -12,
-                      scale: 1.03,
+                      y: -8,
+                      scale: 1.025,
                       zIndex: 35,
-                      transition: { duration: 0.25, ease: "easeOut" },
+                      transition: { duration: 0.45, ease: [0.25, 1, 0.5, 1] },
                     }}
                     className="w-full relative"
                     style={{
@@ -641,14 +649,15 @@ export const ExploreByInterest: React.FC<ExploreByInterestProps> = ({
             </div>
 
             {/* Mobile Card Stack Swiper Slider */}
-            <div className="block md:hidden w-full  px-2 py-2">
+            <div className="block md:hidden w-full px-2 py-2">
               <Swiper
                 modules={[EffectCards, Navigation]}
                 effect="cards"
                 grabCursor={true}
+                speed={650}
                 cardsEffect={{
                   perSlideOffset: 10,
-                  perSlideRotate: 2.5,
+                  perSlideRotate: 2.2,
                   rotate: true,
                   slideShadows: false,
                 }}

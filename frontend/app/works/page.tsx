@@ -92,9 +92,10 @@ function WorksCatalogContent() {
   const [loadingMore, setLoadingMore] = useState<boolean>(false);
   const [selectedStory, setSelectedStory] = useState<Story | null>(null);
 
-  // Sentinel ref for IntersectionObserver
+  // Refs
   const observerRef = useRef<IntersectionObserver | null>(null);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const catalogTopRef = useRef<HTMLDivElement | null>(null);
 
   // Sync state if URL search param changes (e.g. from Navbar search)
   useEffect(() => {
@@ -222,6 +223,21 @@ function WorksCatalogContent() {
     };
   }, [loading, loadingMore, page, totalPages, loadMoreStories]);
 
+  // Smooth scroll to top of catalog when filtering
+  const scrollToTop = useCallback(() => {
+    if (typeof window !== "undefined" && catalogTopRef.current) {
+      const rect = catalogTopRef.current.getBoundingClientRect();
+      const offset = 90; // account for fixed header/nav
+      const targetY = window.pageYOffset + rect.top - offset;
+      if (window.pageYOffset > targetY + 15) {
+        window.scrollTo({
+          top: targetY,
+          behavior: "smooth",
+        });
+      }
+    }
+  }, []);
+
   // Filter handlers
   const handleSelectType = (type: SubmissionTypeFilter) => {
     setSelectedType(type);
@@ -230,11 +246,13 @@ function WorksCatalogContent() {
     } else {
       setSelectedCategory("All");
     }
+    scrollToTop();
   };
 
   const handleSelectCategory = (catName: string) => {
     setSelectedCategory(catName);
     setSelectedType("STORY");
+    scrollToTop();
   };
 
   const handleResetFilters = () => {
@@ -243,6 +261,7 @@ function WorksCatalogContent() {
     setDebouncedSearch("");
     setSearchQuery("");
     setSortBy("newest");
+    scrollToTop();
   };
 
   const activeFiltersCount =
@@ -535,7 +554,10 @@ function WorksCatalogContent() {
             <button
               key={item.id}
               type="button"
-              onClick={() => setSortBy(item.id as SortOption)}
+              onClick={() => {
+                setSortBy(item.id as SortOption);
+                scrollToTop();
+              }}
               className={`px-3 py-2 rounded-xl text-xs font-medium text-center transition-all cursor-pointer ${
                 sortBy === item.id
                   ? "bg-gray-900 text-white font-semibold shadow-xs"
@@ -585,7 +607,7 @@ function WorksCatalogContent() {
         </section>
 
         {/* Main Content Area with E-Commerce Sidebar Layout */}
-        <div className="container px-4 mx-auto py-8">
+        <div ref={catalogTopRef} className="container px-4 mx-auto py-8">
           <div className="flex flex-col lg:flex-row items-start gap-8">
             
             {/* ── Left Sidebar (Desktop Filter Panel) ── */}
@@ -608,7 +630,7 @@ function WorksCatalogContent() {
             </aside>
 
             {/* ── Right Column: Search bar, Active Chips & Works Grid ── */}
-            <div className="flex-1 w-full min-w-0">
+            <div className="flex-1 w-full min-w-0 min-h-[600px]">
               {/* Top Search & Filter Bar */}
               <div className="bg-white rounded-[24px] border border-gray-200/90 p-3.5 sm:p-4 shadow-sm mb-6 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
                 
@@ -653,7 +675,10 @@ function WorksCatalogContent() {
                     <span className="text-[11px] font-semibold text-gray-500 whitespace-nowrap hidden sm:inline">Sort:</span>
                     <select
                       value={sortBy}
-                      onChange={(e) => setSortBy(e.target.value as SortOption)}
+                      onChange={(e) => {
+                        setSortBy(e.target.value as SortOption);
+                        scrollToTop();
+                      }}
                       className="bg-transparent py-1.5 text-xs font-bold text-gray-800 outline-none focus:outline-none cursor-pointer"
                     >
                       <option value="newest">Newest First</option>
@@ -723,19 +748,48 @@ function WorksCatalogContent() {
               )}
 
               {/* Status Header */}
-              <div className="flex items-center justify-between mb-4 px-1">
+              <div className="flex items-center justify-between mb-4 px-1 min-h-[20px]">
                 <p className="text-xs font-semibold text-gray-500">
-                  Showing <strong className="text-gray-950 font-bold">{totalItems}</strong> {totalItems === 1 ? "work" : "works"}
-                  {selectedType !== "ALL" && ` in ${selectedType === "STORY" ? "Articles" : selectedType === "PAINTING" ? "Visual Arts" : "Videos"}`}
-                  {selectedCategory !== "All" && ` • ${selectedCategory}`}
+                  {loading ? (
+                    <span className="inline-block h-3.5 w-36 bg-gray-200/80 rounded animate-pulse" />
+                  ) : (
+                    <>
+                      Showing <strong className="text-gray-950 font-bold">{totalItems}</strong> {totalItems === 1 ? "work" : "works"}
+                      {selectedType !== "ALL" && ` in ${selectedType === "STORY" ? "Articles" : selectedType === "PAINTING" ? "Visual Arts" : "Videos"}`}
+                      {selectedCategory !== "All" && ` • ${selectedCategory}`}
+                    </>
+                  )}
                 </p>
               </div>
 
               {/* Stories/Works Grid */}
               {loading ? (
-                <div className="py-24 flex flex-col justify-center items-center bg-white rounded-[28px] border border-gray-200">
-                  <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#040706] mb-3"></div>
-                  <p className="text-xs font-semibold text-gray-600">Loading catalog works...</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
+                  {[1, 2, 3, 4, 5, 6].map((i) => (
+                    <div
+                      key={i}
+                      className="flex flex-col bg-white border border-gray-200/80 rounded-[24px] p-4 shadow-xs animate-pulse"
+                    >
+                      {/* Cover Skeleton */}
+                      <div className="relative w-full aspect-[16/10] rounded-[18px] bg-gray-200/80 mb-3.5 flex items-start p-2.5">
+                        <div className="h-5 w-16 bg-gray-300/80 rounded-lg" />
+                      </div>
+
+                      {/* Content Skeleton */}
+                      <div className="flex-1 flex flex-col justify-between space-y-3">
+                        <div className="space-y-2">
+                          <div className="h-4.5 bg-gray-200/90 rounded-lg w-5/6" />
+                          <div className="h-3.5 bg-gray-200/60 rounded-md w-full" />
+                          <div className="h-3 bg-gray-200/50 rounded-md w-2/5 mt-2" />
+                        </div>
+
+                        <div className="pt-3 border-t border-gray-100 flex items-center justify-between">
+                          <div className="h-3 bg-gray-200/60 rounded w-16" />
+                          <div className="h-3 bg-gray-200/70 rounded w-20" />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               ) : stories.length === 0 ? (
                 <div className="bg-white border border-gray-200 rounded-[32px] p-12 text-center max-w-lg mx-auto shadow-xs my-8">
@@ -887,7 +941,10 @@ function WorksCatalogContent() {
               <Button
                 variant="primary"
                 size="md"
-                onClick={() => setIsMobileDrawerOpen(false)}
+                onClick={() => {
+                  setIsMobileDrawerOpen(false);
+                  scrollToTop();
+                }}
                 className="w-full rounded-xl font-bold justify-center shadow-md bg-[#040706] text-white hover:bg-black"
               >
                 Apply Filters ({totalItems} works)
