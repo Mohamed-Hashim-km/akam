@@ -7,3 +7,6 @@ uploads/**
 !uploads/
 !uploads/**/
 !uploads/**/.gitkeep
+
+# Prevent build file conflicts on the server
+tsconfig.build.tsbuildinfo
