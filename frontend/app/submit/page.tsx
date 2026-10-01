@@ -1463,7 +1463,7 @@ export default function SubmitWorkPage() {
                         Visual Arts Artworks & Images <span className="text-rose-500 font-bold">*</span>
                       </label>
                       <p className="text-xs text-gray-500 mt-0.5">
-                        Add one or multiple paintings, photographs, digital artworks, or illustrations. You can re-order or set any image as cover.
+                        Add one or multiple paintings, photographs, digital or artworks You can re-order or set any image as cover.
                       </p>
                     </div>
                     {paintingImages.length > 0 && (

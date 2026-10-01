@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, useMemo, useEffect } from "react";
+import React, { useRef, useMemo, useEffect, useState } from "react";
 import * as THREE from "three";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 
@@ -102,15 +102,30 @@ const JellyBlobMesh: React.FC<JellyBlobMeshProps> = ({
   // MeshPhysicalMaterial injected with:
   // 1. Organic shape deformation (curved bean / kidney contour matching Figma SVG)
   // 2. Ashima Arts 3D Simplex noise continuous fluid displacement
-  // 3. Exact 4-Stop SVG Gradient: #E0892B (Orange) -> #B22222 (Crimson) -> #8123DB (Purple) -> #CF25D8 (Magenta)
+  // 3. Right: Soft light peach, Left: Soft light lilac
   const material = useMemo(() => {
+    const isRightBean = shapeType === "bean";
+
+    // Light airy pastels
+    const baseColor = isRightBean
+      ? new THREE.Color("#F8EAE4")
+      : new THREE.Color("#F1DCFA");
+
+    const highlightColor = isRightBean
+      ? new THREE.Color("#FEF8F6")
+      : new THREE.Color("#FAF4FD");
+
+    const shadowColor = isRightBean
+      ? new THREE.Color("#F3DED5")
+      : new THREE.Color("#E8CCF8");
+
     const mat = new THREE.MeshPhysicalMaterial({
       roughness: 0.62,
       metalness: 0.02,
       clearcoat: 0.32,
       clearcoatRoughness: 0.25,
       transparent: true,
-      opacity: 0.84,
+      opacity: 0.45,
       flatShading: false,
     });
 
@@ -122,9 +137,14 @@ const JellyBlobMesh: React.FC<JellyBlobMeshProps> = ({
       uMousePos: { value: new THREE.Vector3(999, 999, 999) },
       uMouseRadius: { value: 2.5 },
       uMouseStrength: { value: 0.35 },
+      uBaseColor: { value: baseColor },
+      uHighlightColor: { value: highlightColor },
+      uShadowColor: { value: shadowColor },
+      uOpacity: { value: 0.45 },
     };
 
     mat.userData.uniforms = uniforms;
+    mat.customProgramCacheKey = () => `jelly-${shapeType}-v5-${isRightBean ? "F8EAE4" : "F1DCFA"}`;
 
     mat.onBeforeCompile = (shader) => {
       shader.uniforms.uTime = uniforms.uTime;
@@ -134,6 +154,10 @@ const JellyBlobMesh: React.FC<JellyBlobMeshProps> = ({
       shader.uniforms.uMousePos = uniforms.uMousePos;
       shader.uniforms.uMouseRadius = uniforms.uMouseRadius;
       shader.uniforms.uMouseStrength = uniforms.uMouseStrength;
+      shader.uniforms.uBaseColor = uniforms.uBaseColor;
+      shader.uniforms.uHighlightColor = uniforms.uHighlightColor;
+      shader.uniforms.uShadowColor = uniforms.uShadowColor;
+      shader.uniforms.uOpacity = uniforms.uOpacity;
 
       // ── Vertex Shader Injections ──
       shader.vertexShader = `
@@ -165,37 +189,41 @@ const JellyBlobMesh: React.FC<JellyBlobMeshProps> = ({
         ${
           shapeType === "bean"
             ? `
-          // Right-hand curved kidney bean geometry:
-          // Elongate along Y, add C-shape curve along X, and gentle waist pinch
-          p.y *= 1.32;
-          p.x *= 0.94;
-          p.x += (p.y * p.y * -0.22 + p.y * 0.16);
-          float waist = 1.0 - 0.16 * exp(-p.y * p.y * 2.2);
+          // Smooth kidney bean geometry without sharp creases or polygon folds
+          p.y *= 1.25;
+          p.x *= 0.96;
+          p.x += sin(p.y * 1.2) * 0.22 - (p.y * p.y * 0.06);
+          float waist = 1.0 - 0.08 * exp(-p.y * p.y * 1.5);
           p.x *= waist;
           p.z *= waist;
           `
             : `
           // Left-hand fluid vertical jelly blob contour
-          p.y *= 1.42;
-          p.x *= 0.90;
-          p.x += sin(p.y * 1.5) * 0.22;
+          p.y *= 1.35;
+          p.x *= 0.92;
+          p.x += sin(p.y * 1.4) * 0.20;
           `
         }
 
-        // Simplex 3D noise displacement for living liquid motion
+        // Multi-octave 3D Simplex noise displacement for living liquid jelly motion
         vec3 norm = normalize(p);
-        float n = snoise(p * uFrequency + vec3(uTime * uSpeed));
-        float disp = n * uDistort;
+        float n1 = snoise(p * uFrequency + vec3(uTime * uSpeed));
+        float n2 = snoise(p * (uFrequency * 1.8) - vec3(uTime * (uSpeed * 1.2)));
+        float disp = (n1 * 0.72 + n2 * 0.28) * uDistort;
 
-        // Reactive proximity ripple when custom cursor draws near
+        // Reactive proximity bulge and liquid wave ripples when cursor draws near
         vec4 wPos = modelMatrix * vec4(p, 1.0);
         float mDist = distance(wPos.xyz, uMousePos);
         if (mDist < uMouseRadius) {
-          float factor = 1.0 - (mDist / uMouseRadius);
-          disp += factor * factor * uMouseStrength * sin(uTime * 4.0 + mDist * 6.0);
+          float q = 1.0 - (mDist / uMouseRadius);
+          float factor = q * q * (3.0 - 2.0 * q);
+          disp += factor * uMouseStrength * (0.75 + 0.35 * sin(uTime * 4.5 - mDist * 7.0));
         }
 
         transformed = p + norm * disp;
+
+        // Smooth view normal calculation
+        vNormal = normalize(normalMatrix * (norm + vec3(0.0, 0.0, 0.25)));
 
         // Diagonal gradient projection parameter [0.0, 1.0]
         vGradCoord = clamp((p.x * 0.45 - p.y * 0.45 + 0.5), 0.0, 1.0);
@@ -205,6 +233,10 @@ const JellyBlobMesh: React.FC<JellyBlobMeshProps> = ({
       // ── Fragment Shader Injections ──
       shader.fragmentShader = `
         uniform float uTime;
+        uniform float uOpacity;
+        uniform vec3 uBaseColor;
+        uniform vec3 uHighlightColor;
+        uniform vec3 uShadowColor;
         varying vec2 vBlobUv;
         varying float vGradCoord;
 
@@ -212,35 +244,21 @@ const JellyBlobMesh: React.FC<JellyBlobMeshProps> = ({
       `;
 
       shader.fragmentShader = shader.fragmentShader.replace(
-        "#include <color_fragment>",
+        "#include <dithering_fragment>",
         `
-        #include <color_fragment>
+        #include <dithering_fragment>
 
-        // Exact 4-Stop SVG Gradient Stops:
-        // 0.00: #E0892B (Golden Orange)
-        // 0.29: #B22222 (Crimson Red)
-        // 0.48: #8123DB (Royal Purple)
-        // 0.80 - 1.00: #CF25D8 (Vibrant Magenta)
-        vec3 c0 = vec3(0.878, 0.537, 0.169); // #E0892B
-        vec3 c1 = vec3(0.698, 0.133, 0.133); // #B22222
-        vec3 c2 = vec3(0.506, 0.137, 0.859); // #8123DB
-        vec3 c3 = vec3(0.812, 0.145, 0.847); // #CF25D8
+        // Custom luminous porcelain-liquid studio shader:
+        vec3 norm = normalize(vNormal);
+        float ndotv = clamp(dot(norm, vec3(0.0, 0.0, 1.0)), 0.0, 1.0);
+        float fres = pow(1.0 - ndotv, 2.2);
 
-        // Living gradient modulation with subtle ambient color swirl
-        float t = clamp(vGradCoord + sin(uTime * 0.3 + vBlobUv.x * 4.0) * 0.04, 0.0, 1.0);
+        // Studio half-lambert lighting ensures colors stay bright and true
+        float lightFactor = ndotv * 0.45 + 0.55;
+        vec3 finalRgb = mix(uShadowColor, uBaseColor, lightFactor);
+        finalRgb = mix(finalRgb, uHighlightColor, fres * 0.45 + pow(ndotv, 4.0) * 0.35);
 
-        vec3 grad;
-        if (t < 0.29) {
-          grad = mix(c0, c1, smoothstep(0.0, 0.29, t));
-        } else if (t < 0.48) {
-          grad = mix(c1, c2, smoothstep(0.29, 0.48, t));
-        } else if (t < 0.80) {
-          grad = mix(c2, c3, smoothstep(0.48, 0.80, t));
-        } else {
-          grad = c3;
-        }
-
-        diffuseColor.rgb = grad;
+        gl_FragColor = vec4(finalRgb, uOpacity);
         `
       );
     };
@@ -278,22 +296,18 @@ const JellyBlobMesh: React.FC<JellyBlobMeshProps> = ({
   );
 };
 
-// ── 3D Trailing Cursor Sphere ───────────────────────────────────────────────
-interface CursorSphereProps {
+// ── Main Scene Interior ──────────────────────────────────────────────────────
+const JellyScene: React.FC<{
   mouseNDC: React.RefObject<{ x: number; y: number; active: boolean }>;
-  cursorPosRef: React.RefObject<THREE.Vector3>;
-}
-
-const CursorSphere: React.FC<CursorSphereProps> = ({ mouseNDC, cursorPosRef }) => {
-  const meshRef = useRef<THREE.Mesh>(null);
-  const currentPos = useRef(new THREE.Vector3(0, 0, 0.5));
+}> = ({ mouseNDC }) => {
+  const { viewport, camera, raycaster } = useThree();
+  const cursorPosRef = useRef<THREE.Vector3>(new THREE.Vector3(999, 999, 999));
   const pointerVec = useMemo(() => new THREE.Vector2(), []);
   const plane = useMemo(() => new THREE.Plane(new THREE.Vector3(0, 0, 1), 0), []);
   const intersectionPoint = useMemo(() => new THREE.Vector3(), []);
-  const { camera, raycaster } = useThree();
 
   useFrame((_, delta) => {
-    if (!meshRef.current || !mouseNDC.current) return;
+    if (!mouseNDC.current) return;
     const m = mouseNDC.current;
 
     if (m.active) {
@@ -301,72 +315,40 @@ const CursorSphere: React.FC<CursorSphereProps> = ({ mouseNDC, cursorPosRef }) =
       raycaster.setFromCamera(pointerVec, camera);
       raycaster.ray.intersectPlane(plane, intersectionPoint);
 
-      // Smooth physics-like lerp tracking with slight inertia
       const lerpFactor = 1.0 - Math.pow(0.018, delta);
-      currentPos.current.x = THREE.MathUtils.lerp(
-        currentPos.current.x,
+      cursorPosRef.current.x = THREE.MathUtils.lerp(
+        cursorPosRef.current.x,
         intersectionPoint.x,
         lerpFactor
       );
-      currentPos.current.y = THREE.MathUtils.lerp(
-        currentPos.current.y,
+      cursorPosRef.current.y = THREE.MathUtils.lerp(
+        cursorPosRef.current.y,
         intersectionPoint.y,
         lerpFactor
       );
-      currentPos.current.z = 0.5;
-
-      meshRef.current.position.copy(currentPos.current);
-      if (cursorPosRef.current) {
-        cursorPosRef.current.copy(currentPos.current);
-      }
+      cursorPosRef.current.z = 0.5;
+    } else {
+      cursorPosRef.current.set(999, 999, 999);
     }
-
-    // Smooth visibility fade when entering / leaving the section
-    const targetScale = m.active ? 1.0 : 0.0;
-    const currentScale = meshRef.current.scale.x;
-    const nextScale = THREE.MathUtils.lerp(currentScale, targetScale, 0.16);
-    meshRef.current.scale.set(nextScale, nextScale, nextScale);
   });
 
-  return (
-    <mesh ref={meshRef} scale={0} position={[0, 0, 0.5]}>
-      <sphereGeometry args={[0.075, 32, 32]} />
-      <meshStandardMaterial
-        color="#1f2937"
-        roughness={0.4}
-        metalness={0.1}
-        transparent
-        opacity={0.65}
-      />
-    </mesh>
-  );
-};
-
-// ── Main Scene Interior ──────────────────────────────────────────────────────
-const JellyScene: React.FC<{
-  mouseNDC: React.RefObject<{ x: number; y: number; active: boolean }>;
-}> = ({ mouseNDC }) => {
-  const { viewport } = useThree();
-  const cursorPosRef = useRef<THREE.Vector3>(new THREE.Vector3(999, 999, 999));
-
   // 1. Top-Right Bean-Shaped Jelly Blob (Matching the designer's exact top-right SVG graphic)
-  // Positioned partially off-screen at top-right, rotated by ~ -24° matching SVG clip-path rotation
   const topRightPos = useMemo<[number, number, number]>(() => {
-    return [viewport.width * 0.42, viewport.height * 0.36, -0.6];
+    return [viewport.width * 0.45, viewport.height * 0.40, -0.6];
   }, [viewport.width, viewport.height]);
 
   const topRightScale = useMemo<[number, number, number]>(() => {
-    const s = Math.min(viewport.width * 0.25, 2.7);
+    const s = Math.min(viewport.width * 0.13, 1.45);
     return [s * 1.35, s * 0.95, s * 1.1];
   }, [viewport.width]);
 
   // 2. Left Undulating Fluid Jelly Blob (Middle-left, partially off-screen)
   const leftPos = useMemo<[number, number, number]>(() => {
-    return [-viewport.width * 0.44, 0.0, -0.6];
+    return [-viewport.width * 0.47, 0.0, -0.6];
   }, [viewport.width]);
 
   const leftScale = useMemo<[number, number, number]>(() => {
-    const s = Math.min(viewport.width * 0.26, 2.75);
+    const s = Math.min(viewport.width * 0.14, 1.50);
     return [s * 0.95, s * 1.35, s * 1.05];
   }, [viewport.width]);
 
@@ -383,9 +365,9 @@ const JellyScene: React.FC<{
         scale={topRightScale}
         rotation={[-0.1, 0.2, -0.42]}
         shapeType="bean"
-        distort={0.32}
-        speed={0.42}
-        frequency={0.75}
+        distort={0.42}
+        speed={0.22}
+        frequency={0.65}
         cursorPosRef={cursorPosRef}
       />
 
@@ -395,14 +377,11 @@ const JellyScene: React.FC<{
         scale={leftScale}
         rotation={[0.15, -0.2, 0.25]}
         shapeType="left-blob"
-        distort={0.34}
-        speed={0.38}
-        frequency={0.7}
+        distort={0.45}
+        speed={0.20}
+        frequency={0.60}
         cursorPosRef={cursorPosRef}
       />
-
-      {/* ── Trailing 3D Cursor Sphere with Spring Physics ── */}
-      <CursorSphere mouseNDC={mouseNDC} cursorPosRef={cursorPosRef} />
     </>
   );
 };
@@ -412,6 +391,7 @@ export const WebGLJellyBackground: React.FC<WebGLJellyBackgroundProps> = ({
   containerRef,
   className = "",
 }) => {
+  const [mounted, setMounted] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const mouseNDC = useRef<{ x: number; y: number; active: boolean }>({
     x: 0,
@@ -420,6 +400,8 @@ export const WebGLJellyBackground: React.FC<WebGLJellyBackgroundProps> = ({
   });
 
   useEffect(() => {
+    setMounted(true);
+
     // Disable mouse follower tracking on touch-only mobile devices
     if (typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches) {
       return;
@@ -461,6 +443,9 @@ export const WebGLJellyBackground: React.FC<WebGLJellyBackgroundProps> = ({
     };
   }, [containerRef]);
 
+  if (!mounted) {
+    return null;
+  }
 
   return (
     <div
@@ -469,7 +454,7 @@ export const WebGLJellyBackground: React.FC<WebGLJellyBackgroundProps> = ({
       aria-hidden="true"
     >
       <Canvas
-        className="w-full h-full pointer-events-auto"
+        className="gl w-full h-full pointer-events-none"
         gl={{
           alpha: true,
           antialias: true,
