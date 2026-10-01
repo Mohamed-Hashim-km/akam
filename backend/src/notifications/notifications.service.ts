@@ -18,6 +18,42 @@ export type NotificationType =
   | 'SUBSCRIPTION_GRANTED'
   | 'SUBSCRIPTION_CANCELLED';
 
+export interface EditorialAuditLogRow {
+  id: string;
+  type: string;
+  message: string;
+  read: boolean;
+  relatedStoryId: string | null;
+  createdAt: string;
+  targetUserId?: string | null;
+  targetUserName?: string | null;
+  targetUserEmail?: string | null;
+  targetUserRole?: string | null;
+  storyTitle?: string | null;
+  storySlug?: string | null;
+  storyStatus?: string | null;
+  submissionType?: string | null;
+}
+
+export interface EditorialAuditLogsResult {
+  data: EditorialAuditLogRow[];
+  meta: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+    hasMore: boolean;
+  };
+  stats: {
+    totalEvents: number;
+    submissionsCount: number;
+    approvalsCount: number;
+    moderationCount: number;
+    studentPassCount: number;
+    subscriptionsCount: number;
+  };
+}
+
 type NotificationRow = {
   id: string;
   type: string;
@@ -30,6 +66,158 @@ type NotificationRow = {
 @Injectable()
 export class NotificationsService {
   constructor(private prisma: PrismaService) {}
+
+  async getEditorialAuditLogs(params: {
+    page?: number;
+    limit?: number;
+    category?: string;
+    search?: string;
+  }): Promise<EditorialAuditLogsResult> {
+    const page = Math.max(1, params.page || 1);
+    const limit = Math.max(1, Math.min(100, params.limit || 20));
+    const offset = (page - 1) * limit;
+
+    const conditions: string[] = ['1=1'];
+    const values: any[] = [];
+    let paramIndex = 1;
+
+    if (params.category && params.category !== 'ALL') {
+      const cat = params.category.toUpperCase();
+      if (cat === 'SUBMISSIONS') {
+        conditions.push(`n.type IN ('STORY_SUBMITTED', 'STORY_APPROVED', 'STORY_REJECTED', 'STORY_APPROVED_EMAGAZINE', 'STORY_PUBLISHED_EMAGAZINE')`);
+      } else if (cat === 'APPROVALS') {
+        conditions.push(`n.type IN ('STORY_APPROVED', 'STORY_APPROVED_EMAGAZINE', 'STORY_PUBLISHED_EMAGAZINE')`);
+      } else if (cat === 'REJECTIONS') {
+        conditions.push(`n.type IN ('STORY_REJECTED', 'CONTENT_REMOVED')`);
+      } else if (cat === 'MODERATION') {
+        conditions.push(`n.type IN ('CONTENT_REPORTED', 'CONTENT_DISPUTED', 'REPORT_RESOLVED', 'REPORT_DISMISSED', 'CONTENT_REMOVED')`);
+      } else if (cat === 'STUDENT_PASS') {
+        conditions.push(`(n.type IN ('STUDENT_APPLICATION_SUBMITTED', 'STUDENT_APPLICATION_APPROVED', 'STUDENT_APPLICATION_REJECTED') OR n.message ILIKE '%Student Scholar Pass%')`);
+      } else if (cat === 'SUBSCRIPTIONS') {
+        conditions.push(`n.type IN ('SUBSCRIPTION_GRANTED', 'SUBSCRIPTION_CANCELLED')`);
+      }
+    }
+
+    if (params.search && params.search.trim()) {
+      const searchPattern = `%${params.search.trim()}%`;
+      values.push(searchPattern);
+      conditions.push(`(
+        n.message ILIKE $${paramIndex} OR
+        u.name ILIKE $${paramIndex} OR
+        u.email ILIKE $${paramIndex} OR
+        s.title ILIKE $${paramIndex}
+      )`);
+      paramIndex++;
+    }
+
+    const whereSql = conditions.join(' AND ');
+
+    const countQuery = `
+      SELECT COUNT(DISTINCT n.id) AS count
+      FROM notification n
+      LEFT JOIN "user" u ON n."userId" = u.id
+      LEFT JOIN story s ON n."relatedStoryId" = s.id
+      WHERE ${whereSql}
+    `;
+
+    const dataQuery = `
+      SELECT 
+        n.id,
+        n.type,
+        n.message,
+        n.read,
+        n."relatedStoryId",
+        n."createdAt",
+        u.id AS "targetUserId",
+        u.name AS "targetUserName",
+        u.email AS "targetUserEmail",
+        u.role AS "targetUserRole",
+        s.title AS "storyTitle",
+        s.slug AS "storySlug",
+        s.status AS "storyStatus",
+        s."submissionType" AS "submissionType"
+      FROM notification n
+      LEFT JOIN "user" u ON n."userId" = u.id
+      LEFT JOIN story s ON n."relatedStoryId" = s.id
+      WHERE ${whereSql}
+      ORDER BY n."createdAt" DESC
+      LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
+    `;
+
+    const dataValues = [...values, limit, offset];
+
+    const [totalRow, dataRows, statsRows] = await Promise.all([
+      this.prisma.queryOne<{ count: string }>(countQuery, values),
+      this.prisma.query<EditorialAuditLogRow>(dataQuery, dataValues),
+      this.prisma.query<{
+        type: string;
+        count: string;
+      }>(`
+        SELECT type, COUNT(*) AS count
+        FROM notification
+        GROUP BY type
+      `),
+    ]);
+
+    const total = parseInt(totalRow?.count ?? '0', 10);
+    const totalPages = Math.ceil(total / limit) || 1;
+    const hasMore = offset + dataRows.length < total;
+
+    const statsMap: Record<string, number> = {};
+    let totalEvents = 0;
+    for (const row of statsRows) {
+      const c = parseInt(row.count, 10);
+      statsMap[row.type] = c;
+      totalEvents += c;
+    }
+
+    const submissionsCount =
+      (statsMap['STORY_SUBMITTED'] || 0) +
+      (statsMap['STORY_APPROVED'] || 0) +
+      (statsMap['STORY_REJECTED'] || 0) +
+      (statsMap['STORY_APPROVED_EMAGAZINE'] || 0) +
+      (statsMap['STORY_PUBLISHED_EMAGAZINE'] || 0);
+
+    const approvalsCount =
+      (statsMap['STORY_APPROVED'] || 0) +
+      (statsMap['STORY_APPROVED_EMAGAZINE'] || 0) +
+      (statsMap['STORY_PUBLISHED_EMAGAZINE'] || 0);
+
+    const moderationCount =
+      (statsMap['CONTENT_REPORTED'] || 0) +
+      (statsMap['CONTENT_DISPUTED'] || 0) +
+      (statsMap['REPORT_RESOLVED'] || 0) +
+      (statsMap['REPORT_DISMISSED'] || 0) +
+      (statsMap['CONTENT_REMOVED'] || 0);
+
+    const studentPassCount =
+      (statsMap['STUDENT_APPLICATION_SUBMITTED'] || 0) +
+      (statsMap['STUDENT_APPLICATION_APPROVED'] || 0) +
+      (statsMap['STUDENT_APPLICATION_REJECTED'] || 0);
+
+    const subscriptionsCount =
+      (statsMap['SUBSCRIPTION_GRANTED'] || 0) +
+      (statsMap['SUBSCRIPTION_CANCELLED'] || 0);
+
+    return {
+      data: dataRows,
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages,
+        hasMore,
+      },
+      stats: {
+        totalEvents,
+        submissionsCount,
+        approvalsCount,
+        moderationCount,
+        studentPassCount,
+        subscriptionsCount,
+      },
+    };
+  }
 
   async getUserNotifications(
     userId: string,

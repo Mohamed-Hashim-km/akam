@@ -209,7 +209,7 @@ export default async function Home() {
       <EditorsNote title={editorsNote.title} note={editorsNote.note} />
 
       {/* Explore By Interest Section */}
-      {/* <ExploreByInterest categories={categories} /> */}
+      <ExploreByInterest categories={categories} />
 
       {/* Upcoming Events Section - Server-side fetched (top 8 upcoming events) */}
       <UpcomingEvents events={events} />

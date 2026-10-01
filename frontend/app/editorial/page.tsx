@@ -76,7 +76,11 @@ import {
   Images,
   Download,
   RotateCcw,
-  SlidersHorizontal,
+  ScrollText,
+  ClipboardList,
+  Activity,
+  FileSpreadsheet,
+  Filter,
 } from "lucide-react";
 import Button from "@/components/ui/Button";
 import AuthModal from "@/components/AuthModal";
@@ -457,9 +461,51 @@ function EditorialDashboardContent() {
     setReviewFormPublished(true);
   };
 
-  // Editorial Notifications State
+  // Editorial Audit Logs & Notifications State
   const [notificationsList, setNotificationsList] = useState<any[]>([]);
+  const [auditLogsMeta, setAuditLogsMeta] = useState<{ total: number; page: number; limit: number; totalPages: number } | null>(null);
+  const [auditLogsStats, setAuditLogsStats] = useState<{
+    totalEvents: number;
+    submissionsCount: number;
+    approvalsCount: number;
+    moderationCount: number;
+    studentPassCount: number;
+    subscriptionsCount: number;
+  }>({
+    totalEvents: 0,
+    submissionsCount: 0,
+    approvalsCount: 0,
+    moderationCount: 0,
+    studentPassCount: 0,
+    subscriptionsCount: 0,
+  });
+  const [auditCategoryFilter, setAuditCategoryFilter] = useState<string>("ALL");
+  const [auditSearchQuery, setAuditSearchQuery] = useState<string>("");
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
+
+  const handleExportAuditLogs = () => {
+    if (!notificationsList || notificationsList.length === 0) return;
+    const headers = ["ID", "Timestamp", "Event Type", "Message", "Target User", "Target Email", "Target Role", "Related Story", "Read Status"];
+    const rows = notificationsList.map((item) => [
+      item.id,
+      new Date(item.createdAt).toISOString(),
+      item.type,
+      `"${(item.message || "").replace(/"/g, '""')}"`,
+      `"${(item.targetUserName || "").replace(/"/g, '""')}"`,
+      item.targetUserEmail || "",
+      item.targetUserRole || "",
+      `"${(item.storyTitle || "").replace(/"/g, '""')}"`,
+      item.read ? "Read" : "Unread",
+    ]);
+    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map((e) => e.join(","))].join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `editorial_audit_logs_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   // Register New Author Modal State
   const [registerAuthorModalOpen, setRegisterAuthorModalOpen] = useState(false);
@@ -1243,10 +1289,23 @@ function EditorialDashboardContent() {
           }
         }
       } else if (tab === "notifications") {
-        const nRes = await apiFetch(`${API_BASE_URL}/notifications`);
-        if (nRes.ok) {
-          const json = await nRes.json();
-          setNotificationsList(Array.isArray(json) ? json : json.data || []);
+        const auditCategoryQuery = auditCategoryFilter && auditCategoryFilter !== "ALL" ? `&category=${auditCategoryFilter}` : "";
+        const queryText = query || auditSearchQuery;
+        const auditSearchQueryParam = queryText ? `&search=${encodeURIComponent(queryText)}` : "";
+        const auditRes = await apiFetch(`${API_BASE_URL}/notifications/audit-logs?page=${page}&limit=15${auditCategoryQuery}${auditSearchQueryParam}`);
+        if (auditRes.ok) {
+          const json = await auditRes.json();
+          setNotificationsList(json.data || []);
+          if (json.meta) setAuditLogsMeta(json.meta);
+          if (json.stats) setAuditLogsStats(json.stats);
+        } else {
+          const nRes = await apiFetch(`${API_BASE_URL}/notifications?page=${page}&limit=15`);
+          if (nRes.ok) {
+            const json = await nRes.json();
+            const list = Array.isArray(json) ? json : json.data || [];
+            setNotificationsList(list);
+            if (json.meta) setAuditLogsMeta(json.meta);
+          }
         }
         const uRes = await apiFetch(`${API_BASE_URL}/notifications/unread-count`);
         if (uRes.ok) {
@@ -3294,15 +3353,22 @@ function EditorialDashboardContent() {
                   <span>Home Page Editor's Note</span>
                 </button>
 
-                <button
+                {/* <button
                   onClick={() => handleTabChange("notifications")}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
                     activeTab === "notifications" ? "bg-[#040706] text-white shadow-xs" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
                   }`}
                 >
-                  <Bell className={`w-4 h-4 shrink-0 ${activeTab === "notifications" ? "text-emerald-400" : "text-gray-400"}`} />
-                  <span>Editorial Alerts</span>
-                </button>
+                  <ScrollText className={`w-4 h-4 shrink-0 ${activeTab === "notifications" ? "text-emerald-400" : "text-gray-400"}`} />
+                  <span className="flex items-center justify-between w-full">
+                    <span>Editorial Audit Logs</span>
+                    {unreadNotificationCount > 0 && (
+                      <span className="bg-emerald-500 text-white text-[10px] font-bold px-1.5 py-0.2 rounded-full">
+                        {unreadNotificationCount}
+                      </span>
+                    )}
+                  </span>
+                </button> */}
 
                 <button
                   onClick={() => handleTabChange("reports")}
@@ -3452,7 +3518,7 @@ function EditorialDashboardContent() {
                 {activeTab === "catalog" && "Published Content Catalog"}
                 {activeTab === "authors" && "User & Author Roster"}
                 {activeTab === "categories" && "Categories & Taxonomy"}
-                {activeTab === "notifications" && "Editorial Alerts & Logs"}
+                {activeTab === "notifications" && "Editorial Audit Logs & Activity Stream"}
                 {activeTab === "settings" && "Home Page Editor's Note"}
                 {activeTab === "communities" && "Community Moderation & Management"}
                 {activeTab === "events" && "Events & Workshops Management"}
@@ -3485,7 +3551,7 @@ function EditorialDashboardContent() {
               {activeTab === "catalog" && "Browse all active works (articles, Visual Art, videos) currently published on AKAM Digital."}
               {activeTab === "authors" && "Manage all registered platform users, writers, and role permissions."}
               {activeTab === "categories" && "Manage platform category taxonomy and genre classifications."}
-              {activeTab === "notifications" && "Event logs for content submissions, approvals, and rejections."}
+              {activeTab === "notifications" && "Immutable audit trail and real-time event stream tracking submissions, approvals, rejections, content disputes, student scholarship reviews, and user subscriptions."}
               {activeTab === "settings" && "Update the featured Editor's Note title and message displayed on the main homepage."}
               {activeTab === "communities" && "Moderate community posts and comments, lock threads, pin posts, and inspect community rosters."}
               {activeTab === "events" && "Manage upcoming reading sessions, discussions, workshops, and past archives."}
@@ -5309,102 +5375,420 @@ function EditorialDashboardContent() {
             </div>
           )}
 
-          {/* TAB 5: NOTIFICATIONS */}
-          {activeTab === "notifications" && (
-            <div className="bg-white border border-gray-200 rounded-[28px] p-6 sm:p-8 shadow-xs font-poppins space-y-6">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-gray-100">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-xl font-bold text-gray-950">Editorial Logs & Event Stream</h3>
-                    {unreadNotificationCount > 0 && (
-                      <span className="bg-emerald-500 text-white text-[10px] font-extrabold px-2.5 py-0.5 rounded-full">
-                        {unreadNotificationCount} UNREAD
-                      </span>
-                    )}
+          {/* TAB 5: EDITORIAL AUDIT LOGS (COMMENTED OUT) */}
+          {/* @ts-ignore */}
+          {false && activeTab === "notifications" && (
+            <div className="space-y-6 font-poppins">
+              {/* Top Overview Stat Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
+                <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Total Audit Events</p>
+                    <p className="text-2xl font-bold text-gray-950 mt-1">
+                      {auditLogsStats.totalEvents || auditLogsMeta?.total || notificationsList.length}
+                    </p>
                   </div>
-                  <p className="text-xs text-gray-500 mt-1">Real-time alerts triggered on content submission, approval, or rejection.</p>
+                  <div className="w-11 h-11 rounded-2xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600">
+                    <ScrollText className="w-5 h-5" />
+                  </div>
                 </div>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={async () => {
-                    await apiFetch(`${API_BASE_URL}/notifications/read-all`, { method: "PATCH" });
-                    fetchDashboardData("notifications");
-                  }}
-                  className="text-xs font-semibold border border-gray-300 shadow-xs cursor-pointer"
-                >
-                  Mark All as Read
-                </Button>
+
+                <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Submissions & Queue</p>
+                    <p className="text-2xl font-bold text-gray-950 mt-1">
+                      {auditLogsStats.submissionsCount}
+                    </p>
+                  </div>
+                  <div className="w-11 h-11 rounded-2xl bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-600">
+                    <Layers className="w-5 h-5" />
+                  </div>
+                </div>
+
+                <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Moderation & Safety</p>
+                    <p className="text-2xl font-bold text-gray-950 mt-1">
+                      {auditLogsStats.moderationCount}
+                    </p>
+                  </div>
+                  <div className="w-11 h-11 rounded-2xl bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-600">
+                    <ShieldCheck className="w-5 h-5" />
+                  </div>
+                </div>
+
+                <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Scholar Passes & Subs</p>
+                    <p className="text-2xl font-bold text-gray-950 mt-1">
+                      {auditLogsStats.studentPassCount + auditLogsStats.subscriptionsCount}
+                    </p>
+                  </div>
+                  <div className="w-11 h-11 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600">
+                    <GraduationCap className="w-5 h-5" />
+                  </div>
+                </div>
               </div>
 
-              {notificationsList.length === 0 ? (
-                <div className="py-12 text-center text-gray-400">
-                  <Bell className="w-10 h-10 mx-auto text-gray-300 mb-3" />
-                  <p className="text-sm font-semibold text-gray-700">No Editorial Alerts Yet</p>
-                  <p className="text-xs text-gray-400 mt-1">Submission and review logs will appear here when authors submit content.</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {notificationsList.map((item) => (
-                    <div
-                      key={item.id}
-                      className={`p-4 rounded-2xl border transition-all flex items-start justify-between gap-4 ${
-                        !item.read ? "bg-emerald-50/50 border-emerald-200" : "bg-gray-50/70 border-gray-200/80"
-                      }`}
-                    >
-                      <div className="flex items-start gap-3">
-                        <div
-                          className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${
-                            item.type === "STORY_SUBMITTED"
-                              ? "bg-amber-100 text-amber-700"
-                              : item.type === "STORY_APPROVED"
-                                ? "bg-emerald-100 text-emerald-700"
-                                : item.type === "STORY_APPROVED_EMAGAZINE"
-                                  ? "bg-purple-100 text-purple-700"
-                                  : item.type === "STUDENT_APPLICATION_SUBMITTED" || item.message?.includes("Student Scholar Pass")
-                                    ? "bg-emerald-100 text-emerald-800"
-                                    : "bg-rose-100 text-rose-700"
-                          }`}
-                        >
-                          {item.type === "STORY_APPROVED_EMAGAZINE" ? (
-                            <BookOpen className="w-4 h-4" />
-                          ) : item.type === "STUDENT_APPLICATION_SUBMITTED" || item.message?.includes("Student Scholar Pass") ? (
-                            <GraduationCap className="w-4 h-4 text-emerald-700" />
-                          ) : (
-                            <Bell className="w-4 h-4" />
-                          )}
-                        </div>
-                        <div>
-                          <p className="text-xs font-bold text-gray-900">{item.message}</p>
-                          <p className="text-[11px] text-gray-400 mt-1">{new Date(item.createdAt).toLocaleString()}</p>
-                          {(item.type === "STUDENT_APPLICATION_SUBMITTED" || item.message?.includes("Student Scholar Pass")) && (
-                            <Link
-                              href="/editorial?tab=subscriptions&subTab=verifications&page=1"
-                              onClick={() => handleTabChange("subscriptions")}
-                              className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 hover:text-emerald-900 mt-1.5 hover:underline"
-                            >
-                              Review Student Pass →
-                            </Link>
-                          )}
-                        </div>
-                      </div>
-                      {!item.read && (
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            await apiFetch(`${API_BASE_URL}/notifications/${item.id}/read`, { method: "PATCH" });
-                            fetchDashboardData("notifications");
-                          }}
-                          className="text-[11px] font-semibold text-emerald-700 hover:underline shrink-0 cursor-pointer"
-                        >
-                          Mark Read
-                        </button>
+              {/* Audit Stream Main Card */}
+              <div className="bg-white border border-gray-200 rounded-[28px] p-6 sm:p-8 shadow-xs space-y-6">
+                {/* Header & Global Actions */}
+                <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 pb-5 border-b border-gray-100">
+                  <div>
+                    <div className="flex items-center gap-2.5">
+                      <h3 className="text-xl font-bold text-gray-950">Editorial Audit Log Stream</h3>
+                      {unreadNotificationCount > 0 && (
+                        <span className="bg-emerald-500 text-white text-[10px] font-extrabold px-2.5 py-0.5 rounded-full">
+                          {unreadNotificationCount} UNREAD ALERTS
+                        </span>
                       )}
                     </div>
-                  ))}
+                    <p className="text-xs text-gray-500 mt-1">
+                      Immutable record of author submissions, editorial approvals, moderation reports, pass verifications, and user activities.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      icon={<Download className="w-3.5 h-3.5" />}
+                      iconPosition="left"
+                      onClick={handleExportAuditLogs}
+                      className="text-xs font-semibold border border-gray-300 shadow-xs cursor-pointer"
+                    >
+                      Export CSV
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      icon={<RefreshCw className="w-3.5 h-3.5" />}
+                      iconPosition="left"
+                      onClick={() => fetchDashboardData("notifications", currentPage)}
+                      className="text-xs font-semibold border border-gray-300 shadow-xs cursor-pointer"
+                    >
+                      Refresh
+                    </Button>
+                    {unreadNotificationCount > 0 && (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        onClick={async () => {
+                          await apiFetch(`${API_BASE_URL}/notifications/read-all`, { method: "PATCH" });
+                          fetchDashboardData("notifications", currentPage);
+                        }}
+                        className="text-xs font-semibold border border-gray-300 shadow-xs cursor-pointer"
+                      >
+                        Mark All Read
+                      </Button>
+                    )}
+                  </div>
                 </div>
-              )}
+
+                {/* Filter and Search Bar */}
+                <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+                  {/* Category Pills */}
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
+                    {[
+                      { id: "ALL", label: "All Activity" },
+                      { id: "SUBMISSIONS", label: "Submissions" },
+                      { id: "APPROVALS", label: "Approvals & E-Mag" },
+                      { id: "REJECTIONS", label: "Rejections" },
+                      { id: "MODERATION", label: "Moderation" },
+                      { id: "STUDENT_PASS", label: "Student Passes" },
+                      { id: "SUBSCRIPTIONS", label: "Subscriptions" },
+                    ].map((cat) => (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        onClick={() => {
+                          setAuditCategoryFilter(cat.id);
+                          // Trigger immediate reload
+                          apiFetch(
+                            `${API_BASE_URL}/notifications/audit-logs?page=1&limit=15${
+                              cat.id !== "ALL" ? `&category=${cat.id}` : ""
+                            }${auditSearchQuery ? `&search=${encodeURIComponent(auditSearchQuery)}` : ""}`
+                          ).then(async (res) => {
+                            if (res.ok) {
+                              const json = await res.json();
+                              setNotificationsList(json.data || []);
+                              if (json.meta) setAuditLogsMeta(json.meta);
+                              if (json.stats) setAuditLogsStats(json.stats);
+                            }
+                          });
+                        }}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                          auditCategoryFilter === cat.id
+                            ? "bg-black text-white shadow-xs"
+                            : "bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-gray-900"
+                        }`}
+                      >
+                        {cat.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Search Input */}
+                  <div className="relative w-full md:w-72 shrink-0">
+                    <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="Search by user, story or event..."
+                      value={auditSearchQuery}
+                      onChange={(e) => setAuditSearchQuery(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          fetchDashboardData("notifications", 1, auditSearchQuery);
+                        }
+                      }}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl pl-8 pr-8 py-1.5 text-xs text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-black/10 focus:border-gray-400 transition"
+                    />
+                    {auditSearchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAuditSearchQuery("");
+                          fetchDashboardData("notifications", 1, "");
+                        }}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Audit Stream Logs List */}
+                {notificationsList.length === 0 ? (
+                  <div className="py-14 text-center text-gray-400 border border-dashed border-gray-200 rounded-2xl">
+                    <ScrollText className="w-12 h-12 mx-auto text-gray-300 mb-3" />
+                    <p className="text-base font-semibold text-gray-700">No Audit Events Found</p>
+                    <p className="text-xs text-gray-400 mt-1 max-w-sm mx-auto">
+                      {auditSearchQuery || auditCategoryFilter !== "ALL"
+                        ? "No audit records matched your search query or selected category filter."
+                        : "Editorial actions, author submissions, approvals, and reports will appear in this real-time audit stream."}
+                    </p>
+                    {(auditSearchQuery || auditCategoryFilter !== "ALL") && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAuditSearchQuery("");
+                          setAuditCategoryFilter("ALL");
+                          fetchDashboardData("notifications", 1, "");
+                        }}
+                        className="mt-4 px-4 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-xl text-xs font-semibold cursor-pointer transition"
+                      >
+                        Clear Filters
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {notificationsList.map((item) => {
+                      const isStorySubmit = item.type === "STORY_SUBMITTED";
+                      const isStoryApproved = item.type === "STORY_APPROVED";
+                      const isEmagApproved = item.type === "STORY_APPROVED_EMAGAZINE";
+                      const isEmagPublished = item.type === "STORY_PUBLISHED_EMAGAZINE";
+                      const isRejected = item.type === "STORY_REJECTED" || item.type === "CONTENT_REMOVED";
+                      const isModeration = item.type === "CONTENT_REPORTED" || item.type === "CONTENT_DISPUTED";
+                      const isStudentPass =
+                        item.type === "STUDENT_APPLICATION_SUBMITTED" ||
+                        item.type === "STUDENT_APPLICATION_APPROVED" ||
+                        item.type === "STUDENT_APPLICATION_REJECTED" ||
+                        item.message?.includes("Student Scholar Pass");
+                      const isSubscription = item.type === "SUBSCRIPTION_GRANTED" || item.type === "SUBSCRIPTION_CANCELLED";
+
+                      return (
+                        <div
+                          key={item.id}
+                          className={`p-4 sm:p-5 rounded-2xl border transition-all flex flex-col sm:flex-row items-start justify-between gap-4 ${
+                            !item.read
+                              ? "bg-emerald-50/40 border-emerald-200/90 shadow-xs"
+                              : "bg-gray-50/70 border-gray-200/80 hover:bg-gray-50 hover:border-gray-300"
+                          }`}
+                        >
+                          <div className="flex items-start gap-3.5 w-full">
+                            {/* Icon Indicator Badge */}
+                            <div
+                              className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 mt-0.5 shadow-xs ${
+                                isStorySubmit
+                                  ? "bg-amber-100 text-amber-700 border border-amber-200/80"
+                                  : isStoryApproved
+                                    ? "bg-emerald-100 text-emerald-700 border border-emerald-200/80"
+                                    : isEmagApproved || isEmagPublished
+                                      ? "bg-purple-100 text-purple-700 border border-purple-200/80"
+                                      : isStudentPass
+                                        ? "bg-cyan-100 text-cyan-800 border border-cyan-200/80"
+                                        : isSubscription
+                                          ? "bg-indigo-100 text-indigo-700 border border-indigo-200/80"
+                                          : isModeration
+                                            ? "bg-amber-100 text-amber-800 border border-amber-300/80"
+                                            : isRejected
+                                              ? "bg-rose-100 text-rose-700 border border-rose-200/80"
+                                              : "bg-gray-100 text-gray-700 border border-gray-200"
+                              }`}
+                            >
+                              {isEmagApproved || isEmagPublished ? (
+                                <BookOpen className="w-5 h-5" />
+                              ) : isStudentPass ? (
+                                <GraduationCap className="w-5 h-5" />
+                              ) : isSubscription ? (
+                                <CreditCard className="w-5 h-5" />
+                              ) : isModeration ? (
+                                <Flag className="w-5 h-5" />
+                              ) : isStoryApproved ? (
+                                <CheckCircle2 className="w-5 h-5" />
+                              ) : isRejected ? (
+                                <XCircle className="w-5 h-5" />
+                              ) : (
+                                <ScrollText className="w-5 h-5" />
+                              )}
+                            </div>
+
+                            {/* Main Body */}
+                            <div className="space-y-1.5 min-w-0 flex-1">
+                              {/* Event Header Badges */}
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span
+                                  className={`text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider ${
+                                    isStorySubmit
+                                      ? "bg-amber-100/80 text-amber-800"
+                                      : isStoryApproved
+                                        ? "bg-emerald-100/80 text-emerald-800"
+                                        : isEmagApproved || isEmagPublished
+                                          ? "bg-purple-100/80 text-purple-800"
+                                          : isStudentPass
+                                            ? "bg-cyan-100/80 text-cyan-900"
+                                            : isSubscription
+                                              ? "bg-indigo-100/80 text-indigo-900"
+                                              : isModeration
+                                                ? "bg-rose-100/80 text-rose-900"
+                                                : isRejected
+                                                  ? "bg-rose-100/80 text-rose-900"
+                                                  : "bg-gray-200 text-gray-800"
+                                  }`}
+                                >
+                                  {item.type.replace(/_/g, " ")}
+                                </span>
+
+                                {!item.read && (
+                                  <span className="bg-emerald-500 text-white text-[9px] font-extrabold px-1.5 py-0.2 rounded-full">
+                                    NEW
+                                  </span>
+                                )}
+
+                                <span className="text-[11px] text-gray-400 font-medium">
+                                  {new Date(item.createdAt).toLocaleString(undefined, {
+                                    dateStyle: "medium",
+                                    timeStyle: "short",
+                                  })}
+                                </span>
+                              </div>
+
+                              {/* Message */}
+                              <p className="text-xs sm:text-sm font-semibold text-gray-900 leading-snug break-words">
+                                {item.message}
+                              </p>
+
+                              {/* Associated Entity Details (User / Story) */}
+                              <div className="flex items-center gap-2 flex-wrap pt-0.5 text-[11px] text-gray-600">
+                                {item.targetUserName && (
+                                  <span className="inline-flex items-center gap-1 bg-white border border-gray-200 rounded-md px-2 py-0.5 text-gray-700">
+                                    <span className="font-semibold text-gray-900">{item.targetUserName}</span>
+                                    {item.targetUserEmail && (
+                                      <span className="text-gray-400">({item.targetUserEmail})</span>
+                                    )}
+                                    {item.targetUserRole && (
+                                      <span className="bg-gray-100 text-gray-600 text-[9px] font-bold px-1 rounded">
+                                        {item.targetUserRole}
+                                      </span>
+                                    )}
+                                  </span>
+                                )}
+
+                                {item.storyTitle && (
+                                  <span className="inline-flex items-center gap-1 bg-white border border-gray-200 rounded-md px-2 py-0.5 text-gray-700">
+                                    <span>Work:</span>
+                                    <span className="font-semibold text-gray-900">"{item.storyTitle}"</span>
+                                    {item.submissionType && (
+                                      <span className="text-[9px] font-medium text-gray-400">[{item.submissionType}]</span>
+                                    )}
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Action Link Shortcuts */}
+                              <div className="flex items-center gap-3 pt-1">
+                                {isStudentPass && (
+                                  <Link
+                                    href="/editorial?tab=subscriptions&subTab=verifications&page=1"
+                                    onClick={() => handleTabChange("subscriptions")}
+                                    className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 hover:text-emerald-900 hover:underline"
+                                  >
+                                    Review Student Pass Queue →
+                                  </Link>
+                                )}
+
+                                {isModeration && (
+                                  <Link
+                                    href="/editorial?tab=reports&page=1"
+                                    onClick={() => handleTabChange("reports")}
+                                    className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 hover:text-rose-900 hover:underline"
+                                  >
+                                    Inspect Moderation Queue →
+                                  </Link>
+                                )}
+
+                                {isStorySubmit && (
+                                  <Link
+                                    href="/editorial?tab=queue&page=1"
+                                    onClick={() => handleTabChange("queue")}
+                                    className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 hover:text-amber-900 hover:underline"
+                                  >
+                                    Inspect in Review Queue →
+                                  </Link>
+                                )}
+
+                                {item.storySlug && (isStoryApproved || isEmagPublished) && (
+                                  <Link
+                                    href={`/works/${item.storySlug}`}
+                                    target="_blank"
+                                    className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-700 hover:text-indigo-900 hover:underline"
+                                  >
+                                    View Live Work <ExternalLink className="w-3 h-3" />
+                                  </Link>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Item Actions */}
+                          {!item.read && (
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                await apiFetch(`${API_BASE_URL}/notifications/${item.id}/read`, { method: "PATCH" });
+                                fetchDashboardData("notifications", currentPage);
+                              }}
+                              className="text-[11px] font-semibold text-emerald-700 hover:text-emerald-900 hover:underline shrink-0 cursor-pointer self-end sm:self-center px-2 py-1 bg-emerald-100/60 rounded-lg"
+                            >
+                              Mark Read
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Audit Pagination Footer */}
+                {auditLogsMeta && (
+                  <PaginationFooter meta={auditLogsMeta!} onPageChange={handlePageChange} />
+                )}
+              </div>
             </div>
           )}
 
