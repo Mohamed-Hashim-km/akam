@@ -344,7 +344,6 @@ export const ReaderReviews: React.FC<ReaderReviewsProps> = ({
   return (
     <section className="relative w-full bg-white py-16 sm:py-20 lg:py-24 font-poppins overflow-hidden">
       {/* ── Decorative Gradient Jelly Bubble Blob on Bottom Left ── */}
-      <ReviewsJellyBlob />
 
       <div className="container px-4 sm:px-6 lg:px-8 mx-auto relative z-10">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 ">
