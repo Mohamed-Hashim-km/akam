@@ -220,3 +220,4 @@ export const WorkshopsSection: React.FC<WorkshopsSectionProps> = ({
 
 export default WorkshopsSection;
 
+
