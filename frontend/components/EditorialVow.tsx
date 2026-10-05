@@ -19,29 +19,24 @@ export interface EditorialVowProps {
 }
 
 const DEFAULT_AUTHORS: EditorialAuthor[] = [
-  {
-    id: "1",
-    name: "T. Padmanabhan",
-    role: "Iconic master of Malayalam short stories",
-    imageSrc: "/images/about/padmanabhan.jpg",
-  },
+
   {
     id: "2",
-    name: "Sunandha Nair",
-    role: "Iconic master of Malayalam poems",
-    imageSrc: "/images/about/sunandha.jpg",
+    name: "Ashok Kumar",
+    role: "Managing Director",
+    imageSrc: "/images/about/ashok.jpeg",
+  },
+    {
+    id: "1",
+    name: "AK BijuRaj",
+    role: "Associate Editor",
+    imageSrc: "/images/about/bijuRaj.jpeg",
   },
   {
     id: "3",
-    name: "Reena Padmarajan",
-    role: "Iconic master of Malayalam contemporary prose",
-    imageSrc: "/images/about/reena.jpg",
-  },
-  {
-    id: "4",
-    name: "K. Sachidanandan",
-    role: "Iconic master of Malayalam poetry & criticism",
-    imageSrc: "/images/about/sachidanandan.jpg",
+    name: "Nila",
+    role: "General Manager",
+    imageSrc: "/images/about/nila.jpeg",
   },
 ];
 
