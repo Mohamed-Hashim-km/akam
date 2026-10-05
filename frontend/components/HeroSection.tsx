@@ -17,7 +17,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
   subheadline = "Discover stories, voices, and ideas that celebrate the richness of Malayalam literature and culture.",
   ctaText = "Explore Works",
   ctaHref = "/works",
-  imageSrc = "/images/home/hero3.webp",
+  imageSrc = "/images/home/hero.webp",
   imageAlt = "Malayalam literary readers",
 }) => {
   return (
