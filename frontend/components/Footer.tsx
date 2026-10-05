@@ -172,11 +172,11 @@ export const Footer: React.FC<FooterProps> = ({
             href="https://megamind.studio/"
             target="_blank"
             rel="noopener noreferrer"
-            className="hover:text-white hover:underline transition-colors text-center shrink-0 text-white/90 font-medium px-2 flex items-center justify-center gap-1.5"
+            className="hover:text-white  transition-colors text-center shrink-0 text-white/90 font-medium px-2 flex items-center justify-center gap-1.5"
           >
             <span>Made with</span>
             <Heart fill="white" className="w-3.5 h-3.5 text-white inline" />
-            <span>by Megamind Studios</span>
+            <span className="">by <span className="hover:underline">Megamind Studios</span></span>
           </a>
 
           <div className="flex flex-wrap  justify-center md:justify-end gap-5 sm:gap-6 font-medium shrink-0">
