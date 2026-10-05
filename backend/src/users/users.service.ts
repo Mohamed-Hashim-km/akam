@@ -26,24 +26,69 @@ export class UsersService {
     private uploadsService: UploadsService,
   ) {}
 
-  async findAll(pageVal?: number, limitVal?: number, search?: string) {
+  async findAll(
+    pageVal?: number,
+    limitVal?: number,
+    search?: string,
+    sortBy?: string,
+    sortOrder?: string,
+    role?: string,
+    status?: string,
+  ) {
     const page = pageVal && pageVal > 0 ? pageVal : 1;
     const limit = limitVal && limitVal > 0 ? limitVal : 10;
     const offset = (page - 1) * limit;
 
-    let whereSql = '';
+    const conditions: string[] = [];
     const params: any[] = [];
 
     if (search && search.trim()) {
       params.push(`%${search.trim()}%`);
-      whereSql = `WHERE email ILIKE $1 OR name ILIKE $1 OR phone ILIKE $1`;
+      conditions.push(`(email ILIKE $${params.length} OR name ILIKE $${params.length} OR phone ILIKE $${params.length})`);
     }
+
+    if (role && role !== 'ALL') {
+      params.push(role);
+      conditions.push(`role = $${params.length}::"Role"`);
+    }
+
+    if (status && status !== 'ALL') {
+      if (status === 'INACTIVE' || status === 'BANNED') {
+        conditions.push(`"isShadowBanned" IS TRUE`);
+      } else if (status === 'ACTIVE') {
+        conditions.push(`("isShadowBanned" IS NOT TRUE)`);
+      }
+    }
+
+    const whereSql = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
     const countRow = await this.prisma.queryOne<{ count: string }>(
       `SELECT COUNT(*) AS count FROM "user" ${whereSql}`,
       params,
     );
     const total = parseInt(countRow?.count ?? '0', 10);
+
+    const isAsc = sortOrder?.toLowerCase() === 'asc';
+
+    let orderSql = '"createdAt" DESC';
+    if (sortBy === 'role') {
+      // Role rank: ADMIN (1) -> EDITOR (2) -> MODERATOR (3) -> AUTHOR (4) -> READER (5)
+      orderSql = `CASE 
+        WHEN role = 'ADMIN'::"Role" THEN 1
+        WHEN role = 'EDITOR'::"Role" THEN 2
+        WHEN role = 'MODERATOR'::"Role" THEN 3
+        WHEN role = 'AUTHOR'::"Role" THEN 4
+        WHEN role = 'READER'::"Role" THEN 5
+        ELSE 6
+      END ${isAsc ? 'ASC' : 'DESC'}, "createdAt" DESC`;
+    } else if (sortBy === 'status') {
+      // Status rank: Active first vs Inactive
+      orderSql = `CASE WHEN "isShadowBanned" IS TRUE THEN 1 ELSE 0 END ${isAsc ? 'ASC' : 'DESC'}, "createdAt" DESC`;
+    } else if (sortBy === 'name') {
+      orderSql = `COALESCE(name, email) ${isAsc ? 'ASC' : 'DESC'}`;
+    } else if (sortBy === 'createdAt') {
+      orderSql = `"createdAt" ${isAsc ? 'ASC' : 'DESC'}`;
+    }
 
     const queryParams = [...params, limit, offset];
     const data = await this.prisma.query<UserRow>(
@@ -53,7 +98,7 @@ export class UsersService {
               bio, "avatarUrl", role, "isFeatured", "sortOrder", "isShadowBanned", "createdAt"
        FROM "user"
        ${whereSql}
-       ORDER BY "createdAt" DESC
+       ORDER BY ${orderSql}
        LIMIT $${queryParams.length - 1} OFFSET $${queryParams.length}`,
       queryParams,
     );
