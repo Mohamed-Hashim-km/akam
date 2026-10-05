@@ -43,10 +43,14 @@ export class UsersController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('search') search?: string,
+    @Query('sortBy') sortBy?: string,
+    @Query('sortOrder') sortOrder?: string,
+    @Query('role') role?: string,
+    @Query('status') status?: string,
   ) {
     const pageNum = page ? parseInt(page, 10) : undefined;
     const limitNum = limit ? parseInt(limit, 10) : undefined;
-    return this.usersService.findAll(pageNum, limitNum, search);
+    return this.usersService.findAll(pageNum, limitNum, search, sortBy, sortOrder, role, status);
   }
 
   @Get('featured')

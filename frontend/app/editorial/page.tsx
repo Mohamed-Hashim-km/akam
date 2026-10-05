@@ -23,6 +23,9 @@ import {
   X,
   Search,
   ArrowLeft,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
   Lock,
   Layers,
   Sparkles,
@@ -201,48 +204,84 @@ function PaginationFooter({
 
   const startItem = (meta.page - 1) * meta.limit + 1;
   const endItem = Math.min(meta.page * meta.limit, meta.total);
+  const totalPages = meta.totalPages;
+  const currentPage = Math.min(Math.max(1, meta.page), totalPages);
+
+  const getPageNumbers = (): (number | "ellipsis-left" | "ellipsis-right")[] => {
+    if (totalPages <= 7) {
+      return Array.from({ length: totalPages }, (_, i) => i + 1);
+    }
+
+    if (currentPage <= 4) {
+      return [1, 2, 3, 4, 5, "ellipsis-right", totalPages];
+    }
+
+    if (currentPage >= totalPages - 3) {
+      return [1, "ellipsis-left", totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages];
+    }
+
+    return [1, "ellipsis-left", currentPage - 1, currentPage, currentPage + 1, "ellipsis-right", totalPages];
+  };
+
+  const pages = getPageNumbers();
 
   return (
     <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-6 border-t border-gray-200 mt-6 font-poppins">
-      <p className="text-xs text-gray-500 font-medium">
+      <p className="text-xs text-gray-500 font-medium text-center sm:text-left">
         Showing <span className="font-semibold text-gray-900">{startItem}</span> to <span className="font-semibold text-gray-900">{endItem}</span> of{" "}
         <span className="font-semibold text-gray-900">{meta.total}</span> entries
       </p>
 
-      <div className="flex items-center gap-1.5">
-        <Button
+      <div className="flex items-center gap-1.5 flex-wrap justify-center">
+        <button
           type="button"
-          variant="secondary"
-          size="sm"
-          disabled={meta.page <= 1}
-          onClick={() => onPageChange(meta.page - 1)}
-          className="border border-gray-200 text-xs px-3 py-1.5 cursor-pointer disabled:opacity-40"
+          disabled={currentPage <= 1}
+          onClick={() => onPageChange(currentPage - 1)}
+          className="h-8 px-3 rounded-xl border border-gray-200 bg-white text-xs font-semibold text-gray-700 hover:bg-gray-100 disabled:opacity-40 disabled:hover:bg-white disabled:cursor-not-allowed transition-all inline-flex items-center gap-1.5 whitespace-nowrap cursor-pointer shadow-2xs"
         >
-          Previous
-        </Button>
+          <ChevronLeft className="w-3.5 h-3.5 shrink-0" />
+          <span>Previous</span>
+        </button>
 
-        {Array.from({ length: meta.totalPages }, (_, i) => i + 1).map((pNum) => (
-          <button
-            key={pNum}
-            onClick={() => onPageChange(pNum)}
-            className={`w-8 h-8 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-              pNum === meta.page ? "bg-black text-white shadow-xs" : "bg-white border border-gray-200 text-gray-700 hover:bg-gray-100"
-            }`}
-          >
-            {pNum}
-          </button>
-        ))}
+        {pages.map((p, idx) => {
+          if (p === "ellipsis-left" || p === "ellipsis-right") {
+            return (
+              <span
+                key={`${p}-${idx}`}
+                className="w-8 h-8 flex items-center justify-center text-xs font-bold text-gray-400 select-none"
+              >
+                ...
+              </span>
+            );
+          }
 
-        <Button
+          const isCurrent = p === currentPage;
+          return (
+            <button
+              key={p}
+              type="button"
+              onClick={() => onPageChange(p)}
+              aria-current={isCurrent ? "page" : undefined}
+              className={`w-8 h-8 rounded-xl text-xs font-bold transition-all inline-flex items-center justify-center cursor-pointer ${
+                isCurrent
+                  ? "bg-black text-white shadow-xs"
+                  : "bg-white border border-gray-200 text-gray-700 hover:bg-gray-100"
+              }`}
+            >
+              {p}
+            </button>
+          );
+        })}
+
+        <button
           type="button"
-          variant="secondary"
-          size="sm"
-          disabled={meta.page >= meta.totalPages}
-          onClick={() => onPageChange(meta.page + 1)}
-          className="border border-gray-200 text-xs px-3 py-1.5 cursor-pointer disabled:opacity-40"
+          disabled={currentPage >= totalPages}
+          onClick={() => onPageChange(currentPage + 1)}
+          className="h-8 px-3 rounded-xl border border-gray-200 bg-white text-xs font-semibold text-gray-700 hover:bg-gray-100 disabled:opacity-40 disabled:hover:bg-white disabled:cursor-not-allowed transition-all inline-flex items-center gap-1.5 whitespace-nowrap cursor-pointer shadow-2xs"
         >
-          Next
-        </Button>
+          <span>Next</span>
+          <ChevronRight className="w-3.5 h-3.5 shrink-0" />
+        </button>
       </div>
     </div>
   );
@@ -417,6 +456,8 @@ function EditorialDashboardContent() {
 
   const [allUsers, setAllUsers] = useState<RosterUser[]>([]);
   const [authorsMeta, setAuthorsMeta] = useState({ total: 0, page: 1, limit: 10, totalPages: 1 });
+  const [authorSortField, setAuthorSortField] = useState<"role" | "status" | "name" | "createdAt" | null>(null);
+  const [authorSortOrder, setAuthorSortOrder] = useState<"asc" | "desc">("asc");
 
   const [categoriesList, setCategoriesList] = useState<any[]>([]);
   const [categoriesMeta, setCategoriesMeta] = useState({ total: 0, page: 1, limit: 10, totalPages: 1 });
@@ -836,7 +877,7 @@ function EditorialDashboardContent() {
 
   // Editions (Previous Editions) State
   const [editionsList, setEditionsList] = useState<any[]>([]);
-  const [editionsMeta, setEditionsMeta] = useState({ total: 0, page: 1, limit: 10, totalPages: 1 });
+  const [editionsMeta, setEditionsMeta] = useState({ total: 0, page: 1, limit: 12, totalPages: 1 });
   const [showAddEditionModal, setShowAddEditionModal] = useState(false);
   const [editingEditionId, setEditingEditionId] = useState<string | null>(null);
   const [editionFormTitle, setEditionFormTitle] = useState("");
@@ -1266,7 +1307,8 @@ function EditorialDashboardContent() {
         fetchCatalogCounts();
       } else if (tab === "authors") {
         const aSearch = query ? `&search=${encodeURIComponent(query)}` : "";
-        const uRes = await apiFetch(`${API_BASE_URL}/users?page=${page}&limit=10${aSearch}`);
+        const aSort = authorSortField ? `&sortBy=${authorSortField}&sortOrder=${authorSortOrder}` : "";
+        const uRes = await apiFetch(`${API_BASE_URL}/users?page=${page}&limit=10${aSearch}${aSort}`);
         if (uRes.ok) {
           const json = await uRes.json();
           if (json.data) {
@@ -1360,7 +1402,7 @@ function EditorialDashboardContent() {
         }
       } else if (tab === "editions") {
         const eSearch = query ? `&search=${encodeURIComponent(query)}` : "";
-        const edRes = await apiFetch(`${API_BASE_URL}/editorial/editions?page=${page}&limit=10${eSearch}`);
+        const edRes = await apiFetch(`${API_BASE_URL}/editorial/editions?page=${page}&limit=12${eSearch}`);
         if (edRes.ok) {
           const json = await edRes.json();
           if (json.data) {
@@ -2436,6 +2478,8 @@ function EditorialDashboardContent() {
   }, [
     activeTab,
     currentPage,
+    authorSortField,
+    authorSortOrder,
     reportStatusFilter,
     reportTypeFilter,
     inquiryStatusFilter,
@@ -5071,24 +5115,25 @@ function EditorialDashboardContent() {
 
                     {/* Status & Priority Badges */}
                     <div className="flex items-center gap-1.5 flex-wrap pt-1">
-                      {u.isFeatured && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                          <Sparkles className="w-2.5 h-2.5 fill-emerald-600" /> Featured
+                      {u.isShadowBanned ? (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 shadow-2xs">
+                          <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" />
+                          Inactive
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                          Active
                         </span>
                       )}
-                      {u.isShadowBanned && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-700 border border-rose-200">
-                          <EyeOff className="w-2.5 h-2.5" /> Banned
+                      {u.isFeatured && (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                          <Sparkles className="w-2.5 h-2.5 fill-amber-500 text-amber-600" /> Featured
                         </span>
                       )}
                       {u.role === "AUTHOR" && typeof u.sortOrder === "number" && u.sortOrder > 0 && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-200">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 text-purple-800 border border-purple-200">
                           Priority #{u.sortOrder}
-                        </span>
-                      )}
-                      {!u.isFeatured && !u.isShadowBanned && (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 text-gray-600">
-                          Active
                         </span>
                       )}
                       {u.phone && (
@@ -5146,9 +5191,64 @@ function EditorialDashboardContent() {
                     <thead>
                       <tr className="bg-gray-50 border-b border-gray-200 text-gray-500 font-semibold uppercase tracking-wider whitespace-nowrap">
                         <th className="py-3.5 px-5">User / Author</th>
-                        <th className="py-3.5 px-5">Role Tier</th>
-                        <th className="py-3.5 px-5">Status & Highlights</th>
-                        <th className="py-3.5 px-5">Joined</th>
+                        <th className="py-3.5 px-5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCurrentPage(1);
+                              if (authorSortField !== "role") {
+                                setAuthorSortField("role");
+                                setAuthorSortOrder("asc");
+                              } else if (authorSortOrder === "asc") {
+                                setAuthorSortOrder("desc");
+                              } else {
+                                setAuthorSortField(null);
+                              }
+                            }}
+                            className="inline-flex items-center gap-1.5 hover:text-gray-900 transition-colors uppercase font-semibold text-gray-500 cursor-pointer group select-none"
+                            title="Sort by Role Tier"
+                          >
+                            <span>Role Tier</span>
+                            {authorSortField === "role" ? (
+                              authorSortOrder === "asc" ? (
+                                <ArrowUp className="w-3.5 h-3.5 text-gray-950 font-bold" />
+                              ) : (
+                                <ArrowDown className="w-3.5 h-3.5 text-gray-950 font-bold" />
+                              )
+                            ) : (
+                              <ArrowUpDown className="w-3.5 h-3.5 text-gray-400 group-hover:text-gray-700" />
+                            )}
+                          </button>
+                        </th>
+                        <th className="py-3.5 px-5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCurrentPage(1);
+                              if (authorSortField !== "status") {
+                                setAuthorSortField("status");
+                                setAuthorSortOrder("asc");
+                              } else if (authorSortOrder === "asc") {
+                                setAuthorSortOrder("desc");
+                              } else {
+                                setAuthorSortField(null);
+                              }
+                            }}
+                            className="inline-flex items-center gap-1.5 hover:text-gray-900 transition-colors uppercase font-semibold text-gray-500 cursor-pointer group select-none"
+                            title="Sort by Status"
+                          >
+                            <span>Status</span>
+                            {authorSortField === "status" ? (
+                              authorSortOrder === "asc" ? (
+                                <ArrowUp className="w-3.5 h-3.5 text-gray-950 font-bold" />
+                              ) : (
+                                <ArrowDown className="w-3.5 h-3.5 text-gray-950 font-bold" />
+                              )
+                            ) : (
+                              <ArrowUpDown className="w-3.5 h-3.5 text-gray-400 group-hover:text-gray-700" />
+                            )}
+                          </button>
+                        </th>
                         <th className="py-3.5 px-5 text-right">Actions</th>
                       </tr>
                     </thead>
@@ -5196,35 +5296,31 @@ function EditorialDashboardContent() {
                             </select>
                           </td>
 
-                          {/* Status & Highlights */}
+                          {/* Status */}
                           <td className="py-3.5 px-5 whitespace-nowrap">
                             <div className="flex items-center gap-1.5 flex-wrap">
-                              {u.isFeatured && (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                                  <Sparkles className="w-2.5 h-2.5 fill-emerald-600" /> Featured
+                              {u.isShadowBanned ? (
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 shadow-2xs">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" />
+                                  Inactive
                                 </span>
-                              )}
-                              {u.isShadowBanned && (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-700 border border-rose-200">
-                                  <EyeOff className="w-2.5 h-2.5" /> Banned
-                                </span>
-                              )}
-                              {u.role === "AUTHOR" && typeof u.sortOrder === "number" && u.sortOrder > 0 && (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-200">
-                                  #{u.sortOrder}
-                                </span>
-                              )}
-                              {!u.isFeatured && !u.isShadowBanned && (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 text-gray-600">
+                              ) : (
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
                                   Active
                                 </span>
                               )}
+                              {u.isFeatured && (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                                  <Sparkles className="w-2.5 h-2.5 fill-amber-500 text-amber-600" /> Featured
+                                </span>
+                              )}
+                              {u.role === "AUTHOR" && typeof u.sortOrder === "number" && u.sortOrder > 0 && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 text-purple-800 border border-purple-200">
+                                  #{u.sortOrder}
+                                </span>
+                              )}
                             </div>
-                          </td>
-
-                          {/* Joined Date */}
-                          <td className="py-3.5 px-5 text-gray-500 whitespace-nowrap text-xs">
-                            {u.createdAt ? new Date(u.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "N/A"}
                           </td>
 
                           {/* Actions */}
@@ -6349,7 +6445,7 @@ function EditorialDashboardContent() {
                     Publishing Showcase
                   </span>
                   <h2 className="text-2xl font-bold text-gray-950 mt-1.5 tracking-tight">Upcoming Book Releases</h2>
-                  <p className="text-xs text-gray-500 mt-1">Manage physical book showcase cards & pre-order links displayed on the homepage.</p>
+                  <p className="text-xs text-gray-500 mt-1">Manage physical book showcase cards & links displayed on the homepage.</p>
                 </div>
 
                 <Button
@@ -6462,7 +6558,7 @@ function EditorialDashboardContent() {
                             className="text-[10px] font-semibold text-purple-700 hover:text-purple-900 hover:underline flex items-center gap-1 truncate"
                           >
                             <ExternalLink className="w-2.5 h-2.5 shrink-0" />
-                            <span className="truncate">Pre-order</span>
+                            <span className="truncate">Link</span>
                           </a>
                         ) : (
                           <span className="text-[10px] text-gray-400">No preorder URL</span>
@@ -6723,35 +6819,35 @@ function EditorialDashboardContent() {
                   </Button>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-5">
                   {editionsList.map((item, index) => {
                     const isLatestPublished = item.isPublished && editionsList.findIndex((e) => e.isPublished) === index;
                     return (
                       <div
                         key={item.id}
-                        className={`bg-white rounded-[24px] border ${isLatestPublished ? "border-emerald-500 shadow-md ring-2 ring-emerald-500/20" : "border-gray-200/80 shadow-xs"} hover:shadow-md transition-shadow overflow-hidden flex flex-col h-full`}
+                        className={`bg-white rounded-2xl border ${isLatestPublished ? "border-emerald-500 shadow-md ring-2 ring-emerald-500/20" : "border-gray-200/80 shadow-xs"} hover:shadow-md transition-shadow overflow-hidden flex flex-col h-full group`}
                       >
                         {/* Cover preview */}
-                        <div className="relative w-full aspect-[3/4] bg-gray-100">
+                        <div className="relative w-full aspect-[3/4] bg-gray-100 overflow-hidden">
                           {item.coverImage ? (
-                            <img src={formatAssetUrl(item.coverImage)} alt={item.title} className="w-full h-full object-fill" />
+                            <img src={formatAssetUrl(item.coverImage)} alt={item.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                           ) : (
-                            <div className="w-full h-full flex flex-col items-center justify-center gap-2 text-gray-300">
-                              <Archive className="w-10 h-10" />
-                              <span className="text-xs font-medium text-gray-400">No cover</span>
+                            <div className="w-full h-full flex flex-col items-center justify-center gap-1.5 text-gray-300">
+                              <Archive className="w-8 h-8" />
+                              <span className="text-[11px] font-medium text-gray-400">No cover</span>
                             </div>
                           )}
                           {isLatestPublished && (
                             <div className="absolute top-2 left-2">
-                              <span className="bg-emerald-600 text-white text-[10px] font-bold px-2.5 py-1 rounded-full shadow-sm flex items-center gap-1">
-                                <Sparkles className="w-3 h-3" /> Live Latest Edition
+                              <span className="bg-emerald-600 text-white text-[9px] font-bold px-2 py-0.5 rounded-full shadow-sm flex items-center gap-1">
+                                <Sparkles className="w-2.5 h-2.5" /> Live Latest Edition
                               </span>
                             </div>
                           )}
                           <div className="absolute top-2 right-2">
                             <button
                               onClick={() => handleTogglePublishEdition(item.id)}
-                              className={`text-[10px] font-bold px-2.5 py-1 rounded-full transition cursor-pointer shadow-sm ${
+                              className={`text-[9px] font-bold px-2 py-0.5 rounded-full transition cursor-pointer shadow-sm ${
                                 item.isPublished
                                   ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-200"
                                   : "bg-gray-100 text-gray-600 hover:bg-gray-200"
@@ -6763,23 +6859,24 @@ function EditorialDashboardContent() {
                         </div>
 
                         {/* Info */}
-                        <div className="p-4 flex flex-col gap-3 flex-1">
+                        <div className="p-3.5 flex flex-col gap-2.5 flex-1">
                           <div>
-                            <h3 className="text-sm font-bold text-gray-950 tracking-tight leading-snug">{item.title}</h3>
-                            <p className="text-xs text-gray-400 mt-0.5">Sort order: {item.sortOrder}</p>
+                            <h3 className="text-xs sm:text-sm font-bold text-gray-950 tracking-tight leading-snug line-clamp-2" title={item.title}>
+                              {item.title}
+                            </h3>
                           </div>
 
-                          <div className="flex flex-wrap items-center gap-2 pt-1 mt-auto">
+                          <div className="flex flex-wrap items-center gap-1.5 pt-1 mt-auto">
                             {item.pdfUrl && (
                               <button
                                 type="button"
                                 onClick={() => setOpenFlipbookEdition(item)}
-                                className="px-3 py-1.5 bg-[#E4F953] hover:bg-[#d8ed40] text-[#040706] text-xs font-bold rounded-xl transition cursor-pointer flex items-center gap-1.5 shadow-xs"
+                                className="px-2.5 py-1.5 bg-[#E4F953] hover:bg-[#d8ed40] text-[#040706] text-[11px] font-bold rounded-lg transition cursor-pointer flex items-center gap-1 shadow-xs"
                               >
-                                <BookOpen className="w-3.5 h-3.5" /> Preview Flipbook
+                                <BookOpen className="w-3 h-3" /> Preview
                               </button>
                             )}
-                            <div className="ml-auto flex items-center gap-1.5">
+                            <div className="ml-auto flex items-center gap-1">
                               <button
                                 onClick={() => {
                                   setEditingEditionId(item.id);
@@ -6790,15 +6887,16 @@ function EditorialDashboardContent() {
                                   setEditionFormPublished(item.isPublished);
                                   setShowAddEditionModal(true);
                                 }}
-                                className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-bold rounded-xl transition cursor-pointer"
+                                className="px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-800 text-[11px] font-bold rounded-lg transition cursor-pointer"
                               >
                                 Edit
                               </button>
                               <button
                                 onClick={() => handleDeleteEdition(item.id)}
-                                className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-xl transition cursor-pointer"
+                                className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg transition cursor-pointer"
+                                title="Delete edition"
                               >
-                                <Trash2 className="w-4 h-4" />
+                                <Trash2 className="w-3.5 h-3.5" />
                               </button>
                             </div>
                           </div>
@@ -6965,18 +7063,7 @@ function EditorialDashboardContent() {
                     </div>
                   </div>
 
-                  {/* Sort Order */}
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1.5">
-                      Sort Order <span className="font-normal text-gray-400">(lower = shown first)</span>
-                    </label>
-                    <input
-                      type="number"
-                      value={editionFormSortOrder}
-                      onChange={(e) => setEditionFormSortOrder(parseInt(e.target.value, 10) || 0)}
-                      className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-violet-400"
-                    />
-                  </div>
+
 
                   {/* Published toggle */}
                   <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
@@ -8067,7 +8154,7 @@ function EditorialDashboardContent() {
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider">
-                      End Date <span className="text-gray-400 font-normal lowercase tracking-normal">(optional for multi-day)</span>
+                      End Date
                     </label>
                     <input
                       type="date"
@@ -8085,7 +8172,7 @@ function EditorialDashboardContent() {
 
                 <div>
                   <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider">
-                    Time / Timing <span className="text-gray-400 font-normal lowercase tracking-normal">(optional)</span>
+                    Time / Timing
                   </label>
                   <input
                     type="text"
@@ -8845,7 +8932,7 @@ function EditorialDashboardContent() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider">Pre-order Link (Opens in new tab)</label>
+                <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider">Link (Opens in new tab)</label>
                 <input
                   type="url"
                   value={bookFormPreorderLink}
@@ -8957,7 +9044,7 @@ function EditorialDashboardContent() {
                   rel="noopener noreferrer"
                   className="bg-[#6940AF] hover:bg-[#563493] text-white py-2.5 px-6 rounded-full text-sm font-medium inline-flex items-center gap-2 transition-all shadow-xs cursor-pointer"
                 >
-                  <span>Pre-order on Kairali Books</span>
+                  <span>Link</span>
                   <ExternalLink className="w-4 h-4" />
                 </a>
               )}
@@ -9344,7 +9431,7 @@ function EditorialDashboardContent() {
                 {viewingAuthorDetails.bio || "No biography provided yet for this profile."}
               </p>
               <div className="pt-2 border-t border-gray-200/60 flex items-center justify-between text-[11px] text-gray-500">
-                <span>Account Created:</span>
+                <span>Joined Date:</span>
                 <span className="font-semibold text-gray-700">
                   {viewingAuthorDetails.createdAt
                     ? new Date(viewingAuthorDetails.createdAt).toLocaleDateString("en-IN", {
