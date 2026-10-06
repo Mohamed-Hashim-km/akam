@@ -84,11 +84,14 @@ import {
   Activity,
   FileSpreadsheet,
   Filter,
+  ZoomIn,
+  Maximize2,
 } from "lucide-react";
 import Button from "@/components/ui/Button";
 import AuthModal from "@/components/AuthModal";
 import { API_BASE_URL, apiFetch, formatAssetUrl } from "@/lib/config";
 import SubscriptionManagementPanel from "@/components/SubscriptionManagementPanel";
+import ImageLightboxModal from "@/components/ImageLightboxModal";
 import { getYouTubeThumbnail } from "@/lib/youtube";
 
 interface PendingStory {
@@ -1127,12 +1130,32 @@ function EditorialDashboardContent() {
   const [editorsNoteContent, setEditorsNoteContent] = useState("");
   const [savingSettings, setSavingSettings] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
   const [selectedStory, setSelectedStory] = useState<PendingStory | null>(null);
+  const [activeReaderImageIndex, setActiveReaderImageIndex] = useState(0);
+  const [lightboxState, setLightboxState] = useState<{
+    isOpen: boolean;
+    images: Array<{ src: string; alt?: string; title?: string }>;
+    initialIndex: number;
+    title?: string;
+    subtitle?: string;
+    badgeLabel?: string;
+  }>({
+    isOpen: false,
+    images: [],
+    initialIndex: 0,
+    title: "",
+    subtitle: "",
+    badgeLabel: "Visual Arts",
+  });
   const [rejectingStory, setRejectingStory] = useState<PendingStory | null>(null);
   const [rejectionNote, setRejectionNote] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
-  const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+
+  useEffect(() => {
+    setActiveReaderImageIndex(0);
+  }, [selectedStory?.id]);
 
   const checkAuthAndFetchData = async () => {
     setAuthChecking(true);
@@ -3165,16 +3188,33 @@ function EditorialDashboardContent() {
         {parts.map((part, idx) => {
           if (part.type === "image") {
             return (
-              <div key={idx} className="my-6 sm:my-8 flex justify-center">
+              <div
+                key={idx}
+                className="my-6 sm:my-8 flex justify-center group cursor-zoom-in relative"
+                onClick={() =>
+                  setLightboxState({
+                    isOpen: true,
+                    images: [{ src: part.src, alt: part.alt }],
+                    initialIndex: 0,
+                    title: selectedStory?.title || "Story Illustration",
+                    subtitle: selectedStory ? `By ${selectedStory.authorName || selectedStory.authorEmail || "Author"}` : undefined,
+                    badgeLabel: "Artwork",
+                  })
+                }
+              >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={formatAssetUrl(part.src)}
                   alt={part.alt}
-                  className="w-full max-w-3xl h-auto max-h-[500px] object-cover rounded-2xl shadow-xs border border-gray-100"
+                  className="w-full max-w-3xl h-auto max-h-[500px] object-cover rounded-2xl shadow-xs border border-gray-100 group-hover:brightness-95 transition-all"
                   onError={(e) => {
                     (e.currentTarget as HTMLElement).style.display = "none";
                   }}
                 />
+                <div className="absolute top-3 right-3 bg-black/75 backdrop-blur-md text-white text-[11px] font-semibold px-2.5 py-1 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 shadow-md pointer-events-none">
+                  <Maximize2 className="w-3.5 h-3.5 text-[#E4F953]" />
+                  <span>Expand Image</span>
+                </div>
               </div>
             );
           }
@@ -7673,27 +7713,110 @@ function EditorialDashboardContent() {
 
                 if (galleryImages.length === 0) return null;
 
+                const safeIdx = Math.min(Math.max(0, activeReaderImageIndex), galleryImages.length - 1);
+                const currentImg = galleryImages[safeIdx] || galleryImages[0];
+
                 return (
                   <div className="w-full max-w-3xl mx-auto mb-6 sm:mb-8 space-y-3">
-                    <div className="relative w-full rounded-[20px] sm:rounded-[24px] overflow-hidden bg-[#0A0D0C] border border-gray-200/80 shadow-sm flex items-center justify-center p-2.5 sm:p-4 group">
+                    {/* Main Artwork Display Card */}
+                    <div
+                      onClick={() =>
+                        setLightboxState({
+                          isOpen: true,
+                          images: galleryImages,
+                          initialIndex: safeIdx,
+                          title: selectedStory.title,
+                          subtitle: `By ${selectedStory.authorName || selectedStory.authorEmail || "Author"} • Visual Arts`,
+                          badgeLabel: "Visual Arts",
+                        })
+                      }
+                      className="relative w-full rounded-[20px] sm:rounded-[24px] overflow-hidden bg-[#0A0D0C] border border-gray-200/80 shadow-sm flex items-center justify-center p-2.5 sm:p-4 group cursor-zoom-in hover:border-purple-400/80 transition-all duration-300"
+                    >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
-                        src={formatAssetUrl(galleryImages[0].src)}
-                        alt={galleryImages[0].alt}
-                        className="w-full max-h-[500px] sm:max-h-[550px] object-contain rounded-xl block"
+                        src={formatAssetUrl(currentImg.src)}
+                        alt={currentImg.alt}
+                        className="w-full max-h-[500px] sm:max-h-[550px] object-contain rounded-xl block group-hover:scale-[1.01] transition-transform duration-300"
                       />
+
+                      {/* Top Right Click to Expand Hint Pill */}
+                      <div className="absolute top-3 right-3 z-10 bg-black/75 hover:bg-black/90 backdrop-blur-md text-white text-xs font-semibold px-3 py-1.5 rounded-xl flex items-center gap-1.5 shadow-lg border border-white/20 transition-transform group-hover:scale-105 pointer-events-none">
+                        <Maximize2 className="w-3.5 h-3.5 text-[#E4F953]" />
+                        <span>Click to expand full size</span>
+                      </div>
+
+                      {/* Prev / Next navigation arrows when multiple images */}
+                      {galleryImages.length > 1 && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setActiveReaderImageIndex((prev) => (prev > 0 ? prev - 1 : galleryImages.length - 1));
+                            }}
+                            className="absolute left-3 top-1/2 -translate-y-1/2 z-10 w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-black/60 hover:bg-black/90 text-white backdrop-blur-md flex items-center justify-center transition-all opacity-80 group-hover:opacity-100 shadow-md cursor-pointer hover:scale-105"
+                            aria-label="Previous artwork image"
+                          >
+                            <ChevronLeft className="w-5 h-5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setActiveReaderImageIndex((prev) => (prev < galleryImages.length - 1 ? prev + 1 : 0));
+                            }}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 z-10 w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-black/60 hover:bg-black/90 text-white backdrop-blur-md flex items-center justify-center transition-all opacity-80 group-hover:opacity-100 shadow-md cursor-pointer hover:scale-105"
+                            aria-label="Next artwork image"
+                          >
+                            <ChevronRight className="w-5 h-5" />
+                          </button>
+                        </>
+                      )}
+
+                      {/* Bottom Artwork Badge */}
                       <div className="absolute bottom-3 right-3 z-10 bg-black/80 backdrop-blur-md text-white text-[10px] sm:text-[11px] font-semibold px-2.5 sm:px-3 py-1 rounded-xl flex items-center gap-1.5 shadow-xs pointer-events-none">
                         <Palette className="w-3.5 h-3.5 text-purple-300" />
-                        <span>{galleryImages.length > 1 ? `${galleryImages.length} Images in Gallery` : "Original Artwork"}</span>
+                        <span>
+                          {galleryImages.length > 1
+                            ? `Image ${safeIdx + 1} of ${galleryImages.length} (Click to expand)`
+                            : "Original Artwork (Click to expand)"}
+                        </span>
                       </div>
                     </div>
 
+                    {/* Gallery Thumbnails */}
                     {galleryImages.length > 1 && (
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-2.5">
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 sm:gap-2.5">
                         {galleryImages.map((img, idx) => (
-                          <div key={idx} className="relative rounded-xl overflow-hidden border border-gray-200 aspect-[4/3] bg-gray-900">
+                          <div
+                            key={idx}
+                            onClick={() => {
+                              setActiveReaderImageIndex(idx);
+                              setLightboxState({
+                                isOpen: true,
+                                images: galleryImages,
+                                initialIndex: idx,
+                                title: selectedStory.title,
+                                subtitle: `By ${selectedStory.authorName || selectedStory.authorEmail || "Author"} • Visual Arts`,
+                                badgeLabel: "Visual Arts",
+                              });
+                            }}
+                            className={`relative rounded-xl overflow-hidden border-2 aspect-[4/3] bg-gray-900 cursor-pointer group transition-all ${
+                              idx === safeIdx
+                                ? "border-purple-600 ring-2 ring-purple-300/60 shadow-md scale-102"
+                                : "border-gray-200 hover:border-purple-400 hover:opacity-100 opacity-80"
+                            }`}
+                            title={`Inspect image #${idx + 1}`}
+                          >
                             {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={formatAssetUrl(img.src)} alt={img.alt} className="w-full h-full object-cover" />
+                            <img
+                              src={formatAssetUrl(img.src)}
+                              alt={img.alt}
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            />
+                            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
+                              <Maximize2 className="w-5 h-5 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-md" />
+                            </div>
                             <span className="absolute bottom-1 left-1 bg-black/75 text-white text-[9px] font-bold px-1.5 py-0.5 rounded">
                               #{idx + 1} {idx === 0 ? "(Cover)" : ""}
                             </span>
@@ -7707,15 +7830,38 @@ function EditorialDashboardContent() {
 
               {/* Article Cover Image */}
               {selectedStory.submissionType !== "VIDEO" && selectedStory.submissionType !== "PAINTING" && (selectedStory.coverImageUrl || selectedStory.mediaUrl) && (
-                <div className="relative w-48 sm:w-64 md:w-80 aspect-square mx-auto mb-6 sm:mb-8 shrink-0 rounded-[18px] sm:rounded-[22px] overflow-hidden bg-gray-100 border border-gray-200/80 shadow-md">
+                <div
+                  onClick={() =>
+                    setLightboxState({
+                      isOpen: true,
+                      images: [
+                        {
+                          src: selectedStory.coverImageUrl || selectedStory.mediaUrl || "",
+                          alt: selectedStory.title || "Cover Preview",
+                          title: selectedStory.title,
+                        },
+                      ],
+                      initialIndex: 0,
+                      title: selectedStory.title,
+                      subtitle: `By ${selectedStory.authorName || selectedStory.authorEmail || "Author"}`,
+                      badgeLabel: selectedStory.category || "Article",
+                    })
+                  }
+                  className="relative w-48 sm:w-64 md:w-80 aspect-square mx-auto mb-6 sm:mb-8 shrink-0 rounded-[18px] sm:rounded-[22px] overflow-hidden bg-gray-100 border border-gray-200/80 shadow-md group cursor-zoom-in hover:border-gray-400 transition-all"
+                >
                   <Image
                     src={formatAssetUrl(selectedStory.coverImageUrl || selectedStory.mediaUrl || "")}
                     alt={selectedStory.title || "Cover Preview"}
                     fill
                     priority
                     unoptimized
-                    className="object-cover object-center"
+                    className="object-cover object-center group-hover:scale-105 transition-transform duration-500"
                   />
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                    <div className="bg-black/75 text-white text-xs px-2.5 py-1 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 shadow-md">
+                      <Maximize2 className="w-3.5 h-3.5 text-[#E4F953]" /> Expand
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -11043,6 +11189,17 @@ function EditorialDashboardContent() {
           </div>
         </div>
       )}
+
+      {/* Expanded Image Lightbox Modal for Submissions & Artworks */}
+      <ImageLightboxModal
+        isOpen={lightboxState.isOpen}
+        onClose={() => setLightboxState((prev) => ({ ...prev, isOpen: false }))}
+        images={lightboxState.images}
+        initialIndex={lightboxState.initialIndex}
+        title={lightboxState.title}
+        subtitle={lightboxState.subtitle}
+        badgeLabel={lightboxState.badgeLabel}
+      />
     </div>
   );
 }
