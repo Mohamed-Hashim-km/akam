@@ -186,7 +186,7 @@ export default function AuthorsPage() {
                 </div>
 
                 {/* Name */}
-                <h2 className="text-lg sm:text-xl font-bold text-dark-text tracking-tight mb-1.5 font-poppins group-hover:text-black transition-colors truncate max-w-[220px]">
+                <h2 className="text-lg sm:text-xl break-words font-bold text-dark-text tracking-tight mb-1.5 font-poppins group-hover:text-black transition-colors  max-w-[220px]">
                   {author.name}
                 </h2>
 

@@ -174,7 +174,7 @@ export const AuthorsOfAkam: React.FC<AuthorsOfAkamProps> = ({
               </div>
 
               {/* Name */}
-              <h3 className="text-lg sm:text-xl font-bold text-dark-text tracking-tight mb-1.5 font-poppins group-hover:text-black transition-colors truncate max-w-[220px]">
+              <h3 className="text-lg sm:text-xl font-bold text-dark-text tracking-tight mb-1.5 font-poppins group-hover:text-black transition-colors break-words max-w-[220px]">
                 {author.name}
               </h3>
 
