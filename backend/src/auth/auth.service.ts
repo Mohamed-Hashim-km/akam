@@ -26,7 +26,7 @@ export class AuthService {
   private getTransporter(): nodemailer.Transporter {
     if (!this.transporter) {
       const host = this.configService.get<string>('SMTP_HOST') || 'smtp.gmail.com';
-      const port = parseInt(this.configService.get<string>('SMTP_PORT') || '587', 10);
+      const port = parseInt(this.configService.get<string>('SMTP_PORT') || '465', 10);
       const secureConfig = this.configService.get<string>('SMTP_SECURE');
       const secure = secureConfig !== undefined ? secureConfig === 'true' : port === 465;
       const user = this.configService.get<string>('SMTP_USER');
@@ -138,6 +138,59 @@ export class AuthService {
       </div>
     `;
 
+    // 1. Primary: ZeptoMail HTTPS API (Port 443 — Bypasses cloud host SMTP firewall blocks)
+    const zeptoToken = this.configService.get<string>('ZEPTO_MAIL_TOKEN');
+    if (zeptoToken) {
+      const zeptoUrl =
+        this.configService.get<string>('ZEPTO_MAIL_URL') ||
+        'https://api.zeptomail.in/v1.1/email';
+      const fromEmail =
+        this.configService.get<string>('ZEPTO_MAIL_FROM_EMAIL') ||
+        'no-reply@megamind.studio';
+      const fromName =
+        this.configService.get<string>('ZEPTO_MAIL_FROM_NAME') ||
+        'AKAM Digital';
+
+      try {
+        const response = await fetch(zeptoUrl, {
+          method: 'POST',
+          headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+            Authorization: zeptoToken.startsWith('Zoho-enczapikey')
+              ? zeptoToken
+              : `Zoho-enczapikey ${zeptoToken}`,
+          },
+          body: JSON.stringify({
+            from: {
+              address: fromEmail,
+              name: fromName,
+            },
+            to: [
+              {
+                email_address: {
+                  address: email,
+                },
+              },
+            ],
+            subject: `${code} is your AKAM Digital verification code`,
+            htmlbody: htmlTemplate,
+          }),
+        });
+
+        if (response.ok) {
+          this.logger.log(`✅ [OTP] Email dispatched to ${email} via ZeptoMail HTTPS API`);
+          return;
+        } else {
+          const errBody = await response.text();
+          this.logger.warn(`ZeptoMail HTTP failed (${response.status}): ${errBody}`);
+        }
+      } catch (err: any) {
+        this.logger.warn(`ZeptoMail HTTP send error: ${err?.message}`);
+      }
+    }
+
+    // 2. Fallback: Nodemailer SMTP
     try {
       const transporter = this.getTransporter();
       const fromAddress =
@@ -150,7 +203,7 @@ export class AuthService {
         subject: `${code} is your AKAM Digital verification code`,
         html: htmlTemplate,
       });
-      this.logger.log(`✅ [OTP] Email dispatched to ${email}. MessageId: ${info.messageId}`);
+      this.logger.log(`✅ [OTP] Email dispatched to ${email} via SMTP. MessageId: ${info.messageId}`);
     } catch (error) {
       this.logger.error(
         `❌ [OTP] Failed to send email to ${email}: ${(error as Error).message}`,
