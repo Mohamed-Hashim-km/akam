@@ -1,20 +1,26 @@
-import { Injectable, NotFoundException, Optional } from '@nestjs/common';
+import { Injectable, NotFoundException, Optional, Logger } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service.js';
 import { UploadsService } from '../uploads/uploads.service.js';
 import { SubscriptionService } from '../subscription/subscription.service.js';
 import { CreateEditionDto } from './dto/create-edition.dto.js';
 import { UpdateEditionDto } from './dto/update-edition.dto.js';
 import { randomUUID } from 'crypto';
+import * as fs from 'fs';
+import * as path from 'path';
+import { Readable } from 'stream';
+import type { Request, Response } from 'express';
 
 @Injectable()
 export class EditionsService {
+  private readonly logger = new Logger(EditionsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly uploadsService: UploadsService,
     @Optional() private readonly subscriptionService?: SubscriptionService,
   ) {}
 
-  private async checkUserHasSubscription(userId?: string, userRole?: string): Promise<boolean> {
+  async checkUserHasSubscription(userId?: string, userRole?: string): Promise<boolean> {
     const roleUpper = (userRole || '').toUpperCase();
     if (['ADMIN', 'EDITOR', 'EDITORIAL', 'CHIEF_EDITOR', 'STAFF_EDITOR'].includes(roleUpper)) {
       return true;
@@ -30,17 +36,27 @@ export class EditionsService {
     }
   }
 
+  async getRealPdfUrl(id: string): Promise<string | null> {
+    const sql = `SELECT "pdfUrl" FROM "edition" WHERE "id" = $1 LIMIT 1`;
+    const row = await this.prisma.queryOne<{ pdfUrl: string | null }>(sql, [id]);
+    return row?.pdfUrl || null;
+  }
+
   /** Public: only published editions, ordered by sortOrder ASC, createdAt DESC */
   async findAllPublished(userId?: string, userRole?: string) {
     const hasAccess = await this.checkUserHasSubscription(userId, userRole);
     const sql = `
-      SELECT "id", "title", ${hasAccess ? '"pdfUrl"' : 'NULL AS "pdfUrl"'}, "coverImage", "isPublished", "sortOrder", "createdAt", "updatedAt"
+      SELECT "id", "title", "pdfUrl", "coverImage", "isPublished", "sortOrder", "createdAt", "updatedAt"
       FROM "edition"
       WHERE "isPublished" = true
       ORDER BY "sortOrder" ASC, "createdAt" DESC
     `;
     const rows = await this.prisma.query<any>(sql);
-    return rows.map((r) => ({ ...r, hasAccess }));
+    return rows.map((r) => ({
+      ...r,
+      pdfUrl: hasAccess && r.pdfUrl ? `/api/editions/${r.id}/read-pdf` : null,
+      hasAccess,
+    }));
   }
 
   /** Public paginated: published editions with page & limit */
@@ -52,7 +68,7 @@ export class EditionsService {
     const total = parseInt(countRes[0]?.count || '0', 10);
 
     const dataSql = `
-      SELECT "id", "title", ${hasAccess ? '"pdfUrl"' : 'NULL AS "pdfUrl"'}, "coverImage", "isPublished", "sortOrder", "createdAt", "updatedAt"
+      SELECT "id", "title", "pdfUrl", "coverImage", "isPublished", "sortOrder", "createdAt", "updatedAt"
       FROM "edition"
       WHERE "isPublished" = true
       ORDER BY "sortOrder" ASC, "createdAt" DESC
@@ -63,7 +79,11 @@ export class EditionsService {
     const totalPages = Math.ceil(total / limit) || 1;
     const hasMore = page < totalPages;
 
-    const mappedData = data.map((item: any) => ({ ...item, hasAccess }));
+    const mappedData = data.map((item: any) => ({
+      ...item,
+      pdfUrl: hasAccess && item.pdfUrl ? `/api/editions/${item.id}/read-pdf` : null,
+      hasAccess,
+    }));
 
     return { data: mappedData, meta: { total, page, limit, totalPages, hasMore, hasAccess } };
   }
@@ -113,10 +133,111 @@ export class EditionsService {
     }
 
     const hasAccess = await this.checkUserHasSubscription(userId, userRole);
-    if (!hasAccess) {
-      item.pdfUrl = null;
+    return {
+      ...item,
+      pdfUrl: hasAccess && item.pdfUrl ? `/api/editions/${item.id}/read-pdf` : null,
+      hasAccess,
+    };
+  }
+
+  async streamPdf(fileUrl: string, req: Request, res: Response) {
+    // 1. Try resolving locally from uploads directory
+    let localPath: string | null = null;
+    const uploadIdx = fileUrl.indexOf('/uploads/');
+    if (uploadIdx !== -1) {
+      const rel = fileUrl.substring(uploadIdx + '/uploads/'.length);
+      const candidate = path.normalize(path.join(process.cwd(), 'uploads', rel));
+      if (
+        candidate.startsWith(path.join(process.cwd(), 'uploads')) &&
+        fs.existsSync(candidate) &&
+        fs.statSync(candidate).isFile()
+      ) {
+        localPath = candidate;
+      }
     }
-    return { ...item, hasAccess };
+
+    if (!localPath) {
+      const basename = path.basename(fileUrl.split('?')[0]);
+      const candidatePdf = path.join(process.cwd(), 'uploads', 'pdfs', basename);
+      if (fs.existsSync(candidatePdf) && fs.statSync(candidatePdf).isFile()) {
+        localPath = candidatePdf;
+      }
+    }
+
+    // Common security and anti-download headers
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Accept-Ranges', 'bytes');
+    res.setHeader('Content-Disposition', 'inline; filename="edition-reader.pdf"');
+    res.setHeader('Cache-Control', 'private, no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+
+    if (localPath) {
+      const stat = fs.statSync(localPath);
+      const fileSize = stat.size;
+      const range = req.headers.range;
+
+      if (range) {
+        const parts = range.replace(/bytes=/, '').split('-');
+        const start = parseInt(parts[0], 10);
+        const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+        const chunkSize = end - start + 1;
+
+        res.status(206);
+        res.setHeader('Content-Range', `bytes ${start}-${end}/${fileSize}`);
+        res.setHeader('Content-Length', chunkSize);
+
+        const fileStream = fs.createReadStream(localPath, { start, end });
+        return fileStream.pipe(res);
+      } else {
+        res.status(200);
+        res.setHeader('Content-Length', fileSize);
+        const fileStream = fs.createReadStream(localPath);
+        return fileStream.pipe(res);
+      }
+    }
+
+    // 2. If remote URL, proxy stream it from remote storage
+    if (fileUrl.startsWith('http://') || fileUrl.startsWith('https://')) {
+      try {
+        const upstreamHeaders: Record<string, string> = {};
+        if (req.headers.range) {
+          upstreamHeaders['Range'] = req.headers.range as string;
+        }
+
+        const upstreamRes = await fetch(fileUrl, {
+          headers: upstreamHeaders,
+        });
+
+        if (!upstreamRes.ok && upstreamRes.status !== 206) {
+          throw new NotFoundException('Could not retrieve edition PDF from remote storage');
+        }
+
+        res.status(upstreamRes.status);
+        const ct = upstreamRes.headers.get('content-type');
+        if (ct) res.setHeader('Content-Type', ct);
+        const cl = upstreamRes.headers.get('content-length');
+        if (cl) res.setHeader('Content-Length', cl);
+        const cr = upstreamRes.headers.get('content-range');
+        if (cr) res.setHeader('Content-Range', cr);
+
+        if (upstreamRes.body) {
+          const stream = Readable.fromWeb(upstreamRes.body as any);
+          return stream.pipe(res);
+        } else {
+          return res.end();
+        }
+      } catch (err) {
+        this.logger.error(`Error streaming remote PDF ${fileUrl}:`, err);
+        if (!res.headersSent) {
+          return res.status(502).json({ statusCode: 502, message: 'Failed to fetch edition PDF.' });
+        }
+        return res.end();
+      }
+    }
+
+    throw new NotFoundException('Edition PDF file not found on disk or remote storage');
   }
 
   async create(dto: CreateEditionDto) {

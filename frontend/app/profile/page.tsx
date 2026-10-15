@@ -699,7 +699,7 @@ export default function ProfilePage() {
                   href="/emagazine"
                   className="inline-flex items-center gap-1 font-semibold text-emerald-800 hover:text-emerald-950 hover:underline"
                 >
-                  Access E-Magazine →
+                  Access Magazine →
                 </Link>
               </div>
             </div>
@@ -758,7 +758,7 @@ export default function ProfilePage() {
                   href="/emagazine"
                   className="inline-flex items-center gap-1 font-semibold text-purple-700 hover:text-purple-900 hover:underline"
                 >
-                  Explore E-Magazine →
+                  Explore Magazine →
                 </Link>
               </div>
             </div>
@@ -881,7 +881,7 @@ export default function ProfilePage() {
                         : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                     }`}
                   >
-                    E-Magazine ({emagazineCount})
+                    Magazine ({emagazineCount})
                   </button>
                 )}
                 {unpublishedCount > 0 && (
@@ -911,7 +911,7 @@ export default function ProfilePage() {
                     {draftCount > 0 && <option value="DRAFT">Drafts ({draftCount})</option>}
                     {pendingCount > 0 && <option value="PENDING">Pending Queue ({pendingCount})</option>}
                     {approvedCount > 0 && <option value="APPROVED">Published ({approvedCount})</option>}
-                    {emagazineCount > 0 && <option value="APPROVED_EMAGAZINE">E-Magazine ({emagazineCount})</option>}
+                    {emagazineCount > 0 && <option value="APPROVED_EMAGAZINE">Magazine ({emagazineCount})</option>}
                     {unpublishedCount > 0 && <option value="UNPUBLISHED">Unpublished ({unpublishedCount})</option>}
                   </select>
                 </div>
@@ -969,9 +969,9 @@ export default function ProfilePage() {
                         }`}
                       >
                         {story.status === "PUBLISHED_EMAGAZINE"
-                          ? "E-Magazine (Published)"
+                          ? "Magazine (Published)"
                           : story.status === "APPROVED_EMAGAZINE"
-                          ? "E-Magazine (Pending)"
+                          ? "Magazine (Pending)"
                           : story.status === "APPROVED"
                           ? "Published"
                           : story.status === "UNPUBLISHED"
@@ -990,7 +990,7 @@ export default function ProfilePage() {
                       <div className="pt-3 border-t border-gray-100 flex items-center justify-between gap-2 flex-wrap text-xs">
                         <span className="text-emerald-700 font-medium flex items-center gap-1.5">
                           <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                          <span>Published in official AKAM E-Magazine edition</span>
+                          <span>Published in official AKAM Magazine edition</span>
                         </span>
                         <div className="flex items-center gap-2">
                           <Button
@@ -1011,7 +1011,7 @@ export default function ProfilePage() {
                       <div className="pt-3 border-t border-gray-100 flex items-center justify-between gap-2 flex-wrap text-xs">
                         <span className="text-gray-600 font-medium flex items-center gap-1.5">
                           <BookOpen className="w-3.5 h-3.5 text-gray-500 shrink-0" />
-                          <span>Approved for AKAM E-Magazine edition (stored for periodical)</span>
+                          <span>Approved for AKAM Magazine edition (stored for periodical)</span>
                         </span>
                         <div className="flex items-center gap-2">
                           <Button
@@ -1280,9 +1280,9 @@ export default function ProfilePage() {
                 <div className="flex items-center gap-2 flex-wrap mb-2">
                   <span className="bg-[#E4F953] text-[#040706] font-bold text-[10px] uppercase tracking-wider px-3 py-1 rounded-xl shadow-xs">
                     {previewStory.status === "PUBLISHED_EMAGAZINE"
-                      ? "PUBLISHED IN E-MAGAZINE"
+                      ? "PUBLISHED IN MAGAZINE"
                       : previewStory.status === "APPROVED_EMAGAZINE"
-                      ? "E-MAGAZINE (PENDING)"
+                      ? "MAGAZINE (PENDING)"
                       : previewStory.status === "APPROVED"
                       ? "PUBLISHED WORK"
                       : previewStory.status === "DRAFT"

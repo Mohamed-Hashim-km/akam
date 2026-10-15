@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { X, Mail, Phone, User, KeyRound, ArrowRight, ArrowLeft, CheckCircle2, AlertCircle, Check } from "lucide-react";
 import Button from "./ui/Button";
 
-import { API_BASE_URL } from "@/lib/config";
+import { API_BASE_URL, apiFetch } from "@/lib/config";
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -30,6 +30,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [resendCooldown, setResendCooldown] = useState(0);
 
   // Reset modal state when opened or closed
   useEffect(() => {
@@ -41,8 +42,18 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       setName("");
       setPhone("");
       setAcceptedPrivacy(false);
+      setResendCooldown(0);
     }
   }, [isOpen]);
+
+  // Resend cooldown timer
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = setInterval(() => {
+      setResendCooldown((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [resendCooldown]);
 
   if (!isOpen) return null;
 
@@ -59,29 +70,38 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setError(null);
 
     try {
-      // Check if user already exists and whether phone & consent are already on file
-      const checkRes = await fetch(`${API_BASE_URL}/auth/check-email`, {
+      // Check user and automatically dispatch OTP in a single roundtrip if details are on file
+      const checkRes = await apiFetch(`${API_BASE_URL}/auth/check-email`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: cleanEmail }),
+        body: JSON.stringify({ email: cleanEmail, autoSendOtp: true }),
       });
 
       const checkData = await checkRes.json();
 
       if (checkRes.ok && checkData.requiresDetails === false) {
         // Returning user with phone & consent already on file:
-        // Do NOT ask again — send OTP code directly and go straight to verification!
-        const otpRes = await fetch(`${API_BASE_URL}/auth/request-otp`, {
+        // If backend auto-dispatched the OTP in the check-email request:
+        if (checkData.otpSent) {
+          setMessage(checkData.message || "Verification code sent to your email!");
+          setStep("otp");
+          setResendCooldown(30);
+          return;
+        }
+
+        // Fallback: send request-otp if not autoSent
+        const otpRes = await apiFetch(`${API_BASE_URL}/auth/request-otp`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ email: cleanEmail }),
         });
 
         const otpData = await otpRes.json();
-        if (!otpRes.ok) throw new Error(otpData.message || "Failed to send OTP");
+        if (!otpRes.ok) throw new Error(otpData.message || "Failed to send verification code");
 
         setMessage(otpData.message || "Verification code sent to your email!");
         setStep("otp");
+        setResendCooldown(30);
         return;
       } else {
         // New user or missing phone/consent: advance to details step
@@ -130,7 +150,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setError(null);
 
     try {
-      const res = await fetch(`${API_BASE_URL}/auth/request-otp`, {
+      const res = await apiFetch(`${API_BASE_URL}/auth/request-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -141,10 +161,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Failed to send OTP");
+      if (!res.ok) throw new Error(data.message || "Failed to send verification code");
 
       setMessage(data.message || "Verification code sent to your email!");
       setStep("otp");
+      setResendCooldown(30);
     } catch (err: any) {
       setError(err.message || "Something went wrong");
     } finally {
@@ -153,9 +174,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   };
 
   // Step 3: User verifies the 6-digit OTP code
-  const handleVerifyOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!otp || otp.length !== 6) {
+  const handleVerifyOtp = async (e?: React.FormEvent, codeOverride?: string) => {
+    if (e) e.preventDefault();
+    const codeToVerify = (codeOverride ?? otp).trim();
+    if (!codeToVerify || codeToVerify.length !== 6) {
       setError("Please enter a valid 6-digit verification code");
       return;
     }
@@ -165,13 +187,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     const cleanEmail = email.trim().toLowerCase();
 
     try {
-      const res = await fetch(`${API_BASE_URL}/auth/verify-otp`, {
+      const res = await apiFetch(`${API_BASE_URL}/auth/verify-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
           email: cleanEmail,
-          code: otp,
+          code: codeToVerify,
           name: name.trim() || undefined,
           phone: phone.trim() || undefined,
           privacyPolicyAccepted: acceptedPrivacy || undefined,
@@ -197,9 +219,32 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         if (redirectTo) {
           router.push(redirectTo);
         }
-      }, 1200);
+      }, 350);
     } catch (err: any) {
       setError(err.message || "Invalid or expired OTP");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Resend OTP handler
+  const handleResendOtp = async () => {
+    if (resendCooldown > 0 || loading) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const cleanEmail = email.trim().toLowerCase();
+      const res = await apiFetch(`${API_BASE_URL}/auth/request-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: cleanEmail }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Failed to resend code");
+      setMessage("New verification code sent to your email!");
+      setResendCooldown(30);
+    } catch (err: any) {
+      setError(err.message || "Failed to resend verification code");
     } finally {
       setLoading(false);
     }
@@ -426,7 +471,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
         {/* STEP 3: OTP Verification */}
         {step === "otp" && (
-          <form onSubmit={handleVerifyOtp} className="space-y-4">
+          <form onSubmit={(e) => handleVerifyOtp(e)} className="space-y-4">
             <div>
               <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">
                 6-Digit Verification Code
@@ -435,10 +480,18 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <KeyRound className="absolute left-4 w-4 h-4 text-gray-400" />
                 <input
                   type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
                   maxLength={6}
                   placeholder="123456"
                   value={otp}
-                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/\D/g, "");
+                    setOtp(val);
+                    if (val.length === 6 && !loading) {
+                      handleVerifyOtp(undefined, val);
+                    }
+                  }}
                   className="w-full pl-11 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-lg font-bold tracking-widest text-gray-900 outline-none focus:border-black focus:bg-white transition-all text-center"
                   required
                   autoFocus
@@ -456,7 +509,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               {loading ? "Verifying..." : "Verify & Sign In"}
             </Button>
 
-            <div className="text-center pt-2">
+            <div className="flex items-center justify-between pt-2">
               <button
                 type="button"
                 onClick={() => {
@@ -465,7 +518,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 }}
                 className="text-xs text-gray-500 hover:text-black font-medium transition-colors cursor-pointer"
               >
-                Change email address
+                Change email
+              </button>
+
+              <button
+                type="button"
+                disabled={resendCooldown > 0 || loading}
+                onClick={handleResendOtp}
+                className="text-xs text-gray-700 hover:text-black font-semibold disabled:text-gray-400 disabled:cursor-not-allowed transition-colors cursor-pointer"
+              >
+                {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : "Resend code"}
               </button>
             </div>
           </form>

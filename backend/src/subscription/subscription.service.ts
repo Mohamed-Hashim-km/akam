@@ -258,7 +258,7 @@ export class SubscriptionService {
       student: parseInt(stats?.student ?? '0', 10),
       cancelled: parseInt(stats?.cancelled ?? '0', 10),
       expired: parseInt(stats?.expired ?? '0', 10),
-      estimatedRevenue: paidCount * 399,
+      estimatedRevenue: paidCount * 1,
     };
   }
 
@@ -270,7 +270,7 @@ export class SubscriptionService {
     type?: string;
   }) {
     const page = Math.max(1, options.page || 1);
-    const limit = Math.max(1, Math.min(100, options.limit || 10));
+    const limit = Math.max(1, Math.min(5000, options.limit || 10));
     const offset = (page - 1) * limit;
 
     const conditions: string[] = [];

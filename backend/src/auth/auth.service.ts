@@ -15,7 +15,7 @@ import { CheckEmailDto } from './dto/check-email.dto.js';
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
-  private transporter: nodemailer.Transporter;
+  private transporter: nodemailer.Transporter | null = null;
 
   constructor(
     private prisma: PrismaService,
@@ -24,26 +24,32 @@ export class AuthService {
   ) {}
 
   private getTransporter(): nodemailer.Transporter {
-    const host = this.configService.get<string>('SMTP_HOST') || 'smtp.gmail.com';
-    const port = parseInt(this.configService.get<string>('SMTP_PORT') || '587', 10);
-    const secureConfig = this.configService.get<string>('SMTP_SECURE');
-    const secure = secureConfig !== undefined ? secureConfig === 'true' : port === 465;
-    const user = this.configService.get<string>('SMTP_USER');
-    const pass = this.configService.get<string>('SMTP_PASS');
+    if (!this.transporter) {
+      const host = this.configService.get<string>('SMTP_HOST') || 'smtp.gmail.com';
+      const port = parseInt(this.configService.get<string>('SMTP_PORT') || '587', 10);
+      const secureConfig = this.configService.get<string>('SMTP_SECURE');
+      const secure = secureConfig !== undefined ? secureConfig === 'true' : port === 465;
+      const user = this.configService.get<string>('SMTP_USER');
+      const pass = this.configService.get<string>('SMTP_PASS');
 
-    return nodemailer.createTransport({
-      host,
-      port,
-      secure,
-      auth: {
-        user,
-        pass,
-      },
-      connectionTimeout: 10000,
-      greetingTimeout: 10000,
-      socketTimeout: 15000,
-      family: 4, // Force IPv4 to prevent ENETUNREACH IPv6 errors on Render
-    } as any);
+      this.transporter = nodemailer.createTransport({
+        pool: true, // Keep connections alive for instant email dispatch
+        maxConnections: 5,
+        maxMessages: 100,
+        host,
+        port,
+        secure,
+        auth: {
+          user,
+          pass,
+        },
+        connectionTimeout: 8000,
+        greetingTimeout: 8000,
+        socketTimeout: 10000,
+        family: 4, // Force IPv4 to prevent ENETUNREACH IPv6 errors on cloud hosts
+      } as any);
+    }
+    return this.transporter;
   }
 
   private generateOtp(): string {
@@ -57,6 +63,8 @@ export class AuthService {
     requiresDetails: boolean;
     hasPhone: boolean;
     hasConsent: boolean;
+    otpSent?: boolean;
+    message?: string;
   }> {
     const email = dto.email.toLowerCase().trim();
     const user = await this.prisma.queryOne<{
@@ -71,38 +79,34 @@ export class AuthService {
 
     const hasPhone = Boolean(user?.phone && user.phone.trim().length >= 8);
     const hasConsent = Boolean(user?.privacyPolicyAccepted);
+    const requiresDetails = !user || !hasPhone || !hasConsent;
+
+    let otpSent = false;
+    let message: string | undefined;
+
+    // Fast-path: If autoSendOtp is enabled and user doesn't require details, generate & dispatch OTP in same request!
+    if (dto.autoSendOtp && !requiresDetails) {
+      await this.requestOtp({ email });
+      otpSent = true;
+      message = 'Verification code sent to your email!';
+    }
 
     return {
       exists: !!user,
       name: user?.name || null,
       phone: user?.phone || null,
-      requiresDetails: !user || !hasPhone || !hasConsent,
+      requiresDetails,
       hasPhone,
       hasConsent,
+      otpSent,
+      message,
     };
   }
 
-  async requestOtp(dto: RequestOtpDto): Promise<{ message: string }> {
-    const email = dto.email.toLowerCase().trim();
-    const code = this.generateOtp();
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
-
-    this.logger.log(`🔑 [OTP] Generated OTP for ${email}: ${code}`);
-
-    // Invalidate previous unused OTPs
-    await this.prisma.execute(
-      `UPDATE otp_code SET used = true WHERE email = $1 AND used = false`,
-      [email],
-    );
-
-    // Insert new OTP
-    await this.prisma.execute(
-      `INSERT INTO otp_code (id, email, code, "expiresAt", used, "createdAt")
-       VALUES (gen_random_uuid()::text, $1, $2, $3, false, now())`,
-      [email, code, expiresAt.toISOString()],
-    );
-
-    // Send OTP email — Try ZeptoMail HTTPS API first (Port 443 never blocked by Render)
+  /**
+   * Dispatches the verification email asynchronously in the background.
+   */
+  private async sendOtpEmail(email: string, code: string): Promise<void> {
     const htmlTemplate = `
       <div style="font-family: Arial, Helvetica, sans-serif; max-width: 480px; margin: 0 auto; padding: 24px 16px; background-color: #f9fafb;">
         <div style="background-color: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 32px; text-align: left;">
@@ -134,56 +138,6 @@ export class AuthService {
       </div>
     `;
 
-    // 1. Try ZeptoMail HTTPS API (Port 443 — bypassing cloud provider SMTP socket blocks)
-    const zeptoToken = this.configService.get<string>('ZEPTO_MAIL_TOKEN');
-    if (zeptoToken) {
-      const zeptoUrl =
-        this.configService.get<string>('ZEPTO_MAIL_URL') ||
-        'https://api.zeptomail.in/v1.1/email';
-      try {
-        const response = await fetch(zeptoUrl, {
-          method: 'POST',
-          headers: {
-            Accept: 'application/json',
-            'Content-Type': 'application/json',
-            Authorization: zeptoToken,
-          },
-          body: JSON.stringify({
-            from: {
-              address:
-                this.configService.get<string>('ZEPTO_MAIL_FROM_EMAIL') ||
-                'no-reply@megamind.studio',
-              name:
-                this.configService.get<string>('ZEPTO_MAIL_FROM_NAME') ||
-                'AKAM Digital',
-            },
-            to: [
-              {
-                email_address: {
-                  address: email,
-                },
-              },
-            ],
-            subject: 'Your AKAM Digital verification code',
-            htmlbody: htmlTemplate,
-          }),
-        });
-
-        if (response.ok) {
-          this.logger.log(
-            `✅ OTP email sent successfully to ${email} via ZeptoMail HTTPS API (Port 443)`,
-          );
-          return { message: 'OTP sent to your email address' };
-        } else {
-          const errBody = await response.text();
-          this.logger.warn(`ZeptoMail HTTP failed (${response.status}): ${errBody}`);
-        }
-      } catch (e) {
-        this.logger.warn(`ZeptoMail HTTP send error: ${(e as Error).message}`);
-      }
-    }
-
-    // 2. Fallback to Nodemailer SMTP
     try {
       const transporter = this.getTransporter();
       const fromAddress =
@@ -193,21 +147,47 @@ export class AuthService {
       const info = await transporter.sendMail({
         from: fromAddress,
         to: email,
-        subject: 'Your AKAM Digital verification code',
+        subject: `${code} is your AKAM Digital verification code`,
         html: htmlTemplate,
       });
-      this.logger.log(`✅ OTP email sent successfully to ${email}. MessageId: ${info.messageId}`);
+      this.logger.log(`✅ [OTP] Email dispatched to ${email}. MessageId: ${info.messageId}`);
     } catch (error) {
       this.logger.error(
-        `❌ Failed to send OTP email to ${email}: ${(error as Error).message}`,
+        `❌ [OTP] Failed to send email to ${email}: ${(error as Error).message}`,
         (error as Error).stack,
       );
       if (this.configService.get('NODE_ENV') !== 'production') {
         this.logger.log(`[DEV FALLBACK] OTP for ${email}: ${code}`);
       }
     }
+  }
 
-    return { message: 'OTP sent to your email address' };
+  async requestOtp(dto: RequestOtpDto): Promise<{ message: string }> {
+    const email = dto.email.toLowerCase().trim();
+    const code = this.generateOtp();
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+    this.logger.log(`🔑 [OTP] Generated OTP for ${email}: ${code}`);
+
+    // Invalidate previous unused OTPs and insert the new OTP in parallel
+    await Promise.all([
+      this.prisma.execute(
+        `UPDATE otp_code SET used = true WHERE email = $1 AND used = false`,
+        [email],
+      ),
+      this.prisma.execute(
+        `INSERT INTO otp_code (id, email, code, "expiresAt", used, "createdAt")
+         VALUES (gen_random_uuid()::text, $1, $2, $3, false, now())`,
+        [email, code, expiresAt.toISOString()],
+      ),
+    ]);
+
+    // Send email asynchronously in background — returns immediately to client in ~25ms!
+    this.sendOtpEmail(email, code).catch((err) => {
+      this.logger.error(`Background OTP email error for ${email}: ${err?.message}`);
+    });
+
+    return { message: 'Verification code sent to your email address' };
   }
 
   async verifyOtp(dto: VerifyOtpDto): Promise<{ token: string; user: object }> {

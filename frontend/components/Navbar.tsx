@@ -52,7 +52,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   const searchRef = useRef<HTMLDivElement>(null);
   const mobileSearchRef = useRef<HTMLDivElement>(null);
   const [authModalOpen, setAuthModalOpen] = useState(false);
-  const [targetRedirect, setTargetRedirect] = useState<string>("/submit");
+  const [targetRedirect, setTargetRedirect] = useState<string | undefined>(undefined);
   const [user, setUser] = useState<any>(null);
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
@@ -64,11 +64,43 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [notifPage, setNotifPage] = useState<number>(1);
   const [hasMoreNotifs, setHasMoreNotifs] = useState<boolean>(true);
   const [isLoadingNotifs, setIsLoadingNotifs] = useState<boolean>(false);
+  const [hasNewNotifPulse, setHasNewNotifPulse] = useState<boolean>(false);
+  const [, setTimeTick] = useState<number>(0);
   const notifRef = useRef<HTMLDivElement>(null);
   const notifScrollRef = useRef<HTMLDivElement>(null);
+  const isFetchingNotifsRef = useRef<boolean>(false);
+  const pendingFetchRef = useRef<boolean>(false);
+  const eventSourceRef = useRef<EventSource | null>(null);
+  const broadcastChannelRef = useRef<BroadcastChannel | null>(null);
+
+  const formatNotificationTime = (dateString?: string | null): string => {
+    if (!dateString) return "";
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return "";
+    const now = new Date();
+    const diffInSeconds = Math.max(0, Math.floor((now.getTime() - date.getTime()) / 1000));
+
+    if (diffInSeconds < 10) return "Just now";
+    if (diffInSeconds < 60) return `${diffInSeconds}s ago`;
+    const diffInMinutes = Math.floor(diffInSeconds / 60);
+    if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
+    const diffInHours = Math.floor(diffInMinutes / 60);
+    if (diffInHours < 24) return `${diffInHours}h ago`;
+    const diffInDays = Math.floor(diffInHours / 24);
+    if (diffInDays < 7) return `${diffInDays}d ago`;
+
+    return date.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+    });
+  };
 
   const fetchNotifications = async (pageToFetch: number = 1, append: boolean = false) => {
-    if (isLoadingNotifs) return;
+    if (isFetchingNotifsRef.current) {
+      pendingFetchRef.current = true;
+      return;
+    }
+    isFetchingNotifsRef.current = true;
     setIsLoadingNotifs(true);
     try {
       const cRes = await apiFetch(`${API_BASE_URL}/notifications/unread-count`, { cache: "no-store" });
@@ -103,7 +135,12 @@ export const Navbar: React.FC<NavbarProps> = ({
     } catch (e) {
       console.error("Failed to load notifications", e);
     } finally {
+      isFetchingNotifsRef.current = false;
       setIsLoadingNotifs(false);
+      if (pendingFetchRef.current) {
+        pendingFetchRef.current = false;
+        fetchNotifications(1, false);
+      }
     }
   };
 
@@ -202,16 +239,76 @@ export const Navbar: React.FC<NavbarProps> = ({
   useEffect(() => {
     loadUserData();
     syncLiveUser();
-    window.addEventListener("akam_user_updated", loadUserData);
-    window.addEventListener("storage", loadUserData);
 
-    // Real-time polling for notifications & live role/profile updates every 12 seconds
-    const pollInterval = setInterval(() => {
+    const handleImmediateRefresh = () => {
+      fetchNotifications();
+      syncLiveUser();
+    };
+
+    window.addEventListener("akam_user_updated", loadUserData);
+    window.addEventListener("akam_notification_updated", handleImmediateRefresh);
+    window.addEventListener("storage", loadUserData);
+    window.addEventListener("focus", handleImmediateRefresh);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        handleImmediateRefresh();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    // Multi-tab real-time broadcast channel
+    try {
+      if (typeof window !== "undefined" && typeof BroadcastChannel !== "undefined") {
+        const bc = new BroadcastChannel("akam_notifications_channel");
+        broadcastChannelRef.current = bc;
+        bc.onmessage = (msg) => {
+          if (msg.data?.type === "NEW_NOTIFICATION" && msg.data.notification) {
+            const incoming = msg.data.notification;
+            setNotifications((prev) => {
+              if (prev.some((n) => n.id === incoming.id)) return prev;
+              return [
+                {
+                  id: incoming.id || `notif-${Date.now()}`,
+                  type: incoming.type,
+                  message: incoming.message,
+                  read: false,
+                  relatedStoryId: incoming.relatedStoryId || null,
+                  createdAt: incoming.createdAt || new Date().toISOString(),
+                },
+                ...prev,
+              ];
+            });
+            setUnreadCount((c) => c + 1);
+            setHasNewNotifPulse(true);
+            setTimeout(() => setHasNewNotifPulse(false), 2500);
+          } else if (msg.data?.type === "READ_UPDATE") {
+            const readId = msg.data.id;
+            if (readId === "ALL") {
+              setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+              setUnreadCount(0);
+            } else {
+              setNotifications((prev) =>
+                prev.map((n) => (n.id === readId ? { ...n, read: true } : n))
+              );
+              setUnreadCount((c) => Math.max(0, c - 1));
+            }
+          }
+        };
+      }
+    } catch {}
+
+    // Dynamic relative timestamp ticker (updates "Just now" to "1m ago" every 30s)
+    const tickInterval = setInterval(() => {
+      setTimeTick((t) => t + 1);
+    }, 30000);
+
+    // Safety fallback poll every 30 seconds
+    const fallbackPoll = setInterval(() => {
       if (localStorage.getItem("akam_user")) {
         fetchNotifications();
-        syncLiveUser();
       }
-    }, 12000);
+    }, 30000);
 
     const handleClickOutside = (event: MouseEvent) => {
       if (notifRef.current && !notifRef.current.contains(event.target as Node)) {
@@ -233,11 +330,162 @@ export const Navbar: React.FC<NavbarProps> = ({
 
     return () => {
       window.removeEventListener("akam_user_updated", loadUserData);
+      window.removeEventListener("akam_notification_updated", handleImmediateRefresh);
       window.removeEventListener("storage", loadUserData);
+      window.removeEventListener("focus", handleImmediateRefresh);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
       document.removeEventListener("mousedown", handleClickOutside);
-      clearInterval(pollInterval);
+      clearInterval(tickInterval);
+      clearInterval(fallbackPoll);
+      if (broadcastChannelRef.current) {
+        broadcastChannelRef.current.close();
+        broadcastChannelRef.current = null;
+      }
     };
   }, []);
+
+  // ── Dedicated Live Server-Sent Events (SSE) Stream ──────────────────────────
+  // Subscribes dynamically whenever the authenticated user is present.
+  // Receives push events from backend mutations within <10ms and immediately updates UI.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const token = localStorage.getItem("akam_token");
+    if (!token || !user) {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+      return;
+    }
+
+    let isSubscribed = true;
+    let reconnectTimeout: any = null;
+
+    const setupSSE = () => {
+      if (!isSubscribed) return;
+      const currentToken = localStorage.getItem("akam_token");
+      if (!currentToken) return;
+
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+
+      // Compute correct base URL matching localhost fallback
+      let targetBase = API_BASE_URL;
+      const isLocalhost =
+        window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+      if (isLocalhost && targetBase.includes("akam-a701.onrender.com")) {
+        targetBase = targetBase.replace("https://akam-a701.onrender.com", "http://localhost:3000");
+      }
+      const streamUrl = `${targetBase}/notifications/stream?token=${encodeURIComponent(currentToken)}`;
+
+      try {
+        const es = new EventSource(streamUrl, { withCredentials: true });
+        eventSourceRef.current = es;
+
+        es.onopen = () => {
+          fetchNotifications(1, false);
+        };
+
+        es.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (data.type === "HEARTBEAT") {
+              return;
+            }
+
+            if (data.type === "NEW_NOTIFICATION" && data.notification) {
+              const incoming = data.notification;
+
+              // 1. INSTANT MUTATION RENDER (<1ms): Prepend notification immediately to list
+              setNotifications((prev) => {
+                if (prev.some((n) => n.id === incoming.id)) return prev;
+                return [
+                  {
+                    id: incoming.id || `notif-${Date.now()}`,
+                    type: incoming.type,
+                    message: incoming.message,
+                    read: false,
+                    relatedStoryId: incoming.relatedStoryId || null,
+                    createdAt: incoming.createdAt || new Date().toISOString(),
+                  },
+                  ...prev,
+                ];
+              });
+
+              // 2. Increment badge count immediately
+              setUnreadCount((c) => c + 1);
+
+              // 3. Animate bell pulse
+              setHasNewNotifPulse(true);
+              setTimeout(() => setHasNewNotifPulse(false), 2500);
+
+              // 4. Notify all components & other open tabs
+              window.dispatchEvent(
+                new CustomEvent("akam_notification_updated", { detail: incoming })
+              );
+              if (broadcastChannelRef.current) {
+                try {
+                  broadcastChannelRef.current.postMessage({
+                    type: "NEW_NOTIFICATION",
+                    notification: incoming,
+                  });
+                } catch {}
+              }
+
+              // 5. Sync live user privileges if event altered subscriptions/role
+              syncLiveUser();
+            } else if (data.type === "READ_UPDATE" && data.notification?.id) {
+              const readId = data.notification.id;
+              setNotifications((prev) =>
+                prev.map((n) => (n.id === readId ? { ...n, read: true } : n))
+              );
+              setUnreadCount((c) => Math.max(0, c - 1));
+              window.dispatchEvent(new Event("akam_notification_updated"));
+            } else if (data.type === "READ_ALL_UPDATE") {
+              setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+              setUnreadCount(0);
+              window.dispatchEvent(new Event("akam_notification_updated"));
+            }
+          } catch {
+            fetchNotifications(1, false);
+          }
+        };
+
+        es.onerror = () => {
+          // Native EventSource auto-reconnects when connection stutters.
+          // Only trigger manual re-initialization if connection was closed completely.
+          if (es.readyState === EventSource.CLOSED) {
+            es.close();
+            if (eventSourceRef.current === es) {
+              eventSourceRef.current = null;
+            }
+            if (isSubscribed) {
+              if (reconnectTimeout) clearTimeout(reconnectTimeout);
+              reconnectTimeout = setTimeout(setupSSE, 3000);
+            }
+          }
+        };
+      } catch (err) {
+        console.error("SSE connection error", err);
+        if (isSubscribed) {
+          reconnectTimeout = setTimeout(setupSSE, 4000);
+        }
+      }
+    };
+
+    setupSSE();
+
+    return () => {
+      isSubscribed = false;
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+    };
+  }, [user?.id]);
 
   const toggleNotifications = () => {
     const nextState = !notificationsOpen;
@@ -257,11 +505,19 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   const handleMarkAllRead = async () => {
     try {
+      // Optimistic 0ms update
+      setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+      setUnreadCount(0);
+      window.dispatchEvent(new Event("akam_notification_updated"));
+      if (broadcastChannelRef.current) {
+        try {
+          broadcastChannelRef.current.postMessage({ type: "READ_UPDATE", id: "ALL" });
+        } catch {}
+      }
+
       await apiFetch(`${API_BASE_URL}/notifications/read-all`, {
         method: "PATCH",
       });
-      setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-      setUnreadCount(0);
     } catch (e) {
       console.error(e);
     }
@@ -269,17 +525,26 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   const handleMarkRead = async (id: string) => {
     try {
-      await apiFetch(`${API_BASE_URL}/notifications/${id}/read`, {
-        method: "PATCH",
-      });
+      // Optimistic 0ms update
       setNotifications((prev) =>
         prev.map((n) => (n.id === id ? { ...n, read: true } : n))
       );
       setUnreadCount((prev) => Math.max(0, prev - 1));
+      window.dispatchEvent(new Event("akam_notification_updated"));
+      if (broadcastChannelRef.current) {
+        try {
+          broadcastChannelRef.current.postMessage({ type: "READ_UPDATE", id });
+        } catch {}
+      }
+
+      await apiFetch(`${API_BASE_URL}/notifications/${id}/read`, {
+        method: "PATCH",
+      });
     } catch (e) {
       console.error(e);
     }
   };
+
 
   const handleNotificationClick = async (n: any) => {
     if (!n.read && n.id && !n.id.startsWith("sample-")) {
@@ -466,7 +731,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     }
   };
 
-  const handleOpenSignIn = (intendedPath: string = "/profile") => {
+  const handleOpenSignIn = (intendedPath?: string) => {
     setMobileMenuOpen(false);
     setTargetRedirect(intendedPath);
     setAuthModalOpen(true);
@@ -623,14 +888,16 @@ export const Navbar: React.FC<NavbarProps> = ({
             {user && (
               <button
                 onClick={toggleNotifications}
-                className="relative w-10 h-10 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-gray-700 hover:bg-gray-50 transition-all cursor-pointer shadow-2xs"
+                className={`relative w-10 h-10 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-gray-700 hover:bg-gray-50 transition-all cursor-pointer shadow-2xs ${
+                  hasNewNotifPulse ? "ring-2 ring-[#22B573] ring-offset-1" : ""
+                }`}
                 aria-label="Notifications"
                 title="Notifications"
               >
-                <Bell className="w-4 h-4" />
+                <Bell className={`w-4 h-4 transition-transform ${hasNewNotifPulse ? "animate-bounce text-[#22B573]" : ""}`} />
                 {unreadCount > 0 && (
-                  <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 bg-rose-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center border border-white">
-                    {unreadCount}
+                  <span className={`absolute -top-1 -right-1 min-w-4 h-4 px-1 bg-rose-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center border border-white ${hasNewNotifPulse ? "scale-110" : ""}`}>
+                    {unreadCount > 99 ? "99+" : unreadCount}
                   </span>
                 )}
               </button>
@@ -722,21 +989,21 @@ export const Navbar: React.FC<NavbarProps> = ({
               </div>
             ) : (
               <button
-                onClick={() => handleOpenSignIn("/profile")}
+                onClick={() => handleOpenSignIn()}
                 className="text-sm font-medium text-gray-900 bg-white border border-gray-200 px-6 py-2.5 rounded-full hover:bg-gray-50 transition-colors shadow-xs cursor-pointer"
               >
                 Sign in
               </button>
             )}
 
-            {/* Start Writing CTA Button */}
+            {/* Join as Creator CTA Button */}
             <Button
               variant="primary"
               size="md"
               onClick={handleStartWriting}
               className="group px-6 py-2.5 text-sm font-medium shadow-xs cursor-pointer rounded-full"
             >
-              Start writing
+              Join as Creator
             </Button>
           </div>
 
@@ -763,13 +1030,15 @@ export const Navbar: React.FC<NavbarProps> = ({
             {user && (
               <button
                 onClick={toggleNotifications}
-                className="relative p-2 text-gray-700 hover:text-black rounded-full hover:bg-black/5 cursor-pointer transition-colors"
+                className={`relative p-2 text-gray-700 hover:text-black rounded-full hover:bg-black/5 cursor-pointer transition-colors ${
+                  hasNewNotifPulse ? "ring-2 ring-[#22B573]" : ""
+                }`}
                 aria-label="Notifications"
               >
-                <Bell className="w-5 h-5" />
+                <Bell className={`w-5 h-5 ${hasNewNotifPulse ? "animate-bounce text-[#22B573]" : ""}`} />
                 {unreadCount > 0 && (
                   <span className="absolute top-1 right-1 min-w-4 h-4 px-1 bg-rose-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
-                    {unreadCount}
+                    {unreadCount > 99 ? "99+" : unreadCount}
                   </span>
                 )}
               </button>
@@ -977,11 +1246,11 @@ export const Navbar: React.FC<NavbarProps> = ({
                             </span>
                           )}
                           {n.createdAt && (
-                            <span className="text-[10px] text-gray-400 ml-auto">
-                              {new Date(n.createdAt).toLocaleDateString("en-US", {
-                                month: "short",
-                                day: "numeric",
-                              })}
+                            <span
+                              className="text-[10px] text-gray-400 ml-auto font-medium"
+                              title={new Date(n.createdAt).toLocaleString()}
+                            >
+                              {formatNotificationTime(n.createdAt)}
                             </span>
                           )}
                         </div>
@@ -1101,7 +1370,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                       onClick={handleStartWriting}
                       className="w-full justify-center py-3 text-sm font-semibold shadow-md cursor-pointer rounded-full"
                     >
-                      Start writing
+                      Join as Creator
                     </Button>
                   </>
                 ) : (
@@ -1112,10 +1381,10 @@ export const Navbar: React.FC<NavbarProps> = ({
                       onClick={handleStartWriting}
                       className="w-full justify-center py-3 text-sm font-semibold shadow-md cursor-pointer rounded-full"
                     >
-                      Start writing
+                      Join as Creator
                     </Button>
                     <button
-                      onClick={() => handleOpenSignIn("/profile")}
+                      onClick={() => handleOpenSignIn()}
                       className="w-full py-3 text-sm font-semibold text-gray-900 bg-gray-100 hover:bg-gray-200 rounded-full transition-colors cursor-pointer text-center"
                     >
                       Sign in

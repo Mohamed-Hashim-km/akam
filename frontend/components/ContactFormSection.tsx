@@ -5,13 +5,9 @@ import { ChevronDown, CheckCircle2, AlertCircle } from "lucide-react";
 import Button from "@/components/ui/Button";
 import { API_BASE_URL, apiFetch } from "@/lib/config";
 
-export interface ContactFormSectionProps {
-  title?: string;
-}
+export interface ContactFormSectionProps {}
 
-export const ContactFormSection: React.FC<ContactFormSectionProps> = ({
-  title = "Reach Out To The Akam Team",
-}) => {
+export const ContactFormSection: React.FC<ContactFormSectionProps> = () => {
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -77,14 +73,8 @@ export const ContactFormSection: React.FC<ContactFormSectionProps> = ({
     : 0;
 
   return (
-    <section className="relative w-full bg-white py-16 sm:py-20 lg:py-24 font-poppins overflow-hidden">
+    <section className="relative w-full bg-white pt-6 sm:pt-8 pb-8 sm:pb-12 font-poppins overflow-hidden">
       <div className="container px-4 mx-auto relative z-10">
-
-        {/* Section Heading */}
-        <h2 className="text-3xl sm:text-4xl lg:text-[42px] font-medium text-dark-text tracking-tight text-center mb-10 sm:mb-14 font-poppins">
-          {title}
-        </h2>
-
         {/* Form Container */}
         <form
           onSubmit={handleSubmit}

@@ -171,10 +171,13 @@ async function getHomePageData() {
       time: e.time || "",
       day: e.day || "",
       monthYear: e.monthYear || "",
+      eventDate: e.eventDate,
       imageSrc: e.imageSrc || (Array.isArray(e.images) && e.images[0]) || "",
       image: e.imageSrc || (Array.isArray(e.images) && e.images[0]) || "",
       registerHref: e.registerHref || undefined,
       type: e.type,
+      isPaid: Boolean(e.isPaid),
+      price: e.price !== undefined ? Number(e.price) : 0,
     }));
 
     const editorsNoteRaw = await safeJson(

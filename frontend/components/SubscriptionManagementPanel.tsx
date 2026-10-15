@@ -19,6 +19,7 @@ import {
   X,
   Sparkles,
   ExternalLink,
+  Download,
 } from "lucide-react";
 import Button from "@/components/ui/Button";
 import { API_BASE_URL, apiFetch, formatAssetUrl } from "@/lib/config";
@@ -286,6 +287,94 @@ export const SubscriptionManagementPanel: React.FC<SubscriptionManagementPanelPr
     }
   };
 
+  // Export Subscribers to CSV
+  const [exporting, setExporting] = useState(false);
+
+  const handleExportSubscribers = async () => {
+    setExporting(true);
+    try {
+      const params = new URLSearchParams();
+      params.set("page", "1");
+      params.set("limit", "5000");
+      if (debouncedSearch.trim()) params.set("search", debouncedSearch.trim());
+      if (statusFilter !== "ALL") params.set("status", statusFilter);
+      if (typeFilter !== "ALL") params.set("type", typeFilter);
+
+      const res = await apiFetch(`${API_BASE_URL}/subscription/editorial/list?${params.toString()}`);
+      let exportData: SubscriberItem[] = subscribers;
+      if (res.ok) {
+        const json = await res.json();
+        if (Array.isArray(json.data) && json.data.length > 0) {
+          exportData = json.data;
+        }
+      }
+
+      if (!exportData || exportData.length === 0) {
+        alert("No subscriber records available to export with the current filters.");
+        return;
+      }
+
+      const headers = [
+        "Subscription ID",
+        "User Name",
+        "User Email",
+        "User Role",
+        "Plan Type",
+        "Pass Category",
+        "Status",
+        "Is Active",
+        "Start Date",
+        "End Date",
+        "Days Left",
+        "Transaction ID",
+        "Created At",
+        "Updated At",
+      ];
+
+      const rows = exportData.map((item) => {
+        const category = item.isStudent ? "Student Free Pass" : "Paid Subscription (₹1)";
+        const remaining = getRemainingDaysText(item.endDate, item.isActive, item.status);
+        return [
+          `"${item.id}"`,
+          `"${(item.userName || "N/A").replace(/"/g, '""')}"`,
+          `"${item.userEmail || ""}"`,
+          `"${item.userRole || "READER"}"`,
+          `"${item.planType || "SIX_MONTHS"}"`,
+          `"${category}"`,
+          `"${item.status || "ACTIVE"}"`,
+          item.isActive ? "Yes" : "No",
+          item.startDate ? new Date(item.startDate).toISOString().split("T")[0] : "",
+          item.endDate ? new Date(item.endDate).toISOString().split("T")[0] : "",
+          `"${remaining}"`,
+          `"${(item.txnId || "N/A").replace(/"/g, '""')}"`,
+          item.createdAt ? new Date(item.createdAt).toISOString() : "",
+          item.updatedAt ? new Date(item.updatedAt).toISOString() : "",
+        ];
+      });
+
+      const csvContent = "\uFEFF" + [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const filterLabel = statusFilter !== "ALL" ? `_${statusFilter.toLowerCase()}` : "";
+      link.setAttribute("href", url);
+      link.setAttribute("download", `akam_subscribers${filterLabel}_${new Date().toISOString().slice(0, 10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      if (onNotify) {
+        onNotify(`Exported ${exportData.length} subscriber records to CSV`);
+      }
+    } catch (err) {
+      console.error("Failed to export subscribers", err);
+      alert("Failed to export subscriber records");
+    } finally {
+      setExporting(false);
+    }
+  };
+
   // Helper date formatter
   const formatDate = (isoStr: string) => {
     try {
@@ -379,7 +468,16 @@ export const SubscriptionManagementPanel: React.FC<SubscriptionManagementPanelPr
               <h3 className="text-xs font-bold text-gray-800 uppercase tracking-wider">
                 Overview & Revenue Metrics
               </h3>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  onClick={handleExportSubscribers}
+                  disabled={exporting || loading}
+                  className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 transition shadow-2xs cursor-pointer disabled:opacity-50"
+                  title="Export subscriber records to CSV"
+                >
+                  <Download className={`w-3.5 h-3.5 text-emerald-600 ${exporting ? "animate-bounce" : ""}`} />
+                  <span>{exporting ? "Exporting..." : "Export CSV"}</span>
+                </button>
                 <button
                   onClick={handleRefresh}
                   disabled={refreshing}
@@ -423,7 +521,7 @@ export const SubscriptionManagementPanel: React.FC<SubscriptionManagementPanelPr
               <div className="bg-white border border-gray-200 rounded-2xl p-3 sm:p-4 shadow-2xs">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-[10px] sm:text-[11px] uppercase tracking-wider font-semibold text-gray-500">
-                    Paid (₹399)
+                    Paid (₹1)
                   </span>
                   <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
                     <ShieldCheck className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
@@ -598,7 +696,7 @@ export const SubscriptionManagementPanel: React.FC<SubscriptionManagementPanelPr
                 typeFilter === "PAID" ? "bg-white text-blue-700 shadow-2xs" : "text-gray-600 hover:text-gray-900"
               }`}
             >
-              Paid (₹399)
+              Paid (₹1)
             </button>
             <button
               onClick={() => {
@@ -711,7 +809,7 @@ export const SubscriptionManagementPanel: React.FC<SubscriptionManagementPanelPr
                         ) : (
                           <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200/60">
                             <ShieldCheck className="w-3 h-3" />
-                            6-Month (₹399)
+                            6-Month (₹1)
                           </span>
                         )}
                       </div>
@@ -829,7 +927,7 @@ export const SubscriptionManagementPanel: React.FC<SubscriptionManagementPanelPr
                           ) : (
                             <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200/60">
                               <ShieldCheck className="w-3 h-3" />
-                              6-Month Pass (₹399)
+                              6-Month Pass (₹1)
                             </span>
                           )}
                         </td>
@@ -1007,7 +1105,7 @@ export const SubscriptionManagementPanel: React.FC<SubscriptionManagementPanelPr
                       <ShieldCheck className="w-4 h-4 text-blue-600" />
                       Paid Pass
                     </div>
-                    <p className="text-[11px] text-gray-500 mt-1">₹399 Digital Access</p>
+                    <p className="text-[11px] text-gray-500 mt-1">₹1 Digital Access</p>
                   </button>
                   <button
                     type="button"

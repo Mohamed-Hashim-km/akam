@@ -628,6 +628,95 @@ export const StudentVerificationsPanel: React.FC<StudentVerificationsPanelProps>
     }));
   };
 
+  // Export Student Applications to CSV
+  const [exporting, setExporting] = useState(false);
+
+  const handleExportApplications = async () => {
+    setExporting(true);
+    try {
+      const queryParams = new URLSearchParams({
+        page: "1",
+        limit: "5000",
+      });
+
+      if (statusFilter !== "ALL") {
+        queryParams.set("status", statusFilter);
+      }
+
+      if (debouncedSearch.trim()) {
+        queryParams.set("search", debouncedSearch.trim());
+      }
+
+      const res = await apiFetch(
+        `${API_BASE_URL}/editorial/student-verifications?${queryParams.toString()}`
+      );
+
+      let exportData: StudentApplication[] = applications;
+      if (res.ok) {
+        const json = await res.json();
+        if (Array.isArray(json)) {
+          exportData = json;
+        } else if (json && Array.isArray(json.data) && json.data.length > 0) {
+          exportData = json.data;
+        }
+      }
+
+      if (!exportData || exportData.length === 0) {
+        alert("No student application records available to export with the current filters.");
+        return;
+      }
+
+      const headers = [
+        "Application Reference ID",
+        "Student Full Name",
+        "Email Address",
+        "Institution / College",
+        "ID Card Document",
+        "Verification Status",
+        "Submitted At",
+        "Reviewed At",
+        "Reviewed By",
+        "Pass End Date",
+        "Review Notes / Reason",
+      ];
+
+      const rows = exportData.map((item) => {
+        return [
+          `"${item.referenceId || item.id || ""}"`,
+          `"${(item.fullName || "").replace(/"/g, '""')}"`,
+          `"${item.email || ""}"`,
+          `"${(item.institution || "").replace(/"/g, '""')}"`,
+          `"${(item.idCardName || item.idCardUrl || "N/A").replace(/"/g, '""')}"`,
+          `"${item.status || "PENDING_APPROVAL"}"`,
+          item.submittedAt ? new Date(item.submittedAt).toISOString() : "",
+          item.reviewedAt ? new Date(item.reviewedAt).toISOString() : "",
+          `"${(item.reviewedBy || "").replace(/"/g, '""')}"`,
+          item.endDate ? new Date(item.endDate).toISOString().split("T")[0] : "",
+          `"${(item.reviewNotes || "").replace(/"/g, '""')}"`,
+        ];
+      });
+
+      const csvContent = "\uFEFF" + [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const filterLabel = statusFilter !== "ALL" ? `_${statusFilter.toLowerCase()}` : "";
+      link.setAttribute("href", url);
+      link.setAttribute("download", `akam_student_verifications${filterLabel}_${new Date().toISOString().slice(0, 10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      showToast(`Exported ${exportData.length} student application records to CSV.`);
+    } catch (err) {
+      console.error("Failed to export student applications", err);
+      alert("Failed to export student application records.");
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div className="space-y-6 font-poppins relative">
       {/* Editorial Feedback Banner (Matches Other Tabs) */}
@@ -661,7 +750,20 @@ export const StudentVerificationsPanel: React.FC<StudentVerificationsPanelProps>
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5 shrink-0 justify-end">
+        <div className="flex items-center gap-2.5 shrink-0 justify-end flex-wrap">
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={handleExportApplications}
+            disabled={exporting || loading}
+            icon={<Download className={`w-3.5 h-3.5 text-emerald-600 ${exporting ? "animate-bounce" : ""}`} />}
+            className="border border-gray-300 shadow-xs cursor-pointer disabled:opacity-50"
+            title="Export student application records to CSV"
+          >
+            {exporting ? "Exporting..." : "Export CSV"}
+          </Button>
+
           <Button
             type="button"
             variant="secondary"

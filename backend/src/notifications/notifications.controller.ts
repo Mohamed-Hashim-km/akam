@@ -1,4 +1,16 @@
-import { Controller, Get, Patch, Param, Query, UseGuards, HttpCode, HttpStatus } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Patch,
+  Param,
+  Query,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
+  Sse,
+  MessageEvent,
+} from '@nestjs/common';
+import { Observable } from 'rxjs';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 import { RolesGuard } from '../auth/guards/roles.guard.js';
@@ -13,6 +25,13 @@ import { NotificationsService } from './notifications.service.js';
 @Controller('notifications')
 export class NotificationsController {
   constructor(private readonly notificationsService: NotificationsService) {}
+
+  @Sse('stream')
+  @ApiOperation({ summary: 'Real-time Server-Sent Events (SSE) notification stream' })
+  stream(@CurrentUser() user: AuthUser): Observable<MessageEvent> {
+    return this.notificationsService.getNotificationStream(user.id, user.role);
+  }
+
 
   @Get('audit-logs')
   @UseGuards(RolesGuard)

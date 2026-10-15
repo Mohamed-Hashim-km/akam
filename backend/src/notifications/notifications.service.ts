@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger, MessageEvent } from '@nestjs/common';
+import { Subject, Observable, interval, merge, map, filter } from 'rxjs';
 import { PrismaService } from '../common/prisma/prisma.service.js';
 
 export type NotificationType =
@@ -16,7 +17,8 @@ export type NotificationType =
   | 'STUDENT_APPLICATION_APPROVED'
   | 'STUDENT_APPLICATION_REJECTED'
   | 'SUBSCRIPTION_GRANTED'
-  | 'SUBSCRIPTION_CANCELLED';
+  | 'SUBSCRIPTION_CANCELLED'
+  | 'READ_UPDATE';
 
 export interface EditorialAuditLogRow {
   id: string;
@@ -65,7 +67,72 @@ type NotificationRow = {
 
 @Injectable()
 export class NotificationsService {
+  private readonly logger = new Logger(NotificationsService.name);
+
+  private readonly notificationEvents$ = new Subject<{
+    id: string;
+    userId: string;
+    targetRole?: string;
+    type: string;
+    message: string;
+    read: boolean;
+    relatedStoryId?: string | null;
+    createdAt: string;
+  }>();
+
   constructor(private prisma: PrismaService) {}
+
+  /**
+   * Subscribe to real-time notification push events via Server-Sent Events (SSE).
+   * Emits live events the moment any notification is created or updated in the backend (<10ms).
+   */
+  getNotificationStream(userId: string, userRole?: string): Observable<MessageEvent> {
+    const live$ = this.notificationEvents$.asObservable().pipe(
+      filter((e) => {
+        // Direct recipient match
+        if (e.userId === userId || e.userId === 'ALL' || e.userId === '*') {
+          return true;
+        }
+        // If connected client is an editor/admin/moderator, also receive editorial broadcast notifications
+        if (userRole && (userRole === 'EDITOR' || userRole === 'ADMIN' || userRole === 'MODERATOR')) {
+          if (
+            e.targetRole === 'EDITOR' ||
+            e.targetRole === 'ADMIN' ||
+            e.targetRole === 'ALL' ||
+            e.userId === 'EDITORS'
+          ) {
+            return true;
+          }
+        }
+        return false;
+      }),
+      map((event) => ({
+        data: {
+          type:
+            event.type === 'READ_UPDATE'
+              ? 'READ_UPDATE'
+              : event.type === 'READ_ALL_UPDATE'
+                ? 'READ_ALL_UPDATE'
+                : 'NEW_NOTIFICATION',
+          notification: event,
+          timestamp: new Date().toISOString(),
+        },
+      } as MessageEvent)),
+    );
+
+    // Keep-alive heartbeat every 15 seconds to prevent browser/proxy timeouts
+    const heartbeat$ = interval(15000).pipe(
+      map(() => ({
+        data: {
+          type: 'HEARTBEAT',
+          timestamp: new Date().toISOString(),
+        },
+      } as MessageEvent)),
+    );
+
+    return merge(live$, heartbeat$);
+  }
+
 
   async getEditorialAuditLogs(params: {
     page?: number;
@@ -200,7 +267,10 @@ export class NotificationsService {
       (statsMap['SUBSCRIPTION_CANCELLED'] || 0);
 
     return {
-      data: dataRows,
+      data: dataRows.map((r) => ({
+        ...r,
+        message: r.message ? r.message.replace(/AKAM E-Magazine/g, 'AKAM Magazine') : r.message,
+      })),
       meta: {
         page,
         limit,
@@ -248,7 +318,10 @@ export class NotificationsService {
     const hasMore = offset + data.length < total;
 
     return {
-      data,
+      data: data.map((r) => ({
+        ...r,
+        message: r.message ? r.message.replace(/AKAM E-Magazine/g, 'AKAM Magazine') : r.message,
+      })),
       meta: {
         page,
         limit,
@@ -263,6 +336,16 @@ export class NotificationsService {
       `UPDATE notification SET read = true WHERE id = $1 AND "userId" = $2`,
       [id, userId],
     );
+    if (count > 0) {
+      this.notificationEvents$.next({
+        id,
+        userId,
+        type: 'READ_UPDATE',
+        message: 'Notification marked as read',
+        read: true,
+        createdAt: new Date().toISOString(),
+      });
+    }
     return { success: count > 0 };
   }
 
@@ -271,6 +354,14 @@ export class NotificationsService {
       `UPDATE notification SET read = true WHERE "userId" = $1 AND read = false`,
       [userId],
     );
+    this.notificationEvents$.next({
+      id: 'ALL',
+      userId,
+      type: 'READ_ALL_UPDATE',
+      message: 'All notifications marked as read',
+      read: true,
+      createdAt: new Date().toISOString(),
+    });
     return { success: true };
   }
 
@@ -287,13 +378,31 @@ export class NotificationsService {
     type: NotificationType,
     message: string,
     relatedStoryId?: string,
-  ): Promise<void> {
+    targetRole?: string,
+  ): Promise<string> {
+    const id = crypto.randomUUID();
+    const createdAt = new Date().toISOString();
     await this.prisma.execute(
       `INSERT INTO notification (id, "userId", type, message, read, "relatedStoryId", "createdAt")
-       VALUES (gen_random_uuid()::text, $1, $2::"NotificationType", $3, false, $4, now())`,
-      [userId, type, message, relatedStoryId ?? null],
+       VALUES ($1, $2, $3::"NotificationType", $4, false, $5, $6::timestamp)`,
+      [id, userId, type, message, relatedStoryId ?? null, createdAt],
     );
+
+    // Push realtime event immediately (< 10ms)
+    this.notificationEvents$.next({
+      id,
+      userId,
+      targetRole,
+      type,
+      message,
+      read: false,
+      relatedStoryId: relatedStoryId ?? null,
+      createdAt,
+    });
+
+    return id;
   }
+
 
   async notifyEditorsOfSubmission(storyTitle: string, storyId: string): Promise<void> {
     const editors = await this.prisma.query<{ id: string }>(
@@ -306,6 +415,7 @@ export class NotificationsService {
         'STORY_SUBMITTED',
         `New story submitted for review: "${storyTitle}"`,
         storyId,
+        'EDITOR',
       );
     }
   }
@@ -321,6 +431,7 @@ export class NotificationsService {
         'CONTENT_REPORTED',
         `Content Flagged: "${targetTitle}" was reported for "${reason}". Please review in Content Moderation.`,
         storyId,
+        'EDITOR',
       );
     }
   }
@@ -403,7 +514,7 @@ export class NotificationsService {
     await this.createNotification(
       authorId,
       'STORY_APPROVED_EMAGAZINE',
-      `Congratulations! Your submission "${storyTitle}" has been approved for the AKAM E-Magazine edition.`,
+      `Congratulations! Your submission "${storyTitle}" has been approved for the AKAM Magazine edition.`,
       storyId,
     );
   }
@@ -412,7 +523,7 @@ export class NotificationsService {
     await this.createNotification(
       authorId,
       'STORY_PUBLISHED_EMAGAZINE',
-      `Congratulations! Your submission "${storyTitle}" has been officially published in the AKAM E-Magazine edition!`,
+      `Congratulations! Your submission "${storyTitle}" has been officially published in the AKAM Magazine edition!`,
       storyId,
     );
   }
@@ -458,6 +569,8 @@ export class NotificationsService {
         editor.id,
         'STUDENT_APPLICATION_SUBMITTED',
         `New Student Scholar Pass Application: "${applicantName}" (${institution}) submitted credentials for review [Ref: ${referenceId}].`,
+        undefined,
+        'EDITOR',
       );
     }
   }

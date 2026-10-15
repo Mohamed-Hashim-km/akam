@@ -1,9 +1,20 @@
-import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Param,
+  Query,
+  UseGuards,
+  Req,
+  Res,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { EditionsService } from './editions.service.js';
 import { OptionalJwtAuthGuard } from '../auth/guards/optional-jwt-auth.guard.js';
 import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
 import type { AuthUser } from '../auth/decorators/current-user.decorator.js';
+import type { Request, Response } from 'express';
 
 @ApiTags('Editions')
 @Controller('editions')
@@ -26,6 +37,26 @@ export class EditionsController {
     return this.editionsService.findAllPublished(user?.id, user?.role);
   }
 
+  @Get(':id/read-pdf')
+  @UseGuards(OptionalJwtAuthGuard)
+  @ApiOperation({ summary: 'Stream protected edition PDF for reader' })
+  async streamPdf(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthUser | undefined,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    const hasAccess = await this.editionsService.checkUserHasSubscription(user?.id, user?.role);
+    if (!hasAccess) {
+      throw new ForbiddenException('An active subscription is required to read this edition.');
+    }
+    const realPdfUrl = await this.editionsService.getRealPdfUrl(id);
+    if (!realPdfUrl) {
+      throw new NotFoundException('Edition PDF not found.');
+    }
+    return this.editionsService.streamPdf(realPdfUrl, req, res);
+  }
+
   @Get(':id')
   @UseGuards(OptionalJwtAuthGuard)
   @ApiOperation({ summary: 'Get single edition by ID' })
@@ -33,3 +64,4 @@ export class EditionsController {
     return this.editionsService.findOne(id, user?.id, user?.role);
   }
 }
+

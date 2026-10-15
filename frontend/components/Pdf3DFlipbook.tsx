@@ -13,6 +13,7 @@ import {
   BookOpen,
   X,
 } from "lucide-react";
+import { apiFetch } from "@/lib/config";
 
 export interface Pdf3DFlipbookProps {
   pdfUrl: string;
@@ -108,11 +109,31 @@ export const Pdf3DFlipbook: React.FC<Pdf3DFlipbookProps> = ({
 
         if (!active) return;
 
-        const loadingTask = pdfjsLib.getDocument({
-          url: pdfUrl,
+        let docInitParams: any = {
           cMapUrl: `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/cmaps/`,
           cMapPacked: true,
-        });
+        };
+
+        try {
+          const res = await apiFetch(pdfUrl);
+          if (!res.ok) {
+            if (res.status === 403) {
+              throw new Error("Active subscription required to read this edition.");
+            }
+            throw new Error(`Failed to load edition (status ${res.status}).`);
+          }
+          const buffer = await res.arrayBuffer();
+          if (!active) return;
+          docInitParams.data = new Uint8Array(buffer);
+        } catch (fetchErr: any) {
+          if (fetchErr?.message?.includes("subscription")) {
+            throw fetchErr;
+          }
+          console.warn("[Pdf3DFlipbook] In-memory buffer fetch fallback to direct URL:", fetchErr?.message);
+          docInitParams.url = pdfUrl;
+        }
+
+        const loadingTask = pdfjsLib.getDocument(docInitParams);
 
         const pdf = await loadingTask.promise;
         if (!active) return;
@@ -267,16 +288,22 @@ export const Pdf3DFlipbook: React.FC<Pdf3DFlipbookProps> = ({
     pageFlipRef.current?.flipPrev("top");
   }, []);
 
-  // ── Keyboard navigation ───────────────────────────────────────────────────
+  // ── Keyboard navigation & Shortcut Protection ─────────────────────────────
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // Intercept and block Ctrl+S, Cmd+S, Ctrl+P, Cmd+P
+      if ((e.ctrlKey || e.metaKey) && ["s", "S", "p", "P"].includes(e.key)) {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
       if ((e.target as HTMLElement)?.tagName === "INPUT") return;
       if (e.key === "ArrowRight") handleNext();
       if (e.key === "ArrowLeft") handlePrev();
       if (e.key === "Escape" && onClose) onClose();
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("keydown", onKey, { capture: true });
+    return () => window.removeEventListener("keydown", onKey, { capture: true });
   }, [handleNext, handlePrev, onClose]);
 
   // ── Fullscreen Toggle ─────────────────────────────────────────────────────
@@ -366,6 +393,7 @@ export const Pdf3DFlipbook: React.FC<Pdf3DFlipbookProps> = ({
   return (
     <div
       ref={containerRef}
+      onContextMenu={(e) => e.preventDefault()}
       className={`fixed inset-0 z-[9999] flex flex-col bg-stone-950 select-none font-sans overflow-hidden`}
     >
       {/* ── Top Header Control Bar ───────────────────────────────────────── */}
@@ -444,7 +472,8 @@ export const Pdf3DFlipbook: React.FC<Pdf3DFlipbookProps> = ({
       {/* ── Main Book Viewport ────────────────────────────────────────────── */}
       <div
         ref={viewportRef}
-        className={`flex-1 relative flex items-center justify-center overflow-hidden bg-stone-950 p-4 ${
+        onContextMenu={(e) => e.preventDefault()}
+        className={`flex-1 relative flex items-center justify-center overflow-hidden bg-stone-950 p-4 select-none ${
           zoom > 1 ? (isPanning ? "cursor-grabbing" : "cursor-grab") : ""
         }`}
         onMouseDown={handleMouseDown}

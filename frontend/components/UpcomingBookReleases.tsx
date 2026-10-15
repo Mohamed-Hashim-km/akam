@@ -80,7 +80,7 @@ const BookCard: React.FC<{
 };
 
 export const UpcomingBookReleases: React.FC<UpcomingBookReleasesProps> = ({
-  title = "Upcoming Book Releases",
+  title = "Book Showcase",
   viewAllHref = "https://kairalibooks.com/",
   releases: initialReleases,
 }) => {
@@ -144,7 +144,7 @@ export const UpcomingBookReleases: React.FC<UpcomingBookReleasesProps> = ({
                           iconPosition="right"
                           className="group px-6 py-2.5 text-sm font-medium shadow-xs cursor-pointer"
                         >
-            <span>View All Releases</span>
+            <span>View All</span>
            </Button>
           </a>
         </div>
