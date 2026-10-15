@@ -86,6 +86,7 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
         );
       `);
       await client.query(`CREATE INDEX IF NOT EXISTS idx_free_read_user_story ON story_free_read("userId", "storyId");`);
+      await client.query(`UPDATE notification SET message = REPLACE(message, 'AKAM E-Magazine', 'AKAM Magazine') WHERE message LIKE '%AKAM E-Magazine%';`);
       client.release();
       this.logger.log('✅ Database connection established and schema verified');
     } catch (error) {

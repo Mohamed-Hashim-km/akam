@@ -194,7 +194,7 @@ export default function EditorialGuidelinesPage() {
               <Link href="/submit">
                 <button className="bg-white text-[#040706] hover:bg-slate-100 font-medium px-6 py-3 rounded-full text-sm sm:text-base inline-flex items-center gap-2 transition-all shadow-sm hover:shadow-md group cursor-pointer">
                   <PenTool className="w-4 h-4 text-[#040706]" />
-                  <span>Start Writing Now</span>
+                  <span>Join as Creator</span>
                   <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
                 </button>
               </Link>

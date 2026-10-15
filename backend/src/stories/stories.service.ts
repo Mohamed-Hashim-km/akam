@@ -93,15 +93,15 @@ export class StoriesService {
     const authorName = story.authorName || 'Author';
     const isEmagazine = type === 'EMAGAZINE';
     const subject = isEmagazine
-      ? `🎉 Your submission "${story.title}" is published in the AKAM E-Magazine!`
+      ? `🎉 Your submission "${story.title}" is published in the AKAM Magazine!`
       : `🎉 Your story "${story.title}" has been published on AKAM Digital!`;
 
     const messageHeading = isEmagazine
-      ? 'Published in AKAM E-Magazine Edition!'
+      ? 'Published in AKAM Magazine Edition!'
       : 'Published on AKAM Digital Works Catalog!';
 
     const messageBody = isEmagazine
-      ? `We are delighted to inform you that your curated submission <strong>"${story.title}"</strong> has been officially published in the AKAM Digital E-Magazine edition.`
+      ? `We are delighted to inform you that your curated submission <strong>"${story.title}"</strong> has been officially published in the AKAM Digital Magazine edition.`
       : `We are pleased to inform you that your story <strong>"${story.title}"</strong> has been approved and published to the live public works catalog on AKAM Digital.`;
 
     const html = `
@@ -127,7 +127,7 @@ export class StoriesService {
 <body>
   <div class="container">
     <div class="header">
-      <div class="badge">${isEmagazine ? 'E-Magazine Edition' : 'Live Publication'}</div>
+      <div class="badge">${isEmagazine ? 'Magazine Edition' : 'Live Publication'}</div>
       <h1>${messageHeading}</h1>
     </div>
     <div class="content">

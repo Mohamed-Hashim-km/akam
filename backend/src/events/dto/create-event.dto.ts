@@ -4,6 +4,8 @@ import {
   IsEnum,
   IsBoolean,
   IsArray,
+  IsNumber,
+  Min,
   MinLength,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -72,4 +74,15 @@ export class CreateEventDto {
   @IsOptional()
   @IsBoolean()
   isPublished?: boolean;
+
+  @ApiPropertyOptional({ default: false, example: false })
+  @IsOptional()
+  @IsBoolean()
+  isPaid?: boolean;
+
+  @ApiPropertyOptional({ default: 0, example: 199 })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  price?: number;
 }

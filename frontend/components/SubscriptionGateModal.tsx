@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { X, BookOpen, Shield, Download, Sparkles, Check, Lock, GraduationCap } from "lucide-react";
+import { X, BookOpen, Shield, Sparkles, Check, Lock, GraduationCap } from "lucide-react";
 import Button from "./ui/Button";
 import dynamic from "next/dynamic";
 
@@ -18,7 +18,7 @@ interface SubscriptionGateModalProps {
 
 const BENEFITS = [
   { icon: BookOpen, text: "Access all e-magazine editions — past & future" },
-  { icon: Download, text: "Download any edition as PDF" },
+  { icon: Sparkles, text: "High-resolution 3D flipbook reading experience" },
   { icon: Sparkles, text: "Curated literary picks every edition" },
   { icon: Shield, text: "Ad-free, distraction-free reading" },
 ];
@@ -119,7 +119,7 @@ const SubscriptionGateModal: React.FC<SubscriptionGateModalProps> = ({
                   100% Free for Students
                 </span>
                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-gray-100 text-gray-700 border border-gray-200">
-                  ₹399 / 6 Months
+                  ₹1 / 6 Months
                 </span>
               </div>
 
@@ -145,7 +145,7 @@ const SubscriptionGateModal: React.FC<SubscriptionGateModalProps> = ({
                   <p className="text-xs text-gray-400 font-medium uppercase tracking-wider mb-0.5">
                     6-Month Plan
                   </p>
-                  <p className="text-lg font-bold">₹399</p>
+                  <p className="text-lg font-bold">₹1</p>
                 </div>
                 <span className="bg-[#E4F953] text-gray-950 text-[10px] font-black uppercase px-2.5 py-1 rounded-lg">
                   Best Value
@@ -159,7 +159,7 @@ const SubscriptionGateModal: React.FC<SubscriptionGateModalProps> = ({
                 className="w-full justify-center cursor-pointer"
                 onClick={handleCtaClick}
               >
-                {user ? "Subscribe Now — ₹399 / 6 months" : "Sign in to Subscribe"}
+                {user ? "Subscribe Now — ₹1 / 6 months" : "Sign in to Subscribe"}
               </Button>
 
               {/* Divider */}
@@ -206,7 +206,7 @@ const SubscriptionGateModal: React.FC<SubscriptionGateModalProps> = ({
           isOpen={payUOpen}
           onClose={() => setPayUOpen(false)}
           planName="Akam Digital Pass"
-          priceAmount={399}
+          priceAmount={1}
           billingCycle="sixmonth"
           onSuccess={handleSubscribeSuccess}
         />

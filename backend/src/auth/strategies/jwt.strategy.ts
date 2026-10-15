@@ -24,6 +24,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
           if (req && req.cookies) {
             token = req.cookies['akam_token'];
           }
+          if (!token && req?.query?.token && typeof req.query.token === 'string') {
+            token = req.query.token;
+          }
           return token || ExtractJwt.fromAuthHeaderAsBearerToken()(req);
         },
       ]),

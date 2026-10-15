@@ -2,6 +2,7 @@ import React from "react";
 import Image from "next/image";
 import { ArrowRight, Play, Quote } from "lucide-react";
 import Button from "./ui/Button";
+import Link from "next/link";
 
 export interface HeroSectionProps {
   headline?: string;
@@ -13,8 +14,8 @@ export interface HeroSectionProps {
 }
 
 export const HeroSection: React.FC<HeroSectionProps> = ({
-  headline = "Where\nMalayalam\nstories live.",
-  subheadline = "Discover stories, voices, and ideas that celebrate the richness of Malayalam literature and culture.",
+  headline = "Where\nMalayalam\nliterature lives.",
+  subheadline = "Discover literature, voices, and ideas that celebrate the richness of Malayalam culture.",
   ctaText = "Explore Works",
   ctaHref = "/works",
   imageSrc = "/images/home/hero.webp",
@@ -35,7 +36,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
           </p>
 
           <div className="pt-2">
-            <a href={ctaHref}>
+            <Link href={ctaHref}>
               <Button
                 variant="primary"
                 size="md"
@@ -45,7 +46,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
               >
                 {ctaText}
               </Button>
-            </a>
+            </Link>
           </div>
         </div>
 

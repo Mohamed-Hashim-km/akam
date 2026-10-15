@@ -1,5 +1,6 @@
-import { Controller, Get, Post, Param, Query, Body, Req, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Param, Query, Body, Req, Res, UseGuards, HttpCode, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
+import type { Response as ExpressResponse } from 'express';
 import { EventsService } from './events.service.js';
 import { EventType } from './events.types.js';
 import { RegisterEventDto } from './dto/register-event.dto.js';
@@ -44,10 +45,63 @@ export class EventsController {
     return this.eventsService.findPastArchivesPaginated(pageNum, limitNum);
   }
 
+  /**
+   * POST /api/events/payu/callback — browser callback from PayU gateway for event tickets
+   */
+  @Post('payu/callback')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'PayU callback endpoint for paid event registrations' })
+  async payUEventCallback(@Req() req: any, @Res() res: ExpressResponse) {
+    const body = req.body || {};
+    const frontendUrl = this.eventsService.getFrontendUrl();
+
+    try {
+      const verification = this.eventsService.verifyPayUResponse(body);
+
+      if (verification.isValid && verification.status === 'success') {
+        // Automatically confirm event registration and dispatch email!
+        await this.eventsService.confirmPaidEventRegistration(verification.txnid, body);
+
+        return res.redirect(
+          302,
+          `${frontendUrl}/events/thank-you?status=success&txnid=${encodeURIComponent(verification.txnid)}`,
+        );
+      } else {
+        const errorMsg = verification.errorMessage || 'Payment was not successful or cancelled';
+        return res.redirect(
+          302,
+          `${frontendUrl}/events/thank-you?status=failed&reason=${encodeURIComponent(errorMsg)}&txnid=${encodeURIComponent(verification.txnid || '')}`,
+        );
+      }
+    } catch (err: any) {
+      return res.redirect(
+        302,
+        `${frontendUrl}/events/thank-you?status=failed&reason=${encodeURIComponent(err.message || 'Payment error')}`,
+      );
+    }
+  }
+
+  @Get('registration/:identifier')
+  @ApiOperation({ summary: 'Get confirmed event registration by txnId or registration ID' })
+  getRegistration(@Param('identifier') identifier: string) {
+    return this.eventsService.getRegistrationByTxnOrId(identifier);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get published event by ID' })
   findOne(@Param('id') id: string) {
     return this.eventsService.findOne(id);
+  }
+
+  @Post(':id/bolt-payload')
+  @UseGuards(OptionalJwtAuthGuard)
+  @ApiOperation({ summary: 'Generate PayU Bolt payload for paid event registration' })
+  getBoltPayload(
+    @Param('id') id: string,
+    @Body() body: { name: string; email: string; phone?: string },
+    @Req() req: any,
+  ) {
+    return this.eventsService.createBoltPayloadForEvent(id, body, req.user?.id);
   }
 
   @Post(':id/register')

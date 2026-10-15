@@ -116,7 +116,7 @@ const FreemiumPaywall: React.FC<FreemiumPaywallProps> = ({
                 className="whitespace-nowrap cursor-pointer"
                 onClick={handleCTA}
               >
-                {isLoggedIn ? "Subscribe — ₹399 / 6 Mo" : "Sign in to Subscribe"}
+                {isLoggedIn ? "Subscribe — ₹1 / 6 Mo" : "Sign in to Subscribe"}
               </Button>
               <button
                 type="button"
@@ -158,7 +158,7 @@ const FreemiumPaywall: React.FC<FreemiumPaywallProps> = ({
           isOpen={payUOpen}
           onClose={() => setPayUOpen(false)}
           planName="Akam Digital Pass"
-          priceAmount={399}
+          priceAmount={1}
           billingCycle="sixmonth"
           onSuccess={handleSubscribeSuccess}
         />

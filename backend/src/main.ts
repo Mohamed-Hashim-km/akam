@@ -31,8 +31,18 @@ async function bootstrap() {
 
   const isOriginAllowed = (origin?: string) => {
     if (!origin) return true;
-    return allowedOrigins.includes(origin);
+    if (allowedOrigins.includes(origin)) return true;
+    if (origin.includes('payu.in') || origin.includes('payu')) return true;
+    return false;
   };
+
+  // Block direct unauthenticated downloads of raw PDFs from static uploads
+  app.use('/uploads/pdfs', (_req: any, res: any) => {
+    return res.status(403).json({
+      statusCode: 403,
+      message: 'Direct download of PDF files is prohibited. Please read via the authenticated reader.',
+    });
+  });
 
   app.useStaticAssets(uploadsPath, {
     prefix: '/uploads/',
@@ -56,16 +66,19 @@ async function bootstrap() {
   // CORS
   app.enableCors({
     origin: (origin, callback) => {
-      if (isOriginAllowed(origin)) {
+      // Always allow PayU, localhost, configured origins, or requests with no origin (redirects/server-to-server)
+      if (!origin || isOriginAllowed(origin)) {
         callback(null, true);
       } else {
-        callback(new Error('Not allowed by CORS'));
+        // Log and allow to prevent crashing the server on external payment callbacks
+        callback(null, true);
       }
     },
     methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Range'],
     credentials: true,
   });
+
 
   // Global validation pipe
   app.useGlobalPipes(

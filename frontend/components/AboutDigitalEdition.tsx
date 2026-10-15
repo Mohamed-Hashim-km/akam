@@ -34,8 +34,8 @@ export const AboutDigitalEdition: React.FC<AboutDigitalEditionProps> = ({
 
   const keyFeatures = [
     {
-      title: "Multi-Format Access:",
-      text: "Read online via our web viewer or download offline PDFs for on-the-go reading.",
+      title: "Interactive 3D Reader:",
+      text: "Read online anytime via our immersive interactive 3D digital flipbook reader.",
     },
     {
       title: "Interactive Media:",
@@ -105,7 +105,7 @@ export const AboutDigitalEdition: React.FC<AboutDigitalEditionProps> = ({
             <div className="flex justify-center mb-6">
               <div className="bg-gray-50 border border-gray-200/90 px-4 py-1.5 rounded-full inline-flex items-center gap-2 text-xs font-semibold text-gray-700">
                 <span className="w-2 h-2 rounded-full bg-[#22B573] animate-pulse" />
-                <span>Akam Digital Pass — 6 Months Unlimited Reading for ₹399</span>
+                <span>Akam Digital Pass — 6 Months Unlimited Reading for ₹1</span>
               </div>
             </div>
 
@@ -218,13 +218,13 @@ export const AboutDigitalEdition: React.FC<AboutDigitalEditionProps> = ({
 
                   <div className="mt-3 mb-1.5 flex items-baseline">
                     <span className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-                      ₹399
+                      ₹1
                     </span>
-                    <span className="text-xs text-white/80 font-medium ml-1.5">/ 6 months (~₹66/mo)</span>
+                    <span className="text-xs text-white/80 font-medium ml-1.5">/ 6 months</span>
                   </div>
 
                   <p className="text-xs text-white/95 font-normal leading-relaxed">
-                    Complete unhindered access to every edition, subscriber audio recitals, and offline PDFs.
+                    Complete unhindered access to every edition, subscriber audio recitals, and interactive flipbook.
                   </p>
                 </div>
 

@@ -22,6 +22,7 @@ export interface EventItem {
   time: string;
   day: string;
   monthYear: string;
+  eventDate?: string;
   imageSrc?: string;
   image?: string;
   imageUrl?: string;
@@ -29,6 +30,8 @@ export interface EventItem {
   registerHref?: string;
   featured?: boolean;
   type?: string;
+  isPaid?: boolean;
+  price?: number;
 }
 
 export interface UpcomingEventsProps {
@@ -47,7 +50,15 @@ function getImageUrl(url: string | null | undefined): string {
   return url;
 }
 
-const isUpcomingDate = (day?: string | null, monthYear?: string | null) => {
+const isUpcomingDate = (day?: string | null, monthYear?: string | null, eventDate?: string | Date | null) => {
+  if (eventDate) {
+    const d = new Date(eventDate);
+    if (!isNaN(d.getTime())) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      return d >= today;
+    }
+  }
   if (!day || !monthYear) return true;
   try {
     const parts = day.split(/[-–—]|to/i).map((s) => s.trim());
@@ -88,13 +99,15 @@ export const UpcomingEvents: React.FC<UpcomingEventsProps> = ({
     if (initialEvents === undefined) {
       const fetchEvents = async () => {
         try {
-          const res = await fetch(`${API_BASE_URL}/events`);
+          const res = await fetch(`${API_BASE_URL}/events?upcoming=true&limit=10`);
           if (res.ok) {
             const data = await res.json();
-            if (Array.isArray(data)) {
-              const upcomingOnly = data.filter((e: any) => {
+            const list = Array.isArray(data) ? data : (data?.data ?? []);
+            if (Array.isArray(list)) {
+              const upcomingOnly = list.filter((e: any) => {
+                if (e.isPublished === false) return false;
                 if (e.type === "PAST_ARCHIVE") return false;
-                return isUpcomingDate(e.day, e.monthYear);
+                return isUpcomingDate(e.day, e.monthYear, e.eventDate);
               });
 
               const mapped: EventItem[] = upcomingOnly.map((e: any) => ({
@@ -105,11 +118,14 @@ export const UpcomingEvents: React.FC<UpcomingEventsProps> = ({
                 time: e.time || "",
                 day: e.day || "",
                 monthYear: e.monthYear || "",
-                imageSrc: e.imageSrc || e.image || e.imageUrl || e.coverImage || "",
-                image: e.imageSrc || e.image || e.imageUrl || e.coverImage || "",
+                eventDate: e.eventDate,
+                imageSrc: e.imageSrc || (Array.isArray(e.images) && e.images[0]) || e.image || e.imageUrl || e.coverImage || "",
+                image: e.imageSrc || (Array.isArray(e.images) && e.images[0]) || e.image || e.imageUrl || e.coverImage || "",
                 registerHref: e.registerHref || undefined,
                 featured: e.type === "READING_SESSION",
                 type: e.type,
+                isPaid: Boolean(e.isPaid),
+                price: e.price !== undefined ? Number(e.price) : 0,
               }));
               setFetchedEvents(mapped);
             }
@@ -198,6 +214,7 @@ export const UpcomingEvents: React.FC<UpcomingEventsProps> = ({
 
                     {/* Dark Gradient Overlay */}
                     <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent" />
+
 
                     {/* Card Content Overlay */}
                     <div className="relative z-10 p-6 sm:p-7 flex flex-col justify-end h-full">

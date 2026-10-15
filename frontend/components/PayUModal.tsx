@@ -1,19 +1,22 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { API_BASE_URL, apiFetch } from "@/lib/config";
-import {
-  X,
-  CreditCard,
-  Building2,
-  Smartphone,
-  Lock,
-  Loader2,
-  CheckCircle2,
-  Sparkles,
-  ArrowRight,
-  AlertCircle,
-} from "lucide-react";
+import { Loader2, X, AlertCircle } from "lucide-react";
+
+declare global {
+  interface Window {
+    bolt?: {
+      launch: (
+        payload: Record<string, any>,
+        handlers: {
+          responseHandler: (response: any) => void;
+          catchException: (error: any) => void;
+        },
+      ) => void;
+    };
+  }
+}
 
 export interface PayUModalProps {
   isOpen: boolean;
@@ -27,401 +30,223 @@ export interface PayUModalProps {
 export const PayUModal: React.FC<PayUModalProps> = ({
   isOpen,
   onClose,
-  planName = "Akam Digital Pass",
+  planName = "6-Month Akam Digital Pass",
   billingCycle = "sixmonth",
-  priceAmount = 399,
+  priceAmount = 1,
   onSuccess,
 }) => {
-  const [paymentStep, setPaymentStep] = useState<"checkout" | "processing" | "success" | "error">("checkout");
-  const [paymentMethod, setPaymentMethod] = useState<"upi" | "card" | "netbanking">("upi");
+  const [status, setStatus] = useState<"launching" | "open" | "error">("launching");
+  const [errorMsg, setErrorMsg] = useState("");
+  const launchedRef = useRef(false);
 
-  // Form Inputs
-  const [upiId, setUpiId] = useState("demo.reader@upi");
-  const [cardNumber, setCardNumber] = useState("4111 2222 3333 4444");
-  const [cardExpiry, setCardExpiry] = useState("12/28");
-  const [cardCvc, setCardCvc] = useState("888");
-  const [cardHolder, setCardHolder] = useState("Akam Reader");
-  const [selectedBank, setSelectedBank] = useState("HDFC Bank");
-  const [txnId, setTxnId] = useState("");
+  useEffect(() => {
+    if (!isOpen) {
+      launchedRef.current = false;
+      setStatus("launching");
+      setErrorMsg("");
+      return;
+    }
+
+    if (launchedRef.current) return;
+    launchedRef.current = true;
+
+    const launchPayUModal = async () => {
+      setStatus("launching");
+      setErrorMsg("");
+
+      try {
+        // Ensure PayU Bolt script is loaded
+        if (typeof window !== "undefined" && !window.bolt) {
+          await new Promise<void>((resolve, reject) => {
+            const existingScript = document.querySelector('script[src*="bolt.min.js"]');
+            if (existingScript && window.bolt) {
+              resolve();
+              return;
+            }
+            const script = document.createElement("script");
+            const isProdPayU = process.env.NEXT_PUBLIC_PAYU_ENV === "PRODUCTION";
+            script.src = isProdPayU
+              ? "https://jssdk.payu.in/bolt/bolt.min.js"
+              : "https://jssdk-uat.payu.in/bolt/bolt.min.js";
+            script.async = true;
+            script.onload = () => resolve();
+            script.onerror = () => reject(new Error("Failed to load PayU Checkout SDK"));
+            document.head.appendChild(script);
+          });
+        }
+
+        // Fetch secure PayU Bolt payload & SHA-512 Hash from backend
+        const res = await apiFetch(`${API_BASE_URL}/subscription/payu/bolt-payload`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            planType: "SIX_MONTH",
+            amount: priceAmount,
+          }),
+        });
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.message || "Failed to initialize PayU payment session");
+        }
+
+        const boltPayload = await res.json();
+
+        if (!window.bolt || typeof window.bolt.launch !== "function") {
+          throw new Error("PayU Bolt gateway is not available");
+        }
+
+        setStatus("open");
+
+        // Directly launch the official PayU checkout modal popup on the site
+        window.bolt.launch(
+          {
+            key: boltPayload.key,
+            txnid: boltPayload.txnid,
+            hash: boltPayload.hash,
+            amount: boltPayload.amount,
+            firstname: boltPayload.firstname,
+            email: boltPayload.email,
+            phone: boltPayload.phone,
+            productinfo: boltPayload.productinfo,
+            surl: boltPayload.surl,
+            furl: boltPayload.furl,
+            mode: "dropout",
+          },
+          {
+            responseHandler: async function (BOLT: any) {
+              console.log("[PayU Bolt Response]:", BOLT);
+
+              const response = BOLT?.response;
+              if (response && response.txnStatus === "SUCCESS") {
+                const finalTxn = response.txnid || boltPayload.txnid;
+
+                try {
+                  const activateRes = await apiFetch(`${API_BASE_URL}/subscription/activate`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ txnId: finalTxn }),
+                  });
+
+                  if (activateRes.ok) {
+                    const data = await activateRes.json();
+                    const rawUser = localStorage.getItem("akam_user");
+                    if (rawUser) {
+                      const userObj = JSON.parse(rawUser);
+                      localStorage.setItem(
+                        "akam_user",
+                        JSON.stringify({
+                          ...userObj,
+                          subscriptionStatus: "ACTIVE",
+                          subscriptionEndDate: data.endDate ?? null,
+                          isStudent: false,
+                        }),
+                      );
+                    }
+                  }
+                } catch (err) {
+                  console.error("Failed to sync subscription status:", err);
+                }
+
+                if (typeof window !== "undefined") {
+                  localStorage.setItem("akam_masika_pass", "true");
+                  localStorage.setItem("akam_pass_type", planName);
+                  localStorage.setItem("akam_pass_cycle", billingCycle);
+                  localStorage.setItem("akam_pass_txn", finalTxn);
+                  localStorage.setItem("akam_pass_date", new Date().toISOString());
+                  window.dispatchEvent(new Event("akam_user_updated"));
+                }
+
+                if (onSuccess) onSuccess();
+                onClose();
+              } else if (response && response.txnStatus === "CANCEL") {
+                onClose();
+              } else {
+                setErrorMsg(response?.error_Message || "Payment was not completed.");
+                setStatus("error");
+              }
+            },
+            catchException: function (err: any) {
+              console.error("[PayU Bolt Exception]:", err);
+              setErrorMsg(err?.message || "PayU Checkout modal was closed or encountered an error.");
+              setStatus("error");
+            },
+          },
+        );
+      } catch (err: any) {
+        console.error("[PayU] Failed to launch PayU modal:", err);
+        setErrorMsg(err.message || "Failed to open PayU gateway modal");
+        setStatus("error");
+      }
+    };
+
+    launchPayUModal();
+  }, [isOpen, priceAmount, planName, billingCycle, onSuccess, onClose]);
 
   if (!isOpen) return null;
 
-  const handleSimulatePayment = (successOutcome: boolean = true) => {
-    setPaymentStep("processing");
-
-    setTimeout(async () => {
-      if (successOutcome) {
-        const generatedTxn = `TXN-PAYU-${Math.floor(1000000 + Math.random() * 9000000)}`;
-        setTxnId(generatedTxn);
-        if (typeof window !== "undefined") {
-          // Legacy localStorage keys (kept for compatibility)
-          localStorage.setItem("akam_masika_pass", "true");
-          localStorage.setItem("akam_pass_type", planName);
-          localStorage.setItem("akam_pass_cycle", billingCycle);
-          localStorage.setItem("akam_pass_txn", generatedTxn);
-          localStorage.setItem("akam_pass_date", new Date().toISOString());
-
-          // Persist subscription in DB and update user object in localStorage
-          try {
-            const res = await apiFetch(`${API_BASE_URL}/subscription/activate`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ txnId: generatedTxn }),
-            });
-            if (res.ok) {
-              const data = await res.json();
-              const rawUser = localStorage.getItem("akam_user");
-              if (rawUser) {
-                const userObj = JSON.parse(rawUser);
-                localStorage.setItem(
-                  "akam_user",
-                  JSON.stringify({
-                    ...userObj,
-                    subscriptionStatus: "ACTIVE",
-                    subscriptionEndDate: data.endDate ?? null,
-                    isStudent: false,
-                  }),
-                );
-                // Notify all useSubscription hooks to refresh
-                window.dispatchEvent(new Event("akam_user_updated"));
-              }
-            }
-          } catch {
-            // Even if backend call fails, UI proceeds — next login will sync
-          }
-        }
-        setPaymentStep("success");
-        if (onSuccess) onSuccess();
-      } else {
-        setPaymentStep("error");
-      }
-    }, 1500);
-  };
-
-  const handleResetModal = () => {
-    setPaymentStep("checkout");
-    onClose();
-  };
-
-  const formattedAmount = priceAmount;
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-sm animate-in fade-in">
-      <div className="relative w-full max-w-lg bg-white rounded-[24px] sm:rounded-[28px] shadow-2xl font-poppins overflow-hidden border border-gray-100 max-h-[92vh] flex flex-col">
-        {/* PayU Branded Top Header */}
-        <div className="bg-[#002842] text-white px-5 sm:px-6 py-4 flex items-center justify-between shrink-0 border-b border-emerald-500/30">
-          <div className="flex items-center gap-3">
-            <div className="bg-[#75c043] text-[#002842] px-2 py-1 rounded-md font-black text-xs tracking-tighter">
-              PayU
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-bold text-white tracking-wide">PayU Biz / Payment Gateway</span>
-                <span className="bg-emerald-500/20 text-emerald-300 text-[9px] sm:text-[10px] font-mono px-2 py-0.5 rounded-full border border-emerald-500/40">
-                  SANDBOX
-                </span>
-              </div>
-              <p className="text-[11px] text-gray-300">Merchant: AKAM DIGITAL PUBLICATIONS</p>
-            </div>
+  // If the PayU modal is launching, show a minimal loading backdrop
+  if (status === "launching" || status === "open") {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+        <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl flex flex-col items-center text-center space-y-3">
+          <Loader2 className="w-9 h-9 text-[#22B573] animate-spin" />
+          <div>
+            <h4 className="text-sm font-bold text-gray-900">Opening PayU Payment Gateway...</h4>
+            <p className="text-xs text-gray-500 mt-1">Connecting to official PayU checkout modal</p>
           </div>
           <button
-            onClick={handleResetModal}
-            className="p-1.5 text-gray-300 hover:text-white rounded-full hover:bg-white/10 transition cursor-pointer"
-            aria-label="Close modal"
+            type="button"
+            onClick={onClose}
+            className="text-xs text-gray-400 hover:text-gray-600 pt-2 cursor-pointer"
           >
+            Cancel
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Error fallback card if browser blocks popup/iframe or network fails
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in">
+      <div className="bg-white rounded-3xl p-6 sm:p-7 max-w-md w-full shadow-2xl space-y-4">
+        <div className="flex items-center justify-between pb-2 border-b border-gray-100">
+          <div className="flex items-center gap-2">
+            <span className="bg-[#75c043] text-[#002842] px-2 py-0.5 rounded font-black text-xs">PayU</span>
+            <span className="text-sm font-bold text-gray-900">PayU Payment</span>
+          </div>
+          <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600 rounded-full">
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Modal Content Scroll Area */}
-        <div className="p-5 sm:p-6 overflow-y-auto space-y-5">
-          {paymentStep === "checkout" && (
-            <>
-              {/* Order Summary Pill */}
-              <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 flex items-center justify-between">
-                <div>
-                  <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Plan Selected</span>
-                  <h4 className="text-sm sm:text-base font-bold text-gray-900">
-                    {planName} ({billingCycle === "monthly" ? "Monthly" : "Annual Billing"})
-                  </h4>
-                  <p className="text-xs text-gray-500 mt-0.5">All-access reading & PDF downloads</p>
-                </div>
-                <div className="text-right">
-                  <span className="text-xl sm:text-2xl font-extrabold text-[#22B573]">₹{formattedAmount}</span>
-                  <span className="block text-[10px] text-gray-400">Incl. all taxes</span>
-                </div>
-              </div>
+        <div className="text-center py-4 space-y-2">
+          <div className="w-12 h-12 bg-red-100 text-red-600 rounded-full mx-auto flex items-center justify-center">
+            <AlertCircle className="w-6 h-6 stroke-[2.5]" />
+          </div>
+          <h3 className="text-base font-bold text-gray-900">Payment Notice</h3>
+          <p className="text-xs text-gray-500 max-w-xs mx-auto">{errorMsg || "Payment cancelled or could not be initiated."}</p>
+        </div>
 
-              {/* Sandbox Quick Fill Alert */}
-              <div className="bg-emerald-50/70 border border-emerald-200 text-emerald-900 rounded-xl p-3 text-xs flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-emerald-600 shrink-0" />
-                  <span>Test sandbox credentials pre-loaded for demonstration.</span>
-                </div>
-              </div>
-
-              {/* Payment Method Tabs */}
-              <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">
-                  Select Payment Method
-                </label>
-                <div className="grid grid-cols-3 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMethod("upi")}
-                    className={`p-3 rounded-xl border text-xs font-semibold flex flex-col items-center gap-1.5 transition cursor-pointer ${
-                      paymentMethod === "upi"
-                        ? "border-[#22B573] bg-emerald-50/40 text-gray-950 ring-1 ring-[#22B573]"
-                        : "border-gray-200 text-gray-600 hover:bg-gray-50"
-                    }`}
-                  >
-                    <Smartphone className="w-4 h-4 text-[#22B573]" />
-                    <span>UPI / QR</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMethod("card")}
-                    className={`p-3 rounded-xl border text-xs font-semibold flex flex-col items-center gap-1.5 transition cursor-pointer ${
-                      paymentMethod === "card"
-                        ? "border-[#22B573] bg-emerald-50/40 text-gray-950 ring-1 ring-[#22B573]"
-                        : "border-gray-200 text-gray-600 hover:bg-gray-50"
-                    }`}
-                  >
-                    <CreditCard className="w-4 h-4 text-[#22B573]" />
-                    <span>Cards</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMethod("netbanking")}
-                    className={`p-3 rounded-xl border text-xs font-semibold flex flex-col items-center gap-1.5 transition cursor-pointer ${
-                      paymentMethod === "netbanking"
-                        ? "border-[#22B573] bg-emerald-50/40 text-gray-950 ring-1 ring-[#22B573]"
-                        : "border-gray-200 text-gray-600 hover:bg-gray-50"
-                    }`}
-                  >
-                    <Building2 className="w-4 h-4 text-[#22B573]" />
-                    <span>Net Banking</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Payment Method Details Form */}
-              <div className="border border-gray-200 rounded-2xl p-4 bg-gray-50/40 space-y-3">
-                {paymentMethod === "upi" && (
-                  <div className="space-y-3">
-                    <div>
-                      <label className="block text-[11px] font-semibold text-gray-600 mb-1">
-                        Virtual Payment Address (UPI ID)
-                      </label>
-                      <input
-                        type="text"
-                        value={upiId}
-                        onChange={(e) => setUpiId(e.target.value)}
-                        placeholder="yourname@okhdfcbank"
-                        className="w-full px-3.5 py-2.5 bg-white border border-gray-300 rounded-xl text-xs font-mono text-gray-900 focus:outline-none focus:border-[#22B573] focus:ring-1 focus:ring-[#22B573]"
-                      />
-                    </div>
-                    <div className="flex items-center gap-2 pt-1 text-[11px] text-gray-500">
-                      <span className="font-semibold text-gray-700">Supported apps:</span>
-                      <span className="bg-white px-2 py-0.5 rounded border border-gray-200 text-[10px]">Google Pay</span>
-                      <span className="bg-white px-2 py-0.5 rounded border border-gray-200 text-[10px]">PhonePe</span>
-                      <span className="bg-white px-2 py-0.5 rounded border border-gray-200 text-[10px]">Paytm</span>
-                    </div>
-                  </div>
-                )}
-
-                {paymentMethod === "card" && (
-                  <div className="space-y-3">
-                    <div>
-                      <label className="block text-[11px] font-semibold text-gray-600 mb-1">Card Number</label>
-                      <input
-                        type="text"
-                        value={cardNumber}
-                        onChange={(e) => setCardNumber(e.target.value)}
-                        placeholder="4111 2222 3333 4444"
-                        className="w-full px-3.5 py-2.5 bg-white border border-gray-300 rounded-xl text-xs font-mono text-gray-900 focus:outline-none focus:border-[#22B573] focus:ring-1 focus:ring-[#22B573]"
-                      />
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-[11px] font-semibold text-gray-600 mb-1">Expiry Date</label>
-                        <input
-                          type="text"
-                          value={cardExpiry}
-                          onChange={(e) => setCardExpiry(e.target.value)}
-                          placeholder="MM/YY"
-                          className="w-full px-3.5 py-2.5 bg-white border border-gray-300 rounded-xl text-xs font-mono text-gray-900 focus:outline-none focus:border-[#22B573] focus:ring-1 focus:ring-[#22B573]"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[11px] font-semibold text-gray-600 mb-1">CVV</label>
-                        <input
-                          type="password"
-                          maxLength={4}
-                          value={cardCvc}
-                          onChange={(e) => setCardCvc(e.target.value)}
-                          placeholder="888"
-                          className="w-full px-3.5 py-2.5 bg-white border border-gray-300 rounded-xl text-xs font-mono text-gray-900 focus:outline-none focus:border-[#22B573] focus:ring-1 focus:ring-[#22B573]"
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-semibold text-gray-600 mb-1">Cardholder Name</label>
-                      <input
-                        type="text"
-                        value={cardHolder}
-                        onChange={(e) => setCardHolder(e.target.value)}
-                        placeholder="Name on card"
-                        className="w-full px-3.5 py-2.5 bg-white border border-gray-300 rounded-xl text-xs text-gray-900 focus:outline-none focus:border-[#22B573] focus:ring-1 focus:ring-[#22B573]"
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {paymentMethod === "netbanking" && (
-                  <div className="space-y-3">
-                    <label className="block text-[11px] font-semibold text-gray-600 mb-1">Choose Bank</label>
-                    <select
-                      value={selectedBank}
-                      onChange={(e) => setSelectedBank(e.target.value)}
-                      className="w-full px-3.5 py-2.5 bg-white border border-gray-300 rounded-xl text-xs text-gray-900 focus:outline-none focus:border-[#22B573] focus:ring-1 focus:ring-[#22B573]"
-                    >
-                      <option value="HDFC Bank">HDFC Bank</option>
-                      <option value="State Bank of India">State Bank of India (SBI)</option>
-                      <option value="ICICI Bank">ICICI Bank</option>
-                      <option value="Federal Bank">Federal Bank</option>
-                      <option value="Axis Bank">Axis Bank</option>
-                      <option value="Kerala Gramin Bank">Kerala Gramin Bank</option>
-                    </select>
-                    <p className="text-[11px] text-gray-500">
-                      You will be routed to your bank’s simulated authorization portal.
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              {/* Security Badge */}
-              <div className="flex items-center justify-center gap-2 text-[11px] text-gray-400">
-                <Lock className="w-3.5 h-3.5 text-gray-400" />
-                <span>256-bit SSL encrypted • 100% Secure RBI 3DS2 Gateway</span>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="space-y-2">
-                <button
-                  type="button"
-                  onClick={() => handleSimulatePayment(true)}
-                  className="w-full py-3 px-4 rounded-xl bg-[#22B573] hover:bg-[#1fa769] text-white font-bold text-sm shadow-sm transition flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <span>Pay ₹{formattedAmount} via PayU</span>
-                  <ArrowRight className="w-4 h-4" />
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleSimulatePayment(false)}
-                  className="w-full py-2 px-3 text-[11px] text-gray-400 hover:text-gray-600 transition text-center cursor-pointer"
-                >
-                  Test Fail Payment (Sandbox simulation)
-                </button>
-              </div>
-            </>
-          )}
-
-          {paymentStep === "processing" && (
-            <div className="py-12 flex flex-col items-center justify-center text-center space-y-4">
-              <div className="relative">
-                <Loader2 className="w-12 h-12 text-[#22B573] animate-spin" />
-              </div>
-              <div>
-                <h4 className="text-base font-bold text-gray-900">Processing via PayU Gateway</h4>
-                <p className="text-xs text-gray-500 mt-1 max-w-xs mx-auto">
-                  Authorizing your transaction securely. Please do not refresh or close this window...
-                </p>
-              </div>
-            </div>
-          )}
-
-          {paymentStep === "success" && (
-            <div className="py-6 flex flex-col items-center text-center space-y-4">
-              <div className="w-14 h-14 bg-emerald-100 text-[#22B573] rounded-full flex items-center justify-center">
-                <CheckCircle2 className="w-8 h-8 stroke-[2.5]" />
-              </div>
-
-              <div>
-                <span className="text-[11px] uppercase tracking-wider font-bold text-[#22B573]">Payment Confirmed</span>
-                <h3 className="text-xl sm:text-2xl font-bold text-gray-950 mt-1">Masika Pass Activated!</h3>
-                <p className="text-xs text-gray-500 mt-1.5 max-w-sm">
-                  Thank you! Your payment has been authorized and your digital reading pass is now active.
-                </p>
-              </div>
-
-              {/* Receipt Box */}
-              <div className="w-full bg-gray-50 border border-gray-200/80 rounded-2xl p-4 text-left space-y-2 text-xs font-mono text-gray-700">
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Transaction ID:</span>
-                  <span className="font-bold text-gray-900">{txnId}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Plan:</span>
-                  <span>{planName} ({billingCycle})</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Amount Paid:</span>
-                  <span className="font-bold text-[#22B573]">₹{formattedAmount}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Date:</span>
-                  <span>{new Date().toLocaleDateString("en-IN", { dateStyle: "medium" })}</span>
-                </div>
-              </div>
-
-              <div className="w-full pt-2">
-                <button
-                  type="button"
-                  onClick={handleResetModal}
-                  className="w-full py-3 px-4 rounded-xl bg-[#22B573] hover:bg-[#1fa769] text-white font-bold text-xs sm:text-sm shadow-sm transition cursor-pointer"
-                >
-                  Start Reading Digital Editions
-                </button>
-              </div>
-            </div>
-          )}
-
-          {paymentStep === "error" && (
-            <div className="py-6 flex flex-col items-center text-center space-y-4">
-              <div className="w-14 h-14 bg-red-100 text-red-600 rounded-full flex items-center justify-center">
-                <AlertCircle className="w-8 h-8 stroke-[2.5]" />
-              </div>
-
-              <div>
-                <span className="text-[11px] uppercase tracking-wider font-bold text-red-600">Payment Failed</span>
-                <h3 className="text-xl sm:text-2xl font-bold text-gray-950 mt-1">Transaction Not Completed</h3>
-                <p className="text-xs text-gray-500 mt-1.5 max-w-sm">
-                  The test gateway returned a declined status. No amount was deducted. You can retry anytime.
-                </p>
-              </div>
-
-              <div className="w-full pt-2 space-y-2">
-                <button
-                  type="button"
-                  onClick={() => setPaymentStep("checkout")}
-                  className="w-full py-3 px-4 rounded-xl bg-gray-900 hover:bg-gray-800 text-white font-bold text-xs sm:text-sm transition cursor-pointer"
-                >
-                  Try Again
-                </button>
-                <button
-                  type="button"
-                  onClick={handleResetModal}
-                  className="w-full py-2 px-3 text-xs text-gray-400 hover:text-gray-600 cursor-pointer"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          )}
+        <div className="space-y-2">
+          <button
+            type="button"
+            onClick={() => {
+              launchedRef.current = false;
+              setStatus("launching");
+            }}
+            className="w-full py-3 px-4 rounded-xl bg-[#22B573] hover:bg-[#1fa769] text-white font-bold text-xs sm:text-sm transition cursor-pointer"
+          >
+            Retry Opening PayU
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-full py-2.5 px-4 text-xs text-gray-500 hover:text-gray-700 cursor-pointer"
+          >
+            Close
+          </button>
         </div>
       </div>
     </div>

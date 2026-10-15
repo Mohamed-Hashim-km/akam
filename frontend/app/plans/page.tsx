@@ -92,7 +92,7 @@ export default function PlansPage() {
         onClose={() => setPayUModalOpen(false)}
         planName="6-Month Akam Digital Pass"
         billingCycle="sixmonth"
-        priceAmount={399}
+        priceAmount={1}
         onSuccess={() => setIsPassActive(true)}
       />
 

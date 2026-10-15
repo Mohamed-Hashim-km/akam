@@ -326,7 +326,7 @@ const defaultCategories: FeatureCategory[] = [
       { name: "Save favourite stories", readerMember: true, masikaPass: true },
       { name: "Access past editions", readerMember: false, masikaPass: true },
       { name: "Complete digital archive", readerMember: false, masikaPass: true },
-      { name: "Downloadable PDF editions", readerMember: false, masikaPass: true },
+      { name: "Full magazine interactive 3D reader", readerMember: false, masikaPass: true },
     ],
   },
   {
@@ -434,7 +434,7 @@ export const ReadingPlansSection: React.FC<ReadingPlansSectionProps> = ({
                   6-Month Pass
                 </span>
                 <div className="text-xs sm:text-base font-semibold text-dark-bg">
-                  ₹399 <span className="block sm:inline text-[9px] sm:text-xs text-gray-400 font-normal">/ 6 months (~₹66/mo)</span>
+                  ₹1 <span className="block sm:inline text-[9px] sm:text-xs text-gray-400 font-normal">/ 6 months</span>
                 </div>
               </div>
             </div>
@@ -512,7 +512,7 @@ export const ReadingPlansSection: React.FC<ReadingPlansSectionProps> = ({
               iconPosition="right"
               className="w-full sm:w-auto group px-7 py-3 text-sm font-medium shadow-xs cursor-pointer"
             >
-              {loggedIn ? "Subscribe — ₹399 / 6 Months" : "Sign in to Subscribe"}
+              {loggedIn ? "Subscribe — ₹1 / 6 Months" : "Sign in to Subscribe"}
             </Button>
 
             {onStudentApply && (

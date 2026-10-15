@@ -147,7 +147,7 @@ export const Footer: React.FC<FooterProps> = ({
               className="bg-white text-dark-bg hover:bg-slate-100 font-medium px-6 py-3 rounded-full text-sm sm:text-base inline-flex items-center gap-2 transition-all shadow-sm hover:shadow-md group cursor-pointer"
             >
               <PenTool className="w-4 h-4 text-dark-bg" />
-              <span>Start Writing Now</span>
+              <span>Join as Creator</span>
               <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
             </button>
 

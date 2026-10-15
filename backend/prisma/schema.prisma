@@ -417,8 +417,13 @@ model Event {
   videoUrl     String?
   registerHref String?
   isPublished  Boolean   @default(true)
+  isPaid       Boolean   @default(false)
+  price        Decimal   @default(0)
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
+
+  @@map("event")
+}
 
 // ─── BOOK RELEASES PLATFORM ───────────────────────────────────────────────────
 

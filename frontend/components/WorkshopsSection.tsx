@@ -36,6 +36,8 @@ export interface WorkshopItem {
   imageAlt?: string;
   bgColor?: string;
   isPrimaryButton?: boolean;
+  isPaid?: boolean;
+  price?: number;
 }
 
 export interface WorkshopsSectionProps {

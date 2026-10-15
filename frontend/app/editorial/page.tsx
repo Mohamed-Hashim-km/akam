@@ -295,7 +295,17 @@ function EditorialDashboardContent() {
   const searchParams = useSearchParams();
 
   // Auth & RBAC State
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<any>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem("akam_user");
+        return saved ? JSON.parse(saved) : null;
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  });
 
   const [activeTab, setActiveTab] = useState<TabType>(() => {
     if (typeof window !== "undefined") {
@@ -320,6 +330,14 @@ function EditorialDashboardContent() {
 
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const mainRef = React.useRef<HTMLElement>(null);
+  const activeTabRef = React.useRef(activeTab);
+  const currentPageRef = React.useRef(currentPage);
+  useEffect(() => {
+    activeTabRef.current = activeTab;
+  }, [activeTab]);
+  useEffect(() => {
+    currentPageRef.current = currentPage;
+  }, [currentPage]);
 
   useEffect(() => {
     const tabFromUrl = searchParams.get("tab") as TabType;
@@ -334,7 +352,7 @@ function EditorialDashboardContent() {
 
     let currentTab = tabFromUrl;
     if (currentTab === "student-verifications") {
-      router.replace(`/editorial?tab=subscriptions&subTab=verifications${pageFromUrlStr ? `&page=${pageFromUrlStr}` : ""}`);
+      router.replace(`/editorial?tab=subscriptions&subTab=verifications${pageFromUrlStr ? `&page=${pageFromUrlStr}` : ""}`, { scroll: false });
       return;
     }
     if (!currentTab && typeof window !== "undefined") {
@@ -345,7 +363,7 @@ function EditorialDashboardContent() {
 
     // Enforce role access: MODERATOR can only access reports and communities tabs
     if (user?.role === "MODERATOR" && currentTab !== "reports" && currentTab !== "communities") {
-      router.replace(`/editorial?tab=reports&page=1`);
+      router.replace(`/editorial?tab=reports&page=1`, { scroll: false });
       return;
     }
 
@@ -361,15 +379,14 @@ function EditorialDashboardContent() {
       sessionStorage.setItem(`akam_editorial_page_${currentTab}`, String(pageNum));
     }
 
-    setActiveTab(currentTab);
-    setCurrentPage(pageNum);
-    mainRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+    setActiveTab((prev) => (prev !== currentTab ? currentTab : prev));
+    setCurrentPage((prev) => (prev !== pageNum ? pageNum : prev));
   }, [searchParams, user?.role]);
 
   useEffect(() => {
     if (user?.role === "MODERATOR" && activeTab !== "reports" && activeTab !== "communities") {
       setActiveTab("reports");
-      router.replace(`/editorial?tab=reports&page=1`);
+      router.replace(`/editorial?tab=reports&page=1`, { scroll: false });
     }
   }, [user?.role, activeTab]);
 
@@ -393,7 +410,7 @@ function EditorialDashboardContent() {
     setSearchQuery("");
     setMobileSidebarOpen(false);
     mainRef.current?.scrollTo({ top: 0, behavior: "smooth" });
-    router.push(`/editorial?tab=${tab}&page=${savedPage}`);
+    router.push(`/editorial?tab=${tab}&page=${savedPage}`, { scroll: false });
   };
 
   const handlePageChange = (newPage: number) => {
@@ -404,11 +421,24 @@ function EditorialDashboardContent() {
     }
     mainRef.current?.scrollTo({ top: 0, behavior: "smooth" });
     const subTabQuery = activeTab === "emagazine" ? `&subTab=${emagazineSubTab.toLowerCase()}` : "";
-    router.push(`/editorial?tab=${activeTab}${subTabQuery}&page=${newPage}`);
+    router.push(`/editorial?tab=${activeTab}${subTabQuery}&page=${newPage}`, { scroll: false });
   };
 
   // Auth & RBAC State
-  const [authChecking, setAuthChecking] = useState(true);
+  const [authChecking, setAuthChecking] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem("akam_user");
+        const parsed = saved ? JSON.parse(saved) : null;
+        if (parsed && ["EDITOR", "ADMIN", "MODERATOR"].includes(parsed.role)) {
+          return false;
+        }
+      } catch {
+        return true;
+      }
+    }
+    return true;
+  });
   const [authModalOpen, setAuthModalOpen] = useState(false);
 
   // Data & Metadata State (Server-Side Paginated & Searched)
@@ -749,6 +779,8 @@ function EditorialDashboardContent() {
   const [eventFormRegisterHref, setEventFormRegisterHref] = useState("");
   const [eventFormVideoUrl, setEventFormVideoUrl] = useState("");
   const [eventFormPublished, setEventFormPublished] = useState(true);
+  const [eventFormIsPaid, setEventFormIsPaid] = useState<boolean>(false);
+  const [eventFormPrice, setEventFormPrice] = useState<string>("");
   const [pastArchiveMediaType, setPastArchiveMediaType] = useState<"IMAGES" | "VIDEO">("IMAGES");
   const [submittingEvent, setSubmittingEvent] = useState(false);
 
@@ -1157,8 +1189,10 @@ function EditorialDashboardContent() {
     setActiveReaderImageIndex(0);
   }, [selectedStory?.id]);
 
-  const checkAuthAndFetchData = async () => {
-    setAuthChecking(true);
+  const checkAuthAndFetchData = async (initial = false) => {
+    if (initial && !user) {
+      setAuthChecking(true);
+    }
     try {
       const res = await apiFetch(`${API_BASE_URL}/users/me`);
       if (res.ok) {
@@ -1170,13 +1204,13 @@ function EditorialDashboardContent() {
         if (["EDITOR", "ADMIN", "MODERATOR"].includes(uData.role)) {
           fetchAllPlatformCategories();
           fetchPendingReportsCount();
-          let effectiveTab = activeTab;
+          let effectiveTab = activeTabRef.current;
           if (uData.role === "MODERATOR" && !["reports", "communities"].includes(effectiveTab)) {
             effectiveTab = "reports";
             setActiveTab("reports");
-            router.replace("/editorial?tab=reports&page=1");
+            router.replace("/editorial?tab=reports&page=1", { scroll: false });
           }
-          await fetchDashboardData(effectiveTab, currentPage, searchQuery);
+          await fetchDashboardData(effectiveTab, currentPageRef.current, searchQuery);
         }
       } else {
         setUser(null);
@@ -1649,6 +1683,14 @@ function EditorialDashboardContent() {
       return;
     }
 
+    if (eventFormIsPaid) {
+      const parsedPrice = parseFloat(eventFormPrice);
+      if (isNaN(parsedPrice) || parsedPrice <= 0) {
+        alert("Please enter a valid registration price (minimum ₹1) for paid events.");
+        return;
+      }
+    }
+
     setSubmittingEvent(true);
     try {
       let finalDay = eventFormDay.trim();
@@ -1711,6 +1753,8 @@ function EditorialDashboardContent() {
         videoUrl: isPastArchiveVideo ? (eventFormVideoUrl.trim() || null) : null,
         registerHref: eventFormRegisterHref.trim() || undefined,
         isPublished: eventFormPublished,
+        isPaid: eventFormIsPaid,
+        price: eventFormIsPaid ? (parseFloat(eventFormPrice) || 0) : 0,
       };
 
       const url = editingEventId ? `${API_BASE_URL}/editorial/events/${editingEventId}` : `${API_BASE_URL}/editorial/events`;
@@ -1951,6 +1995,8 @@ function EditorialDashboardContent() {
     setEventFormVideoUrl("");
     setPastArchiveMediaType("IMAGES");
     setEventFormPublished(true);
+    setEventFormIsPaid(false);
+    setEventFormPrice("");
   };
 
   const handleUpdateCommReportStatus = async (reportId: string, status: "ACTIONED" | "DISMISSED") => {
@@ -2490,8 +2536,26 @@ function EditorialDashboardContent() {
     };
   }, [activeTab, loading, catalogLoadingMore, catalogMeta, loadMoreCatalogStories]);
 
+  // Initial mount: verify credentials once & register notification updates
   useEffect(() => {
-    checkAuthAndFetchData();
+    checkAuthAndFetchData(true);
+
+    const handleNotifUpdate = () => {
+      apiFetch(`${API_BASE_URL}/notifications/unread-count`).then(async (r) => {
+        if (r.ok) {
+          const d = await r.json();
+          setUnreadNotificationCount(d.count || 0);
+        }
+      });
+      if (activeTabRef.current === "notifications") {
+        fetchDashboardData("notifications", currentPageRef.current);
+      }
+    };
+
+    window.addEventListener("akam_notification_updated", handleNotifUpdate);
+    return () => {
+      window.removeEventListener("akam_notification_updated", handleNotifUpdate);
+    };
   }, []);
 
   useEffect(() => {
@@ -2542,16 +2606,16 @@ function EditorialDashboardContent() {
 
       if (res.ok) {
         if (decision === "APPROVED") {
-          setFeedbackMessage("Submission approved and published to public works catalog! Confirmation email sent to author.");
+          setFeedbackMessage("Submission approved and published to public works catalog.");
           fetch("/api/revalidate?path=/").catch(() => {});
         } else if (decision === "PUBLISHED_EMAGAZINE") {
-          setFeedbackMessage("Submission officially published to AKAM E-Magazine! Notification email sent to author.");
+          setFeedbackMessage("Submission officially published to AKAM Magazine.");
         } else if (decision === "APPROVED_EMAGAZINE") {
-          setFeedbackMessage("Submission moved to E-Magazine Pending Queue.");
+          setFeedbackMessage("Submission moved to Magazine Pending Queue.");
         } else if (decision === "PENDING") {
           setFeedbackMessage("Story moved back to Pending Review Queue.");
         } else {
-          setFeedbackMessage("Submission rejected with feedback sent to author.");
+          setFeedbackMessage("Submission rejected.");
         }
         setSelectedStory(null);
         setRejectingStory(null);
@@ -3392,7 +3456,7 @@ function EditorialDashboardContent() {
                   }`}
                 >
                   <BookOpen className={`w-4 h-4 shrink-0 ${activeTab === "emagazine" ? "text-emerald-400" : "text-gray-400"}`} />
-                  <span>E-Magazine Collection</span>
+                  <span>Magazine Collection</span>
                 </button>
 
                 <button
@@ -3402,7 +3466,7 @@ function EditorialDashboardContent() {
                   }`}
                 >
                   <Users className={`w-4 h-4 shrink-0 ${activeTab === "authors" ? "text-emerald-400" : "text-gray-400"}`} />
-                  <span>Author Roster</span>
+                  <span>User Roster</span>
                 </button>
 
                 <button
@@ -3501,7 +3565,7 @@ function EditorialDashboardContent() {
                   }`}
                 >
                   <BookOpen className={`w-4 h-4 shrink-0 ${activeTab === "books" ? "text-emerald-400" : "text-gray-400"}`} />
-                  <span>Upcoming Book Releases</span>
+                  <span>Book Showcase</span>
                 </button>
 
                 <button
@@ -3521,7 +3585,7 @@ function EditorialDashboardContent() {
                   }`}
                 >
                   <Archive className={`w-4 h-4 shrink-0 ${activeTab === "editions" ? "text-emerald-400" : "text-gray-400"}`} />
-                  <span>E-Magazine (Digital Editions)</span>
+                  <span>Magazine (Digital Editions)</span>
                 </button>
 
                 <button
@@ -3597,16 +3661,16 @@ function EditorialDashboardContent() {
                 {activeTab === "queue" && "Pending Review Queue"}
                 {activeTab === "student-verifications" && "Student Scholarship Pass Approvals"}
                 {activeTab === "subscriptions" && "Subscription & Pass Management"}
-                {activeTab === "emagazine" && "E-Magazine Collection"}
+                {activeTab === "emagazine" && "Magazine Collection"}
                 {activeTab === "reports" && "Reported Content Moderation"}
                 {activeTab === "catalog" && "Published Content Catalog"}
-                {activeTab === "authors" && "User & Author Roster"}
+                {activeTab === "authors" && "User Roster"}
                 {activeTab === "categories" && "Categories & Taxonomy"}
                 {activeTab === "notifications" && "Editorial Audit Logs & Activity Stream"}
                 {activeTab === "settings" && "Home Page Editor's Note"}
                 {activeTab === "communities" && "Community Moderation & Management"}
                 {activeTab === "events" && "Events & Workshops Management"}
-                {activeTab === "books" && "Upcoming Book Releases Management"}
+                {activeTab === "books" && "Book Showcase Management"}
                 {activeTab === "media" && "Media Showcase Management"}
                 {activeTab === "editions" && "Previous Editions (Flipbook Archive)"}
                 {activeTab === "reviews" && "Reader Reviews & Comments"}
@@ -3618,8 +3682,10 @@ function EditorialDashboardContent() {
                 variant="secondary"
                 size="sm"
                 icon={<RefreshCw className="w-3.5 h-3.5" />}
-                iconPosition="left"
-                onClick={() => checkAuthAndFetchData()}
+                onClick={() => {
+                  fetchDashboardData(activeTab, currentPage, searchQuery, emagazineSubTab, mediaCategoryFilter);
+                  fetchPendingReportsCount();
+                }}
                 className="border border-gray-300 shadow-xs cursor-pointer shrink-0"
               >
                 Refresh Data
@@ -3630,7 +3696,7 @@ function EditorialDashboardContent() {
               {activeTab === "queue" && "Review pending author submissions and approve or reject content."}
               {activeTab === "student-verifications" && "Review uploaded student ID cards, verify credentials, and approve 100% free digital passes for students."}
               {activeTab === "subscriptions" && "Monitor active digital subscribers, student scholarship passes, revenue metrics, and grant or revoke access."}
-              {activeTab === "emagazine" && "Curated submissions for AKAM E-Magazine editions. Filter between Magazine Pending and Magazine Published, with automatic author email notifications upon publication."}
+              {activeTab === "emagazine" && "Curated submissions for AKAM Magazine editions."}
               {activeTab === "reports" && "Investigate reader flag reports submitted against published content and comments."}
               {activeTab === "catalog" && "Browse all active works (articles, Visual Art, videos) currently published on AKAM Digital."}
               {activeTab === "authors" && "Manage all registered platform users, writers, and role permissions."}
@@ -3639,7 +3705,7 @@ function EditorialDashboardContent() {
               {activeTab === "settings" && "Update the featured Editor's Note title and message displayed on the main homepage."}
               {activeTab === "communities" && "Moderate community posts and comments, lock threads, pin posts, and inspect community rosters."}
               {activeTab === "events" && "Manage upcoming reading sessions, discussions, workshops, and past archives."}
-              {activeTab === "books" && "Manage upcoming print and digital book releases."}
+              {activeTab === "books" && "Manage books, print editions, and showcase listings."}
               {activeTab === "media" && "Manage YouTube video interviews and podcast media links."}
               {activeTab === "editions" && "Upload and publish monthly digital issue PDFs."}
               {activeTab === "reviews" && "Curate reader comments and feature select reviews on the main website homepage."}
@@ -3878,10 +3944,10 @@ function EditorialDashboardContent() {
                                 type="button"
                                 onClick={() => handleReview(story.id, "APPROVED_EMAGAZINE")}
                                 className="flex-1 inline-flex items-center justify-center gap-1 py-2 px-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold rounded-xl transition-all cursor-pointer shadow-2xs active:scale-95"
-                                title="Approve for E-Magazine (stores offline for digital edition)"
+                                title="Approve for Magazine Collection (stores offline for digital edition)"
                               >
                                 <BookOpen className="w-3.5 h-3.5 text-purple-200 shrink-0" />
-                                <span className="truncate">E-Magazine</span>
+                                <span className="truncate">Magazine</span>
                               </button>
                               <button
                                 type="button"
@@ -3959,7 +4025,7 @@ function EditorialDashboardContent() {
                   <Search className="absolute left-3.5 top-3 w-4 h-4 text-gray-400" />
                   <input
                     type="text"
-                    placeholder={`Search ${emagazineSubTab === "PENDING" ? "pending" : "published"} e-magazine works...`}
+                    placeholder={`Search ${emagazineSubTab === "PENDING" ? "pending" : "published"} magazine works...`}
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-2xl text-xs font-medium outline-none focus:border-black shadow-xs"
@@ -3987,15 +4053,15 @@ function EditorialDashboardContent() {
                     {searchQuery
                       ? `No Matching ${emagazineSubTab === "PENDING" ? "Pending" : "Published"} Works`
                       : emagazineSubTab === "PENDING"
-                      ? "No Pending E-Magazine Submissions"
-                      : "No Published E-Magazine Submissions"}
+                      ? "No Pending Magazine Submissions"
+                      : "No Published Magazine Submissions"}
                   </h3>
                   <p className="text-sm text-gray-500 max-w-md mx-auto">
                     {searchQuery
-                      ? `No ${emagazineSubTab.toLowerCase()} e-magazine works matched "${searchQuery}". Try adjusting your search term.`
+                      ? `No ${emagazineSubTab.toLowerCase()} magazine works matched "${searchQuery}". Try adjusting your search term.`
                       : emagazineSubTab === "PENDING"
-                      ? "Submissions approved for the AKAM E-Magazine from the review queue will appear here waiting for publication."
-                      : "Works published in the AKAM E-Magazine edition will appear here."}
+                      ? "Submissions approved for the AKAM Magazine from the review queue will appear here waiting for publication."
+                      : "Works published in the AKAM Magazine edition will appear here."}
                   </p>
                 </div>
               ) : (
@@ -4135,12 +4201,12 @@ function EditorialDashboardContent() {
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    if (confirm(`Publish "${story.title}" to the official AKAM E-Magazine edition? An email notification will be sent to the author.`)) {
+                                    if (confirm(`Publish "${story.title}" to the official AKAM Magazine edition?`)) {
                                       handleReview(story.id, "PUBLISHED_EMAGAZINE");
                                     }
                                   }}
                                   className="flex-1 inline-flex items-center justify-center gap-1 py-2 px-2 bg-[#E4F953] hover:bg-[#d5ea44] text-[#040706] text-xs font-bold rounded-xl transition-all cursor-pointer shadow-2xs active:scale-95"
-                                  title="Publish to official E-Magazine edition (sends email to author)"
+                                  title="Publish to official Magazine edition"
                                 >
                                   <BookOpen className="w-3.5 h-3.5 text-[#040706] shrink-0" />
                                   <span className="truncate">Publish</span>
@@ -6334,9 +6400,21 @@ function EditorialDashboardContent() {
 
                         {/* Type & Status Header */}
                         <div className="flex items-center justify-between mb-3">
-                          <span className="text-[11px] font-bold px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 uppercase tracking-wider">
-                            {ev.type.replace("_", " ")}
-                          </span>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-[11px] font-bold px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 uppercase tracking-wider">
+                              {ev.type.replace("_", " ")}
+                            </span>
+                            {ev.isPaid ? (
+                              <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1 shadow-2xs">
+                                <span>₹{ev.price}</span>
+                                <span className="text-[9px] uppercase tracking-wider text-amber-700 font-semibold">• Paid</span>
+                              </span>
+                            ) : (
+                              <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-gray-100 text-gray-700 border border-gray-200">
+                                Free Entry
+                              </span>
+                            )}
+                          </div>
                           <div className="flex items-center gap-2">
                             <button
                               onClick={() => handleTogglePublishEvent(ev.id)}
@@ -6385,6 +6463,8 @@ function EditorialDashboardContent() {
                                   setPastArchiveMediaType(ev.videoUrl && ev.videoUrl.trim() ? "VIDEO" : "IMAGES");
                                 }
                                 setEventFormPublished(ev.isPublished);
+                                setEventFormIsPaid(Boolean(ev.isPaid));
+                                setEventFormPrice(ev.price !== undefined && ev.price !== null && Number(ev.price) > 0 ? String(ev.price) : "");
                                 setShowAddEventModal(true);
                               }}
                               title="Edit Event"
@@ -6484,7 +6564,7 @@ function EditorialDashboardContent() {
                   <span className="bg-purple-100 text-purple-800 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider">
                     Publishing Showcase
                   </span>
-                  <h2 className="text-2xl font-bold text-gray-950 mt-1.5 tracking-tight">Upcoming Book Releases</h2>
+                  <h2 className="text-2xl font-bold text-gray-950 mt-1.5 tracking-tight">Book Showcase</h2>
                   <p className="text-xs text-gray-500 mt-1">Manage physical book showcase cards & links displayed on the homepage.</p>
                 </div>
 
@@ -7576,9 +7656,9 @@ function EditorialDashboardContent() {
                 <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap mb-2">
                   <span className="bg-[#E4F953] text-[#040706] font-bold text-[9px] sm:text-[10px] uppercase tracking-wider px-2.5 sm:px-3 py-0.5 sm:py-1 rounded-xl shadow-xs">
                     {selectedStory.status === "PUBLISHED_EMAGAZINE"
-                      ? "PUBLISHED IN E-MAGAZINE"
+                      ? "PUBLISHED IN MAGAZINE"
                       : selectedStory.status === "APPROVED_EMAGAZINE"
-                      ? "E-MAGAZINE (PENDING)"
+                      ? "MAGAZINE (PENDING)"
                       : selectedStory.status === "APPROVED"
                       ? "PUBLISHED WORK"
                       : "REVIEWING SUBMISSION"}
@@ -7906,7 +7986,7 @@ function EditorialDashboardContent() {
                       disabled={actionLoading}
                       className="w-full sm:w-auto justify-center bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100 font-semibold cursor-pointer text-xs sm:text-sm py-2.5 sm:py-1.5 whitespace-nowrap"
                     >
-                      Approve for E-Magazine
+                      Approve for Magazine
                     </Button>
                     <Button
                       variant="primary"
@@ -7948,7 +8028,7 @@ function EditorialDashboardContent() {
                       iconPosition="left"
                       onClick={() => {
                         const sId = selectedStory.id;
-                        if (confirm("Publish this submission to the official AKAM E-Magazine edition? An email notification will be sent to the author.")) {
+                        if (confirm("Publish this submission to the official AKAM Magazine edition?")) {
                           setSelectedStory(null);
                           handleReview(sId, "PUBLISHED_EMAGAZINE");
                         }
@@ -8330,6 +8410,90 @@ function EditorialDashboardContent() {
                 </div>
               </div>
 
+              {/* Event Admission & Pricing (Free vs Paid) */}
+              <div className="bg-gray-50/80 p-4 rounded-2xl border border-gray-200/80 space-y-3">
+                <div>
+                  <label className="block text-xs font-bold text-gray-950 uppercase tracking-wider">
+                    Event Admission & Pricing
+                  </label>
+                  <p className="text-[11px] text-gray-500 font-medium mt-0.5">
+                    Specify whether this event is free or requires a paid ticket registration.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEventFormIsPaid(false);
+                      setEventFormPrice("");
+                    }}
+                    className={`flex items-center gap-2.5 p-3 rounded-xl border text-left cursor-pointer transition ${
+                      !eventFormIsPaid
+                        ? "bg-white border-black ring-1 ring-black shadow-xs"
+                        : "bg-white/60 border-gray-200 hover:bg-white text-gray-600"
+                    }`}
+                  >
+                    <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                      !eventFormIsPaid ? "border-black" : "border-gray-300"
+                    }`}>
+                      {!eventFormIsPaid && <div className="w-2 h-2 rounded-full bg-black" />}
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold text-gray-900">Free Event</div>
+                      <div className="text-[10px] text-gray-500">Free Admission</div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEventFormIsPaid(true);
+                      if (!eventFormPrice) setEventFormPrice("199");
+                    }}
+                    className={`flex items-center gap-2.5 p-3 rounded-xl border text-left cursor-pointer transition ${
+                      eventFormIsPaid
+                        ? "bg-amber-50/50 border-amber-600 ring-1 ring-amber-600 shadow-xs"
+                        : "bg-white/60 border-gray-200 hover:bg-white text-gray-600"
+                    }`}
+                  >
+                    <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                      eventFormIsPaid ? "border-amber-600" : "border-gray-300"
+                    }`}>
+                      {eventFormIsPaid && <div className="w-2 h-2 rounded-full bg-amber-600" />}
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold text-amber-950">Paid Event</div>
+                      <div className="text-[10px] text-amber-700">Online PayU Ticket</div>
+                    </div>
+                  </button>
+                </div>
+
+                {eventFormIsPaid && (
+                  <div className="pt-2 animate-in fade-in">
+                    <label className="block text-xs font-bold text-gray-900 mb-1 uppercase tracking-wider">
+                      Ticket Price (₹ INR) <span className="text-rose-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-500">₹</span>
+                      <input
+                        type="number"
+                        min="1"
+                        step="1"
+                        required={eventFormIsPaid}
+                        value={eventFormPrice}
+                        onChange={(e) => setEventFormPrice(e.target.value)}
+                        placeholder="e.g. 199 or 499"
+                        className="w-full pl-8 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-900 outline-none focus:border-black shadow-xs"
+                      />
+                    </div>
+                    <p className="text-[10px] text-gray-500 mt-1 font-medium">
+                      Attendees will be prompted to pay this amount via PayU during event registration.
+                    </p>
+                  </div>
+                )}
+              </div>
+
               {/* Cover & Gallery Images / Video Option */}
               {eventFormType === "PAST_ARCHIVE" ? (
                 <div className="space-y-4">
@@ -8655,11 +8819,11 @@ function EditorialDashboardContent() {
                   </span>
                   <button
                     onClick={() => {
-                      const csvHeader = "Name,Email,Phone,Notes,Registered At\n";
+                      const csvHeader = "Name,Email,Phone,Admission Type,Amount,Payment Status,Txn ID,Notes,Registered At\n";
                       const csvRows = registrationsList
                         .map(
                           (r) =>
-                            `"${r.name}","${r.email}","${r.phone || ""}","${(r.notes || "").replace(/"/g, '""')}","${new Date(r.createdAt).toLocaleString()}"`,
+                            `"${r.name}","${r.email}","${r.phone || ""}","${r.isPaid ? "PAID" : "FREE"}","${r.amount ?? (r.isPaid ? selectedEventForReg.price : 0)}","${r.paymentStatus || (r.isPaid ? "COMPLETED" : "FREE")}","${r.txnId || ""}","${(r.notes || "").replace(/"/g, '""')}","${new Date(r.createdAt).toLocaleString()}"`,
                         )
                         .join("\n");
                       const blob = new Blob([csvHeader + csvRows], { type: "text/csv" });
@@ -8679,8 +8843,8 @@ function EditorialDashboardContent() {
                 <div className="divide-y divide-gray-100 border border-gray-100 rounded-2xl overflow-hidden">
                   {registrationsList.map((reg) => (
                     <div key={reg.id} className="p-4 bg-white hover:bg-gray-50 transition-colors">
-                      <div className="flex items-start justify-between">
-                        <div>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
                           <div className="text-sm font-bold text-gray-950">{reg.name}</div>
                           <div className="text-xs text-gray-600 font-medium mt-0.5">
                             {reg.email} {reg.phone ? `• ${reg.phone}` : ""}
@@ -8692,7 +8856,23 @@ function EditorialDashboardContent() {
                             </div>
                           )}
                         </div>
-                        <span className="text-[10px] text-gray-400 font-mono whitespace-nowrap">{new Date(reg.createdAt).toLocaleDateString()}</span>
+                        <div className="flex flex-col items-end gap-1 shrink-0">
+                          {reg.isPaid ? (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+                              Paid: ₹{reg.amount ?? selectedEventForReg.price ?? 0}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 border border-gray-200">
+                              Free Entry
+                            </span>
+                          )}
+                          {reg.txnId && (
+                            <span className="text-[9px] font-mono text-gray-500 max-w-[140px] truncate" title={reg.txnId}>
+                              Txn: {reg.txnId}
+                            </span>
+                          )}
+                          <span className="text-[10px] text-gray-400 font-mono whitespace-nowrap">{new Date(reg.createdAt).toLocaleDateString()}</span>
+                        </div>
                       </div>
                     </div>
                   ))}
