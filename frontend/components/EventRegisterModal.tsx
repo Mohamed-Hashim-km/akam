@@ -451,7 +451,7 @@ export default function EventRegisterModal({
             <div>
               <label className="block text-xs font-bold text-gray-900 mb-1.5 uppercase tracking-wider flex items-center justify-between">
                 <span>Phone Number {isPaid ? <span className="text-rose-500">*</span> : <span className="text-gray-400 font-normal lowercase">(optional)</span>}</span>
-                {isPaid && <span className="text-[10px] text-amber-700 font-medium">Required for PayU ticket receipt</span>}
+                {/* {isPaid && <span className="text-[10px] text-amber-700 font-medium">Required for PayU ticket receipt</span>} */}
               </label>
               <input
                 type="tel"
