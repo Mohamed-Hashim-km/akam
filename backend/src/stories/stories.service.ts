@@ -533,6 +533,19 @@ export class StoriesService {
     const descriptionVal = dto.description?.trim() || null;
     const submissionTypeVal = dto.submissionType || 'STORY';
     const mediaUrlVal = dto.mediaUrl?.trim() || null;
+
+    if (submissionTypeVal === 'VIDEO') {
+      if (!mediaUrlVal) {
+        throw new BadRequestException('A YouTube video URL is required for video submissions.');
+      }
+      const ytMatch = mediaUrlVal.match(
+        /(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/|live\/))([\w-]{11})/
+      );
+      if (!ytMatch) {
+        throw new BadRequestException('Only YouTube video URLs (under 30 minutes) are accepted for video submissions.');
+      }
+    }
+
     const coverImageUrlVal = dto.coverImageUrl?.trim() || (isPaintingOrVideo ? (dto.mediaUrl?.trim() || null) : null);
     const contentVal = dto.content ?? '';
 
@@ -578,6 +591,15 @@ export class StoriesService {
       updates.push(`"submissionType" = $${params.length}::"SubmissionType"`);
     }
     if (dto.mediaUrl !== undefined) {
+      const isVideo = (dto.submissionType || story.submissionType) === 'VIDEO';
+      if (isVideo && dto.mediaUrl) {
+        const ytMatch = dto.mediaUrl.match(
+          /(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/|live\/))([\w-]{11})/
+        );
+        if (!ytMatch) {
+          throw new BadRequestException('Only YouTube video URLs (under 30 minutes) are accepted for video submissions.');
+        }
+      }
       params.push(dto.mediaUrl);
       updates.push(`"mediaUrl" = $${params.length}`);
     }
