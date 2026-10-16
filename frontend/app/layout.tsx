@@ -60,7 +60,11 @@ export default function RootLayout({
       <body className="flex flex-col min-h-screen text-dark-bg font-poppins">
         <LayoutShell>{children}</LayoutShell>
         <Script
-          src="https://jssdk-uat.payu.in/bolt/bolt.min.js"
+          src={
+            process.env.NEXT_PUBLIC_PAYU_ENV === "PRODUCTION"
+              ? "https://jssdk.payu.in/bolt/bolt.min.js"
+              : "https://jssdk-uat.payu.in/bolt/bolt.min.js"
+          }
           strategy="afterInteractive"
         />
       </body>

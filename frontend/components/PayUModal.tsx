@@ -56,18 +56,26 @@ export const PayUModal: React.FC<PayUModalProps> = ({
 
       try {
         // Ensure PayU Bolt script is loaded
-        if (typeof window !== "undefined" && !window.bolt) {
+        if (typeof window !== "undefined") {
           await new Promise<void>((resolve, reject) => {
-            const existingScript = document.querySelector('script[src*="bolt.min.js"]');
-            if (existingScript && window.bolt) {
-              resolve();
-              return;
-            }
-            const script = document.createElement("script");
             const isProdPayU = process.env.NEXT_PUBLIC_PAYU_ENV === "PRODUCTION";
-            script.src = isProdPayU
+            const targetSrc = isProdPayU
               ? "https://jssdk.payu.in/bolt/bolt.min.js"
               : "https://jssdk-uat.payu.in/bolt/bolt.min.js";
+
+            const existingScript = document.querySelector('script[src*="bolt.min.js"]') as HTMLScriptElement | null;
+            if (existingScript && window.bolt) {
+              if (existingScript.src.includes(isProdPayU ? "jssdk.payu.in" : "jssdk-uat.payu.in")) {
+                resolve();
+                return;
+              }
+              // Remove wrong environment script from layout or previous load
+              existingScript.remove();
+              delete (window as any).bolt;
+            }
+
+            const script = document.createElement("script");
+            script.src = targetSrc;
             script.async = true;
             script.onload = () => resolve();
             script.onerror = () => reject(new Error("Failed to load PayU Checkout SDK"));
