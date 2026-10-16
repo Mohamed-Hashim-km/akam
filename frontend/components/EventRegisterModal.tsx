@@ -107,18 +107,25 @@ export default function EventRegisterModal({
       setSubmitting(true);
       try {
         // Ensure PayU Bolt SDK is available
-        if (typeof window !== "undefined" && !window.bolt) {
+        if (typeof window !== "undefined") {
           await new Promise<void>((resolve, reject) => {
-            const existing = document.querySelector('script[src*="bolt.min.js"]');
-            if (existing && window.bolt) {
-              resolve();
-              return;
-            }
-            const script = document.createElement("script");
             const isProdPayU = process.env.NEXT_PUBLIC_PAYU_ENV === "PRODUCTION";
-            script.src = isProdPayU
+            const targetSrc = isProdPayU
               ? "https://jssdk.payu.in/bolt/bolt.min.js"
               : "https://jssdk-uat.payu.in/bolt/bolt.min.js";
+
+            const existing = document.querySelector('script[src*="bolt.min.js"]') as HTMLScriptElement | null;
+            if (existing && window.bolt) {
+              if (existing.src.includes(isProdPayU ? "jssdk.payu.in" : "jssdk-uat.payu.in")) {
+                resolve();
+                return;
+              }
+              existing.remove();
+              delete (window as any).bolt;
+            }
+
+            const script = document.createElement("script");
+            script.src = targetSrc;
             script.async = true;
             script.onload = () => resolve();
             script.onerror = () => reject(new Error("Failed to load PayU Checkout SDK"));
