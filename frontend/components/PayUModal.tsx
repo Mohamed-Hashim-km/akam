@@ -32,7 +32,7 @@ export const PayUModal: React.FC<PayUModalProps> = ({
   onClose,
   planName = "6-Month Akam Digital Pass",
   billingCycle = "sixmonth",
-  priceAmount = 1,
+  priceAmount = 0.1,
   onSuccess,
 }) => {
   const [status, setStatus] = useState<"launching" | "open" | "error">("launching");
