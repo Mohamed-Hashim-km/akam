@@ -45,6 +45,7 @@ import {
   Plus,
   Check,
   Trash2,
+  Clock,
 } from "lucide-react";
 import Button from "@/components/ui/Button";
 import { API_BASE_URL, apiFetch } from "@/lib/config";
@@ -108,7 +109,7 @@ const SUBMISSION_TABS: SubmissionTabItem[] = [
     type: "VIDEO",
     label: "Video",
     icon: <Video className="w-5 h-5" />,
-    description: "Share a video from YouTube, Vimeo, Google Drive, or video link",
+    description: "Share a YouTube video (must be under 30 minutes)",
     // globals.css L17: --color-brand-yellow: #E4F953
     activeCard: "border-[#cce42e] bg-[#E4F953] text-[#040706] shadow-md hover:bg-[#d8ed3e]",
     activeIconWrapper: "bg-[#040706]/10 text-[#040706]",
@@ -121,12 +122,12 @@ const SUBMISSION_TABS: SubmissionTabItem[] = [
   },
 ];
 
-export type VideoEmbedType = "youtube" | "vimeo" | "dailymotion" | "googledrive" | "direct";
+export type VideoEmbedType = "youtube";
 
 export interface ParsedVideo {
   type: VideoEmbedType;
-  id?: string;
-  embedUrl?: string;
+  id: string;
+  embedUrl: string;
   directUrl?: string;
 }
 
@@ -134,7 +135,7 @@ export function parseVideoUrl(url: string): ParsedVideo | null {
   if (!url || !url.trim()) return null;
   const clean = url.trim();
 
-  // YouTube (standard, youtu.be, shorts, live, embed)
+  // YouTube only (standard watch, youtu.be, shorts, live, embed)
   const ytMatch = clean.match(
     /(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/|live\/))([\w-]{11})/
   );
@@ -143,48 +144,6 @@ export function parseVideoUrl(url: string): ParsedVideo | null {
       type: "youtube",
       id: ytMatch[1],
       embedUrl: `https://www.youtube-nocookie.com/embed/${ytMatch[1]}`,
-    };
-  }
-
-  // Vimeo
-  const vimMatch = clean.match(/vimeo\.com\/(?:video\/)?(\d+)/);
-  if (vimMatch) {
-    return {
-      type: "vimeo",
-      id: vimMatch[1],
-      embedUrl: `https://player.vimeo.com/video/${vimMatch[1]}`,
-    };
-  }
-
-  // Dailymotion
-  const dmMatch = clean.match(/(?:dailymotion\.com\/(?:video|embed\/video)\/|dai\.ly\/)([a-zA-Z0-9]+)/);
-  if (dmMatch) {
-    return {
-      type: "dailymotion",
-      id: dmMatch[1],
-      embedUrl: `https://www.dailymotion.com/embed/video/${dmMatch[1]}`,
-    };
-  }
-
-  // Google Drive
-  const gdMatch = clean.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/);
-  if (gdMatch) {
-    return {
-      type: "googledrive",
-      id: gdMatch[1],
-      embedUrl: `https://drive.google.com/file/d/${gdMatch[1]}/preview`,
-    };
-  }
-
-  // Direct video file (mp4, webm, ogg, mov)
-  if (
-    /\.(mp4|webm|ogg|mov)(\?.*)?$/i.test(clean) ||
-    clean.startsWith("blob:") ||
-    /^https?:\/\/.*\/uploads\/.*video/i.test(clean)
-  ) {
-    return {
-      type: "direct",
-      directUrl: clean,
     };
   }
 
@@ -283,50 +242,6 @@ function createDemoImageFile(
   }
 }
 
-async function captureVideoFrame(
-  videoUrl: string
-): Promise<{ file: File; previewUrl: string } | null> {
-  if (typeof window === "undefined" || typeof document === "undefined") return null;
-  return new Promise((resolve) => {
-    try {
-      const video = document.createElement("video");
-      video.crossOrigin = "anonymous";
-      video.src = videoUrl;
-      video.muted = true;
-      video.currentTime = 1;
-      video.onloadeddata = () => {
-        try {
-          video.currentTime = Math.min(1, (video.duration || 2) / 2);
-        } catch {}
-      };
-      video.onseeked = () => {
-        try {
-          const canvas = document.createElement("canvas");
-          canvas.width = video.videoWidth || 1280;
-          canvas.height = video.videoHeight || 720;
-          const ctx = canvas.getContext("2d");
-          if (!ctx) { resolve(null); return; }
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          canvas.toBlob((blob) => {
-            if (blob) {
-              const file = new File([blob], "video-thumbnail.jpg", { type: "image/jpeg" });
-              const previewUrl = URL.createObjectURL(blob);
-              resolve({ file, previewUrl });
-            } else {
-              resolve(null);
-            }
-          }, "image/jpeg", 0.85);
-        } catch {
-          resolve(null);
-        }
-      };
-      video.onerror = () => resolve(null);
-    } catch {
-      resolve(null);
-    }
-  });
-}
-
 async function fetchVideoThumbnailFile(
   video: ParsedVideo
 ): Promise<{ file: File; previewUrl: string } | null> {
@@ -351,59 +266,6 @@ async function fetchVideoThumbnailFile(
         file: new File([], `youtube-${video.id}.jpg`, { type: "image/jpeg" }),
         previewUrl: hqUrl,
       };
-    }
-
-    if (video.type === "vimeo" && video.id) {
-      try {
-        const oembedRes = await fetch(`https://vimeo.com/api/oembed.json?url=https://vimeo.com/${video.id}`);
-        if (oembedRes.ok) {
-          const data = await oembedRes.json();
-          const thumbUrl = data.thumbnail_url || data.thumbnail_url_with_play_button;
-          if (thumbUrl) {
-            try {
-              const imgRes = await fetch(thumbUrl);
-              if (imgRes.ok) {
-                const blob = await imgRes.blob();
-                const file = new File([blob], `vimeo-${video.id}.jpg`, { type: "image/jpeg" });
-                return { file, previewUrl: URL.createObjectURL(blob) };
-              }
-            } catch {}
-            return {
-              file: new File([], `vimeo-${video.id}.jpg`, { type: "image/jpeg" }),
-              previewUrl: thumbUrl,
-            };
-          }
-        }
-      } catch {}
-    }
-
-    if (video.type === "dailymotion" && video.id) {
-      try {
-        const dmRes = await fetch(`https://api.dailymotion.com/video/${video.id}?fields=thumbnail_720_url,thumbnail_480_url,thumbnail_url`);
-        if (dmRes.ok) {
-          const data = await dmRes.json();
-          const thumbUrl = data.thumbnail_720_url || data.thumbnail_480_url || data.thumbnail_url;
-          if (thumbUrl) {
-            try {
-              const imgRes = await fetch(thumbUrl);
-              if (imgRes.ok) {
-                const blob = await imgRes.blob();
-                const file = new File([blob], `dailymotion-${video.id}.jpg`, { type: "image/jpeg" });
-                return { file, previewUrl: URL.createObjectURL(blob) };
-              }
-            } catch {}
-            return {
-              file: new File([], `dailymotion-${video.id}.jpg`, { type: "image/jpeg" }),
-              previewUrl: thumbUrl,
-            };
-          }
-        }
-      } catch {}
-    }
-
-    if (video.type === "direct" && video.directUrl) {
-      const frame = await captureVideoFrame(video.directUrl);
-      if (frame) return frame;
     }
   } catch (err) {
     console.error("Failed to auto-fetch video thumbnail:", err);
@@ -444,6 +306,10 @@ export default function SubmitWorkPage() {
   const [videoUrl, setVideoUrl] = useState("");
   const [videoPreview, setVideoPreview] = useState<ParsedVideo | null>(null);
   const [isCustomThumbnail, setIsCustomThumbnail] = useState(false);
+  const [videoDurationSeconds, setVideoDurationSeconds] = useState<number | null>(null);
+  const [videoFormattedDuration, setVideoFormattedDuration] = useState<string | null>(null);
+  const [checkingVideoDuration, setCheckingVideoDuration] = useState(false);
+  const [videoDurationError, setVideoDurationError] = useState<string | null>(null);
 
   // Refs
   const coverInputRef = useRef<HTMLInputElement>(null);
@@ -564,20 +430,71 @@ export default function SubmitWorkPage() {
     }
   }, [activeTab, content]);
 
-  // ─── Video preview & auto-thumbnail helper ───────────────────────────────
+  // ─── Video preview, duration & auto-thumbnail helper ─────────────────────
   useEffect(() => {
-    if (!videoUrl.trim()) { setVideoPreview(null); return; }
+    if (!videoUrl.trim()) {
+      setVideoPreview(null);
+      setVideoDurationSeconds(null);
+      setVideoFormattedDuration(null);
+      setVideoDurationError(null);
+      setCheckingVideoDuration(false);
+      return;
+    }
+
     const parsed = parseVideoUrl(videoUrl);
     setVideoPreview(parsed);
 
-    if (parsed) {
-      fetchVideoThumbnailFile(parsed).then((thumb) => {
-        if (thumb) {
-          setCoverFile(thumb.file);
-          setCoverPreview(thumb.previewUrl);
+    if (!parsed) {
+      setVideoDurationSeconds(null);
+      setVideoFormattedDuration(null);
+      setVideoDurationError("Only YouTube videos are accepted. Please provide a valid YouTube link.");
+      setCheckingVideoDuration(false);
+      return;
+    }
+
+    // Auto-fetch thumbnail
+    fetchVideoThumbnailFile(parsed).then((thumb) => {
+      if (thumb) {
+        setCoverFile(thumb.file);
+        setCoverPreview(thumb.previewUrl);
+      }
+    });
+
+    // Check video duration (< 30 minutes)
+    let isCancelled = false;
+    setCheckingVideoDuration(true);
+    setVideoDurationError(null);
+
+    fetch(`/api/youtube-duration?id=${encodeURIComponent(parsed.id)}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (isCancelled) return;
+        setCheckingVideoDuration(false);
+        if (data.ok === false) {
+          setVideoDurationError(data.error || "This video exceeds the 30-minute limit.");
+          setVideoDurationSeconds(data.durationSeconds ?? null);
+          setVideoFormattedDuration(data.formattedDuration ?? null);
+        } else {
+          setVideoDurationSeconds(data.durationSeconds ?? null);
+          setVideoFormattedDuration(data.formattedDuration ?? null);
+          if (data.durationSeconds && data.durationSeconds > 1800) {
+            setVideoDurationError(
+              `This video is ${data.formattedDuration} long. Only YouTube videos under 30 minutes are accepted.`
+            );
+          } else {
+            setVideoDurationError(null);
+          }
+        }
+      })
+      .catch(() => {
+        if (!isCancelled) {
+          setCheckingVideoDuration(false);
         }
       });
-    }
+
+    return () => {
+      isCancelled = true;
+    };
   }, [videoUrl]);
 
   // ─── Formatting helpers ───────────────────────────────────────────────────
@@ -833,8 +750,24 @@ export default function SubmitWorkPage() {
     }
 
     if (submissionType === "VIDEO") {
-      if (!videoUrl.trim()) { setError("Please enter a video URL."); return; }
-      if (!videoPreview) { setError("Please enter a valid video URL (YouTube, Vimeo, Dailymotion, Google Drive, or direct MP4/WebM)."); return; }
+      if (!videoUrl.trim()) { setError("Please enter a YouTube video URL."); return; }
+      const parsed = parseVideoUrl(videoUrl);
+      if (!parsed || parsed.type !== "youtube") {
+        setError("Only YouTube video URLs are accepted (must be under 30 minutes).");
+        return;
+      }
+      if (checkingVideoDuration) {
+        setError("Please wait while we verify video duration...");
+        return;
+      }
+      if (videoDurationError) {
+        setError(videoDurationError);
+        return;
+      }
+      if (videoDurationSeconds !== null && videoDurationSeconds > 1800) {
+        setError("This video exceeds 30 minutes. Only YouTube videos under 30 minutes are accepted.");
+        return;
+      }
       if (!coverFile && !coverPreview) { setError("Thumbnail image is required for video submissions."); return; }
     }
 
@@ -1071,15 +1004,15 @@ export default function SubmitWorkPage() {
       setDescription(
         "ഓപ്പൺ സോഴ്സ് സിനിമാറ്റിക് ആനിമേഷൻ സാങ്കേതികതകളെക്കുറിച്ചും ലോകപ്രശസ്ത ബ്ലെൻഡർ ആനിമേഷൻ ഫിലിമിനെക്കുറിച്ചുമുള്ള സമഗ്ര വിശകലനം."
       );
-      const demoUrl = "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_1MB.mp4";
-      const standardThumbnail = "https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=1200&auto=format&fit=crop&q=80";
+      const demoUrl = "https://www.youtube.com/watch?v=aqz-KE-bpKQ";
+      const standardThumbnail = "https://img.youtube.com/vi/aqz-KE-bpKQ/maxresdefault.jpg";
       const parsed = parseVideoUrl(demoUrl);
       setVideoUrl(demoUrl);
       setVideoPreview(parsed);
       setCoverFile(null);
       setCoverPreview(standardThumbnail);
       setIsCustomThumbnail(true);
-      setSuccess("Demo MP4 video & standard thumbnail loaded!");
+      setSuccess("Demo YouTube video loaded!");
     }
 
     setTimeout(() => {
@@ -1722,71 +1655,108 @@ export default function SubmitWorkPage() {
             {submissionType === "VIDEO" && (
               <div className="space-y-5">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-800 uppercase tracking-wider mb-2">
-                    Video URL <span className="text-rose-500 font-bold">*</span>
-                  </label>
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <label className="block text-xs font-semibold text-gray-800 uppercase tracking-wider">
+                      YouTube Video URL <span className="text-rose-500 font-bold">*</span>
+                    </label>
+                    <span className="text-[11px] font-medium text-gray-500 flex items-center gap-1">
+                      <Clock className="w-3.5 h-3.5 text-gray-400" /> Max duration: 30 minutes
+                    </span>
+                  </div>
                   <div className="relative flex items-center">
                     <Globe className="absolute left-4 w-4 h-4 text-gray-400 pointer-events-none" />
                     <input
                       type="url"
-                      placeholder="https://youtube.com/watch?v=... or Vimeo, Google Drive, MP4, WebM..."
+                      placeholder="https://www.youtube.com/watch?v=... or https://youtu.be/..."
                       value={videoUrl}
                       onChange={(e) => setVideoUrl(e.target.value)}
-                      className="w-full pl-11 pr-4 py-3.5 bg-white border border-gray-200 rounded-2xl text-sm font-medium text-gray-900 placeholder-gray-400 outline-none focus:border-black transition-all"
+                      className={`w-full pl-11 pr-10 py-3.5 bg-white border rounded-2xl text-sm font-medium text-gray-900 placeholder-gray-400 outline-none transition-all ${
+                        videoDurationError
+                          ? "border-rose-300 focus:border-rose-500 focus:ring-1 focus:ring-rose-500"
+                          : videoPreview
+                          ? "border-emerald-300 focus:border-emerald-500"
+                          : "border-gray-200 focus:border-black"
+                      }`}
                     />
+                    {checkingVideoDuration && (
+                      <div className="absolute right-3.5 flex items-center">
+                        <Loader2 className="w-4 h-4 text-gray-400 animate-spin" />
+                      </div>
+                    )}
+                    {!checkingVideoDuration && videoPreview && !videoDurationError && (
+                      <div className="absolute right-3.5 flex items-center">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                      </div>
+                    )}
                   </div>
-                  <p className="text-xs text-gray-400 mt-1.5 px-1">
-                    Accepted: YouTube (<code className="bg-gray-100 px-1 rounded text-xs">youtube.com</code>, <code className="bg-gray-100 px-1 rounded text-xs">youtu.be</code>, Shorts), Vimeo, Dailymotion, Google Drive, or direct video files (<code className="bg-gray-100 px-1 rounded text-xs">.mp4</code>, <code className="bg-gray-100 px-1 rounded text-xs">.webm</code>)
+                  <p className="text-xs text-gray-500 mt-1.5 px-1">
+                    Only YouTube videos under 30 minutes are accepted (supports standard <code className="bg-gray-100 px-1 rounded text-xs">youtube.com/watch</code>, <code className="bg-gray-100 px-1 rounded text-xs">youtu.be</code>, and <code className="bg-gray-100 px-1 rounded text-xs">Shorts</code>).
                   </p>
                 </div>
 
-                {/* Video embed preview */}
-                {videoPreview ? (
-                  <div className="bg-white rounded-[28px] border border-gray-200 overflow-hidden shadow-xs">
-                    <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
-                      <Play className="w-4 h-4 text-emerald-600 fill-emerald-600" />
-                      <span className="text-xs font-semibold text-gray-700 uppercase tracking-wider">Video Preview</span>
-                      <span
-                        className={`ml-auto text-[10px] font-bold uppercase px-2 py-0.5 rounded-lg ${
-                          videoPreview.type === "youtube"
-                            ? "bg-red-100 text-red-700"
-                            : videoPreview.type === "vimeo"
-                            ? "bg-blue-100 text-blue-700"
-                            : videoPreview.type === "googledrive"
-                            ? "bg-amber-100 text-amber-700"
-                            : videoPreview.type === "dailymotion"
-                            ? "bg-sky-100 text-sky-700"
-                            : "bg-emerald-100 text-emerald-700"
-                        }`}
-                      >
-                        {videoPreview.type === "direct" ? "Direct Video File (MP4/WebM)" : videoPreview.type}
+                {/* Duration Status / Error Alerts */}
+                {checkingVideoDuration && (
+                  <div className="flex items-center gap-2.5 p-3.5 bg-blue-50 border border-blue-200 rounded-2xl text-blue-800 text-xs font-medium">
+                    <Loader2 className="w-4 h-4 animate-spin shrink-0 text-blue-600" />
+                    <span>Verifying YouTube video and checking duration (must be under 30 mins)...</span>
+                  </div>
+                )}
+
+                {!checkingVideoDuration && videoDurationError && (
+                  <div className="flex items-start gap-3 p-4 bg-rose-50 border border-rose-200 rounded-2xl text-rose-800 text-sm">
+                    <AlertCircle className="w-5 h-5 shrink-0 text-rose-600 mt-0.5" />
+                    <div className="space-y-0.5">
+                      <p className="font-semibold text-rose-900">Video Not Eligible</p>
+                      <p className="text-xs text-rose-700">{videoDurationError}</p>
+                    </div>
+                  </div>
+                )}
+
+                {!checkingVideoDuration && !videoDurationError && videoPreview && (
+                  <div className="flex items-center justify-between gap-3 p-3.5 bg-emerald-50 border border-emerald-200 rounded-2xl text-emerald-800 text-xs font-medium">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
+                      <span>YouTube video verified successfully (under 30 minutes limit).</span>
+                    </div>
+                    {videoFormattedDuration && (
+                      <span className="inline-flex items-center gap-1 font-semibold bg-emerald-100/80 text-emerald-800 px-2 py-0.5 rounded-md">
+                        <Clock className="w-3 h-3 text-emerald-600" /> {videoFormattedDuration}
                       </span>
+                    )}
+                  </div>
+                )}
+
+                {/* Video embed preview */}
+                {videoPreview && (
+                  <div className="bg-white rounded-[28px] border border-gray-200 overflow-hidden shadow-xs">
+                    <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <Play className="w-4 h-4 text-red-600 fill-red-600" />
+                        <span className="text-xs font-semibold text-gray-700 uppercase tracking-wider">YouTube Preview</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {videoFormattedDuration && (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-gray-700 bg-gray-100 px-2 py-0.5 rounded-md">
+                            <Clock className="w-3 h-3 text-gray-500" />
+                            {videoFormattedDuration}
+                          </span>
+                        )}
+                        <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-lg bg-red-100 text-red-700">
+                          YouTube
+                        </span>
+                      </div>
                     </div>
                     <div className="aspect-video w-full bg-black flex items-center justify-center">
-                      {videoPreview.type === "direct" ? (
-                        <video
-                          src={videoPreview.directUrl}
-                          controls
-                          playsInline
-                          className="w-full h-full object-contain"
-                        />
-                      ) : (
-                        <iframe
-                          src={videoPreview.embedUrl}
-                          className="w-full h-full border-0"
-                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                          allowFullScreen
-                          title="Video Preview"
-                        />
-                      )}
+                      <iframe
+                        src={videoPreview.embedUrl}
+                        className="w-full h-full border-0"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen
+                        title="YouTube Video Preview"
+                      />
                     </div>
                   </div>
-                ) : videoUrl.trim() ? (
-                  <div className="flex items-center gap-3 p-4 bg-amber-50 border border-amber-200 rounded-2xl text-amber-700 text-sm">
-                    <AlertCircle className="w-4 h-4 shrink-0" />
-                    <span>URL not recognized. Supports YouTube, Shorts, Vimeo, Dailymotion, Google Drive, or direct MP4/WebM video links.</span>
-                  </div>
-                ) : null}
+                )}
 
                 {/* Mandatory Video Thumbnail */}
                 <div className="bg-white rounded-[28px] border border-gray-200 p-6 sm:p-7 shadow-xs">
