@@ -68,6 +68,7 @@ import {
   Save,
   Globe,
   Loader2,
+  AlertCircle,
   Star,
   GraduationCap,
   Play,
@@ -639,6 +640,10 @@ function EditorialDashboardContent() {
   const [addSubmissionDescription, setAddSubmissionDescription] = useState("");
   const [addSubmissionCategory, setAddSubmissionCategory] = useState("Art");
   const [addSubmissionVideoUrl, setAddSubmissionVideoUrl] = useState("");
+  const [addSubmissionVideoDuration, setAddSubmissionVideoDuration] = useState<string | null>(null);
+  const [addSubmissionVideoDurationSeconds, setAddSubmissionVideoDurationSeconds] = useState<number | null>(null);
+  const [checkingAddSubmissionVideoDuration, setCheckingAddSubmissionVideoDuration] = useState(false);
+  const [addSubmissionVideoDurationError, setAddSubmissionVideoDurationError] = useState<string | null>(null);
   const [addSubmissionPaintingFile, setAddSubmissionPaintingFile] = useState<File | null>(null);
   const [addSubmissionPaintingPreview, setAddSubmissionPaintingPreview] = useState<string | null>(null);
   const [savingAddSubmission, setSavingAddSubmission] = useState(false);
@@ -2344,6 +2349,66 @@ function EditorialDashboardContent() {
     return null;
   };
 
+  // Check video duration for Add Submission modal (YouTube only, < 30 mins)
+  useEffect(() => {
+    if (!addSubmissionVideoUrl.trim()) {
+      setAddSubmissionVideoDuration(null);
+      setAddSubmissionVideoDurationSeconds(null);
+      setAddSubmissionVideoDurationError(null);
+      setCheckingAddSubmissionVideoDuration(false);
+      return;
+    }
+
+    const clean = addSubmissionVideoUrl.trim();
+    const ytMatch = clean.match(
+      /(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/|live\/))([\w-]{11})/
+    );
+
+    if (!ytMatch) {
+      setAddSubmissionVideoDuration(null);
+      setAddSubmissionVideoDurationSeconds(null);
+      setAddSubmissionVideoDurationError("Only YouTube video links are accepted (under 30 minutes).");
+      setCheckingAddSubmissionVideoDuration(false);
+      return;
+    }
+
+    const videoId = ytMatch[1];
+    let isCancelled = false;
+    setCheckingAddSubmissionVideoDuration(true);
+    setAddSubmissionVideoDurationError(null);
+
+    fetch(`/api/youtube-duration?id=${encodeURIComponent(videoId)}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (isCancelled) return;
+        setCheckingAddSubmissionVideoDuration(false);
+        if (data.ok === false) {
+          setAddSubmissionVideoDurationError(data.error || "This video exceeds the 30-minute limit.");
+          setAddSubmissionVideoDurationSeconds(data.durationSeconds ?? null);
+          setAddSubmissionVideoDuration(data.formattedDuration ?? null);
+        } else {
+          setAddSubmissionVideoDurationSeconds(data.durationSeconds ?? null);
+          setAddSubmissionVideoDuration(data.formattedDuration ?? null);
+          if (data.durationSeconds && data.durationSeconds > 1800) {
+            setAddSubmissionVideoDurationError(
+              `This video is ${data.formattedDuration} long. Only YouTube videos under 30 minutes are accepted.`
+            );
+          } else {
+            setAddSubmissionVideoDurationError(null);
+          }
+        }
+      })
+      .catch(() => {
+        if (!isCancelled) {
+          setCheckingAddSubmissionVideoDuration(false);
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [addSubmissionVideoUrl]);
+
   const handleAuthorSubmissionSubmit = async (publishDirectly: boolean) => {
     if (!addSubmissionAuthorTarget) return;
 
@@ -2363,12 +2428,27 @@ function EditorialDashboardContent() {
 
     if (addSubmissionType === "VIDEO") {
       if (!addSubmissionVideoUrl.trim()) {
-        setAddSubmissionError("Please enter a video URL.");
+        setAddSubmissionError("Please enter a YouTube video URL.");
         return;
       }
-      const embed = getAddSubmissionVideoEmbed(addSubmissionVideoUrl);
-      if (!embed) {
-        setAddSubmissionError("Please enter a valid YouTube or Vimeo URL.");
+      const clean = addSubmissionVideoUrl.trim();
+      const ytMatch = clean.match(
+        /(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/|live\/))([\w-]{11})/
+      );
+      if (!ytMatch) {
+        setAddSubmissionError("Only YouTube video URLs are accepted (must be under 30 minutes).");
+        return;
+      }
+      if (checkingAddSubmissionVideoDuration) {
+        setAddSubmissionError("Please wait while we verify video duration...");
+        return;
+      }
+      if (addSubmissionVideoDurationError) {
+        setAddSubmissionError(addSubmissionVideoDurationError);
+        return;
+      }
+      if (addSubmissionVideoDurationSeconds !== null && addSubmissionVideoDurationSeconds > 1800) {
+        setAddSubmissionError("This video exceeds 30 minutes. Only YouTube videos under 30 minutes are accepted.");
         return;
       }
     }
@@ -2420,6 +2500,10 @@ function EditorialDashboardContent() {
       setAddSubmissionTitle("");
       setAddSubmissionDescription("");
       setAddSubmissionVideoUrl("");
+      setAddSubmissionVideoDuration(null);
+      setAddSubmissionVideoDurationSeconds(null);
+      setAddSubmissionVideoDurationError(null);
+      setCheckingAddSubmissionVideoDuration(false);
       setAddSubmissionPaintingFile(null);
       setAddSubmissionPaintingPreview(null);
       setAddSubmissionError(null);
@@ -9912,6 +9996,11 @@ function EditorialDashboardContent() {
                       setAddSubmissionType("STORY");
                       setAddSubmissionTitle("");
                       setAddSubmissionDescription("");
+                      setAddSubmissionVideoUrl("");
+                      setAddSubmissionVideoDuration(null);
+                      setAddSubmissionVideoDurationSeconds(null);
+                      setAddSubmissionVideoDurationError(null);
+                      setCheckingAddSubmissionVideoDuration(false);
                       setAddSubmissionError(null);
                       setAddSubmissionModalOpen(true);
                     }}
@@ -11013,43 +11102,90 @@ function EditorialDashboardContent() {
               {addSubmissionType === "VIDEO" && (
                 <div className="space-y-3">
                   <div>
-                    <label className="block text-xs font-bold text-gray-900 mb-1.5 uppercase tracking-wider">
-                      YouTube or Vimeo Video URL <span className="text-rose-500">*</span>
-                    </label>
-                    <input
-                      type="url"
-                      required
-                      value={addSubmissionVideoUrl}
-                      onChange={(e) => setAddSubmissionVideoUrl(e.target.value)}
-                      placeholder="https://www.youtube.com/watch?v=... or https://vimeo.com/..."
-                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-900 outline-none focus:border-black focus:bg-white transition-all shadow-xs"
-                    />
+                    <div className="flex items-center justify-between gap-2 mb-1.5">
+                      <label className="block text-xs font-bold text-gray-900 uppercase tracking-wider">
+                        YouTube Video URL <span className="text-rose-500">*</span>
+                      </label>
+                      <span className="text-[10px] font-medium text-gray-500 flex items-center gap-1">
+                        <Clock className="w-3 h-3 text-gray-400" /> Max duration: 30 minutes
+                      </span>
+                    </div>
+                    <div className="relative flex items-center">
+                      <input
+                        type="url"
+                        required
+                        value={addSubmissionVideoUrl}
+                        onChange={(e) => setAddSubmissionVideoUrl(e.target.value)}
+                        placeholder="https://www.youtube.com/watch?v=... or https://youtu.be/..."
+                        className={`w-full px-4 py-2.5 pr-10 bg-gray-50 border rounded-xl text-xs font-semibold text-gray-900 outline-none transition-all shadow-xs ${
+                          addSubmissionVideoDurationError
+                            ? "border-rose-300 focus:border-rose-500 focus:bg-white"
+                            : addSubmissionVideoUrl && !checkingAddSubmissionVideoDuration
+                            ? "border-emerald-300 focus:border-emerald-500 focus:bg-white"
+                            : "border-gray-200 focus:border-black focus:bg-white"
+                        }`}
+                      />
+                      {checkingAddSubmissionVideoDuration && (
+                        <div className="absolute right-3 flex items-center">
+                          <Loader2 className="w-3.5 h-3.5 text-gray-400 animate-spin" />
+                        </div>
+                      )}
+                      {!checkingAddSubmissionVideoDuration && addSubmissionVideoUrl && !addSubmissionVideoDurationError && (
+                        <div className="absolute right-3 flex items-center">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-gray-500 mt-1">
+                      Only YouTube videos under 30 minutes are accepted (supports standard <code className="bg-gray-100 px-1 rounded text-[10px]">youtube.com/watch</code>, <code className="bg-gray-100 px-1 rounded text-[10px]">youtu.be</code>, and <code className="bg-gray-100 px-1 rounded text-[10px]">Shorts</code>).
+                    </p>
                   </div>
 
+                  {/* Duration Status / Error Alerts */}
+                  {checkingAddSubmissionVideoDuration && (
+                    <div className="flex items-center gap-2 p-2.5 bg-blue-50 border border-blue-200 rounded-xl text-blue-800 text-[11px] font-medium">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0 text-blue-600" />
+                      <span>Verifying YouTube video and checking duration (must be under 30 mins)...</span>
+                    </div>
+                  )}
+
+                  {!checkingAddSubmissionVideoDuration && addSubmissionVideoDurationError && (
+                    <div className="flex items-start gap-2 p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 text-xs">
+                      <AlertCircle className="w-4 h-4 shrink-0 text-rose-600 mt-0.5" />
+                      <div>
+                        <p className="font-semibold text-rose-900 text-xs">Video Not Eligible</p>
+                        <p className="text-[11px] text-rose-700">{addSubmissionVideoDurationError}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {!checkingAddSubmissionVideoDuration && !addSubmissionVideoDurationError && addSubmissionVideoUrl && (
+                    <div className="flex items-center justify-between gap-2 p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-[11px] font-medium">
+                      <div className="flex items-center gap-1.5">
+                        <CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-emerald-600" />
+                        <span>YouTube video verified (under 30 minutes limit).</span>
+                      </div>
+                      {addSubmissionVideoDuration && (
+                        <span className="inline-flex items-center gap-1 font-semibold bg-emerald-100/80 text-emerald-800 px-2 py-0.5 rounded-md">
+                          <Clock className="w-3 h-3 text-emerald-600" /> {addSubmissionVideoDuration}
+                        </span>
+                      )}
+                    </div>
+                  )}
+
                   {/* Video Live Preview */}
-                  {addSubmissionVideoUrl && (() => {
+                  {addSubmissionVideoUrl && !addSubmissionVideoDurationError && (() => {
                     const embed = getAddSubmissionVideoEmbed(addSubmissionVideoUrl);
-                    if (!embed) return (
-                      <p className="text-[11px] text-amber-600 font-medium">Please enter a valid YouTube, Vimeo, Google Drive, Dailymotion, or MP4 URL.</p>
-                    );
+                    if (!embed || embed.type !== "youtube") return null;
                     return (
                       <div className="rounded-2xl overflow-hidden border border-gray-200 shadow-xs bg-black aspect-video max-h-56 flex items-center justify-center">
-                        {embed.type === "direct" ? (
-                          <video
-                            src={formatAssetUrl(embed.directUrl)}
-                            controls
-                            playsInline
-                            className="w-full h-full object-contain"
-                          />
-                        ) : (
-                          <iframe
-                            src={embed.embedUrl}
-                            title="Video preview"
-                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
-                            allowFullScreen
-                            className="w-full h-full border-0"
-                          />
-                        )}
+                        <iframe
+                          src={embed.embedUrl}
+                          title="Video preview"
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+                          allowFullScreen
+                          className="w-full h-full border-0"
+                        />
                       </div>
                     );
                   })()}
