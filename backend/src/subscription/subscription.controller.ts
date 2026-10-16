@@ -62,7 +62,7 @@ export class SubscriptionController {
       name: user.name || undefined,
       phone: body.phone,
       planType: body.planType || 'SIX_MONTH',
-      amount: body.amount || 1,
+      amount: typeof body.amount === 'number' && body.amount > 0 ? body.amount : 0.1,
     });
 
     return payload;
@@ -92,7 +92,7 @@ export class SubscriptionController {
       name: user.name || undefined,
       phone: body.phone,
       planType: body.planType || 'SIX_MONTH',
-      amount: body.amount || 1,
+      amount: typeof body.amount === 'number' && body.amount > 0 ? body.amount : 0.1,
     });
 
     return payload;
@@ -127,15 +127,27 @@ export class SubscriptionController {
           );
         }
 
-        if (verification.userId && !verification.userId.startsWith('guest_')) {
-          await this.subscriptionService.activate(verification.userId, verification.txnid);
+        let resolvedUserId = verification.userId;
+        if ((!resolvedUserId || resolvedUserId.startsWith('guest_')) && body.email) {
+          const userRow = await this.prisma.queryOne<{ id: string }>(
+            `SELECT id FROM "user" WHERE LOWER(email) = LOWER($1) LIMIT 1`,
+            [String(body.email).trim()],
+          );
+          if (userRow) resolvedUserId = userRow.id;
         }
+
+        if (resolvedUserId && !resolvedUserId.startsWith('guest_')) {
+          await this.subscriptionService.activate(resolvedUserId, verification.txnid);
+        }
+
         return res.redirect(
           302,
           `${frontendUrl}/plans/payment-status?status=success&txnid=${encodeURIComponent(verification.txnid)}&amount=${encodeURIComponent(verification.amount)}`,
         );
       } else {
-        const errorMsg = verification.errorMessage || 'Payment was not successful or hash mismatch';
+        const rawErr = verification.errorMessage;
+        const errorMsg =
+          rawErr && rawErr !== 'No Error' ? rawErr : 'Payment was not completed or verification failed';
         if (isEventTicket) {
           return res.redirect(
             302,
