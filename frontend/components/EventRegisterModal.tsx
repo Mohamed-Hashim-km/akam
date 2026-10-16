@@ -52,7 +52,7 @@ export default function EventRegisterModal({
 
   useEffect(() => {
     setResolvedMeta(null);
-    if (isOpen && event?.id && (event.isPaid === undefined || event.price === undefined)) {
+    if (isOpen && event?.id) {
       apiFetch(`${API_BASE_URL}/events/${event.id}`)
         .then((res) => (res.ok ? res.json() : null))
         .then((data) => {
@@ -65,7 +65,7 @@ export default function EventRegisterModal({
         })
         .catch(() => {});
     }
-  }, [isOpen, event?.id, event?.isPaid, event?.price]);
+  }, [isOpen, event?.id]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
