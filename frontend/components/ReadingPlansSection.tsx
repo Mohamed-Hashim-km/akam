@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Check, ArrowRight, Sparkles, ShieldCheck, GraduationCap, Lock, X } from "lucide-react";
+import { Check, ArrowRight } from "lucide-react";
 import Button from "./ui/Button";
 
 interface BubblePoint {
@@ -290,9 +290,8 @@ const JellyBubbleBlob: React.FC = () => {
 
 export interface FeatureRow {
   name: string;
-  readerMember: boolean | string;
-  studentPass?: boolean | string;
-  masikaPass: boolean | string;
+  readerMember: boolean;
+  masikaPass: boolean;
 }
 
 export interface FeatureCategory {
@@ -309,142 +308,33 @@ export interface ReadingPlansSectionProps {
   className?: string;
 }
 
-const renderPlanCell = (
-  val: boolean | string | undefined,
-  planType: "reader" | "student" | "premium"
-) => {
-  if (typeof val === "string") {
-    if (val === "15%") {
-      return (
-        <span className="text-[10px] sm:text-xs font-bold text-amber-900 bg-amber-100/90 border border-amber-300 px-2 sm:px-2.5 py-0.5 rounded-full inline-block shadow-2xs">
-          15% Preview
-        </span>
-      );
-    }
-    if (val === "Full") {
-      return (
-        <span className="text-[10px] sm:text-xs font-bold text-emerald-900 bg-emerald-100/90 border border-emerald-300 px-2 sm:px-2.5 py-0.5 rounded-full inline-flex items-center gap-1 shadow-2xs">
-          <Check className="w-3 h-3 stroke-[3] text-emerald-700" />
-          <span>Full Access</span>
-        </span>
-      );
-    }
-    return (
-      <span className="text-[10px] sm:text-xs font-semibold text-gray-700 bg-gray-100 px-2 py-0.5 rounded-full">
-        {val}
-      </span>
-    );
-  }
-
-  if (val === true) {
-    return (
-      <Check
-        className={`w-4 h-4 stroke-[2.5] ${
-          planType === "reader"
-            ? "text-gray-800"
-            : planType === "student"
-            ? "text-[#0FA975]"
-            : "text-[#22B573]"
-        }`}
-      />
-    );
-  }
-
-  return <span className="text-gray-300 font-light text-base select-none">—</span>;
-};
-
 const defaultCategories: FeatureCategory[] = [
   {
     title: "Reading & Article Access",
     items: [
-      {
-        name: "Story & Article Reading",
-        readerMember: "15%",
-        studentPass: "Full",
-        masikaPass: "Full",
-      },
-      {
-        name: "Visual Art, Illustrations & Photo Essays",
-        readerMember: false,
-        studentPass: true,
-        masikaPass: true,
-      },
-      {
-        name: "Videos & Multimedia Productions",
-        readerMember: false,
-        studentPass: true,
-        masikaPass: true,
-      },
-      {
-        name: "Exclusive Subscriber Deep Dives & Series",
-        readerMember: false,
-        studentPass: true,
-        masikaPass: true,
-      },
-      {
-        name: "Curated Public Introductions & Excerpts",
-        readerMember: true,
-        studentPass: true,
-        masikaPass: true,
-      },
+      { name: "Article reading preview (first 15% only)", readerMember: true, masikaPass: true },
+      { name: "Full 100% story & article reading", readerMember: false, masikaPass: true },
+      { name: "Visual art, illustrations & photo essays", readerMember: false, masikaPass: true },
+      { name: "Videos & multimedia productions", readerMember: false, masikaPass: true },
+      { name: "Exclusive subscriber stories & deep dives", readerMember: false, masikaPass: true },
     ],
   },
   {
     title: "Akam Masika (E-Magazine)",
     items: [
-      {
-        name: "Monthly Masika Digital Magazine Access",
-        readerMember: false,
-        studentPass: true,
-        masikaPass: true,
-      },
-      {
-        name: "Interactive 3D Flipbook Magazine Reader",
-        readerMember: false,
-        studentPass: true,
-        masikaPass: true,
-      },
-      {
-        name: "Access to Past Issues & Complete Digital Archive",
-        readerMember: false,
-        studentPass: true,
-        masikaPass: true,
-      },
-      {
-        name: "Subscriber Audio Recitals & Author Commentaries",
-        readerMember: false,
-        studentPass: true,
-        masikaPass: true,
-      },
+      { name: "Monthly Masika digital magazine access", readerMember: false, masikaPass: true },
+      { name: "Interactive 3D magazine flipbook reader", readerMember: false, masikaPass: true },
+      { name: "Access past editions & digital archive", readerMember: false, masikaPass: true },
+      { name: "Subscriber audio recitals & commentaries", readerMember: false, masikaPass: true },
     ],
   },
   {
-    title: "Digital Library & Reader Community",
+    title: "Digital Library & Community",
     items: [
-      {
-        name: "Personal Library Bookmarks & Saved Reading",
-        readerMember: true,
-        studentPass: true,
-        masikaPass: true,
-      },
-      {
-        name: "Participate in Reader Community Discussions",
-        readerMember: true,
-        studentPass: true,
-        masikaPass: true,
-      },
-      {
-        name: "Follow Authors & Publication Updates",
-        readerMember: true,
-        studentPass: true,
-        masikaPass: true,
-      },
-      {
-        name: "Early Access to Selected Literary Releases",
-        readerMember: false,
-        studentPass: true,
-        masikaPass: true,
-      },
+      { name: "Save favourite stories & personal bookmarks", readerMember: true, masikaPass: true },
+      { name: "Participate in reader community discussions", readerMember: true, masikaPass: true },
+      { name: "Follow authors & publication updates", readerMember: true, masikaPass: true },
+      { name: "Early access to selected literary releases", readerMember: false, masikaPass: true },
     ],
   },
 ];
@@ -508,231 +398,12 @@ export const ReadingPlansSection: React.FC<ReadingPlansSectionProps> = ({
 
       <div className="container px-4 mx-auto relative z-10">
         {/* Main Section Headline */}
-        <h2 className="text-3xl sm:text-5xl lg:text-6xl font-semibold text-dark-text tracking-tight leading-[1.12] max-w-2xl text-left mb-6 sm:mb-8">
+        <h2 className="text-3xl sm:text-5xl lg:text-6xl font-semibold text-dark-text tracking-tight leading-[1.12] max-w-2xl text-left mb-8 sm:mb-14">
           {title}
         </h2>
 
-        {/* ── Quick Access Highlights Summary Banner ── */}
-        <div className="mb-8 sm:mb-10 p-5 rounded-2xl bg-gradient-to-r from-gray-50 via-emerald-50/50 to-gray-50 border border-gray-200/90 shadow-2xs">
-          <div className="space-y-1.5">
-            <span className="text-xs font-bold uppercase tracking-wider text-gray-900 flex items-center gap-1.5">
-              <Sparkles className="w-4 h-4 text-[#22B573]" />
-              Akam Reading Access Summary
-            </span>
-            <p className="text-xs sm:text-sm text-gray-700 leading-relaxed">
-              <strong>Free Reader Member:</strong> First 15% preview read of articles (visuals, videos, and Masika e-magazine are locked).
-              <br className="hidden sm:inline" />
-              <strong className="text-emerald-950 font-bold ml-0 sm:ml-1">Student Pass & 6-Month Pass:</strong> Full 100% article reading, high-res visual art & photo essays, video productions, and complete monthly Masika digital magazine editions.
-            </p>
-          </div>
-        </div>
-
-        {/* ── 3 Main Plan Cards (Free Reader, Student Pass, 6-Month Pass) ── */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 lg:gap-6 items-stretch mb-12 sm:mb-16">
-          {/* Card 1: Reader Member (Free) */}
-          <div className="border border-gray-200 rounded-3xl p-6 sm:p-7 flex flex-col justify-between bg-white hover:border-gray-300 transition-all shadow-xs">
-            <div>
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-gray-500 tracking-wider uppercase">
-                  Reader Member
-                </span>
-                <span className="bg-amber-100 text-amber-800 text-[11px] font-bold px-2.5 py-0.5 rounded-full">
-                  15% Preview
-                </span>
-              </div>
-
-              <div className="mt-4 mb-2 flex items-baseline">
-                <span className="text-3xl sm:text-4xl font-extrabold text-gray-950 tracking-tight">Free</span>
-                <span className="text-xs text-gray-400 font-medium ml-1.5">/ forever</span>
-              </div>
-
-              <p className="text-xs sm:text-sm text-gray-500 font-normal leading-relaxed mb-6">
-                Read the first 15% preview of any story or article. Visuals, videos, and Masika e-magazine are locked.
-              </p>
-
-              <div className="border-t border-gray-100 pt-5">
-                <span className="text-[11px] font-bold text-gray-900 uppercase tracking-wider block mb-3">
-                  What&apos;s Included
-                </span>
-                <ul className="space-y-2.5">
-                  <li className="flex items-start text-xs sm:text-sm text-gray-700 leading-snug">
-                    <Check className="w-4 h-4 text-[#22B573] stroke-[3] mr-2.5 shrink-0 mt-0.5" />
-                    <span>Story & article reading preview (15%)</span>
-                  </li>
-                  <li className="flex items-start text-xs sm:text-sm text-gray-400 leading-snug">
-                    <Lock className="w-4 h-4 text-gray-400 mr-2.5 shrink-0 mt-0.5" />
-                    <span>Visual art, illustrations & photo essays (Locked)</span>
-                  </li>
-                  <li className="flex items-start text-xs sm:text-sm text-gray-400 leading-snug">
-                    <Lock className="w-4 h-4 text-gray-400 mr-2.5 shrink-0 mt-0.5" />
-                    <span>Videos & multimedia productions (Locked)</span>
-                  </li>
-                  <li className="flex items-start text-xs sm:text-sm text-gray-400 leading-snug">
-                    <Lock className="w-4 h-4 text-gray-400 mr-2.5 shrink-0 mt-0.5" />
-                    <span>Monthly Masika E-Magazine & 3D Reader (Locked)</span>
-                  </li>
-                  <li className="flex items-start text-xs sm:text-sm text-gray-700 leading-snug">
-                    <Check className="w-4 h-4 text-[#22B573] stroke-[3] mr-2.5 shrink-0 mt-0.5" />
-                    <span>Bookmarks & reader community access</span>
-                  </li>
-                </ul>
-              </div>
-            </div>
-
-            <div className="mt-8 pt-4">
-              <div className="w-full py-2.5 text-center text-xs font-semibold text-gray-500 bg-gray-100 rounded-xl">
-                Default Free Access
-              </div>
-            </div>
-          </div>
-
-          {/* Card 2: Student Pass (₹0 / Free) */}
-          <div className="border-2 border-[#0FA975]/50 rounded-3xl p-6 sm:p-7 flex flex-col justify-between bg-gradient-to-b from-[#F0FBF6] to-white relative shadow-sm hover:border-[#0FA975] transition-all">
-            <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-[#0FA975] text-white text-[10px] font-bold px-3.5 py-1 rounded-full flex items-center gap-1.5 shadow-xs uppercase tracking-wider whitespace-nowrap">
-              <GraduationCap className="w-3.5 h-3.5" /> Student Scholarship
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between mt-1">
-                <span className="text-xs font-bold text-[#0FA975] tracking-wider uppercase">
-                  Student Pass
-                </span>
-                <span className="bg-emerald-100 text-[#0FA975] text-[11px] font-bold px-2.5 py-0.5 rounded-full">
-                  100% Free
-                </span>
-              </div>
-
-              <div className="mt-4 mb-2 flex items-baseline">
-                <span className="text-3xl sm:text-4xl font-extrabold text-emerald-950 tracking-tight">₹0</span>
-                <span className="text-xs text-emerald-700 font-medium ml-1.5">/ with verified ID</span>
-              </div>
-
-              <p className="text-xs sm:text-sm text-gray-600 font-normal leading-relaxed mb-6">
-                Sponsored 6-month scholarship grant for students with full unhindered all-access to everything.
-              </p>
-
-              <div className="border-t border-emerald-100 pt-5">
-                <span className="text-[11px] font-bold text-gray-900 uppercase tracking-wider block mb-3">
-                  Full All-Access Included
-                </span>
-                <ul className="space-y-2.5">
-                  <li className="flex items-start text-xs sm:text-sm text-gray-800 leading-snug">
-                    <Check className="w-4 h-4 text-[#0FA975] stroke-[3] mr-2.5 shrink-0 mt-0.5" />
-                    <span>Full 100% reading of all stories & articles</span>
-                  </li>
-                  <li className="flex items-start text-xs sm:text-sm text-gray-800 leading-snug">
-                    <Check className="w-4 h-4 text-[#0FA975] stroke-[3] mr-2.5 shrink-0 mt-0.5" />
-                    <span>Visual art, illustrations & photo essays</span>
-                  </li>
-                  <li className="flex items-start text-xs sm:text-sm text-gray-800 leading-snug">
-                    <Check className="w-4 h-4 text-[#0FA975] stroke-[3] mr-2.5 shrink-0 mt-0.5" />
-                    <span>Videos & multimedia productions</span>
-                  </li>
-                  <li className="flex items-start text-xs sm:text-sm text-gray-800 leading-snug">
-                    <Check className="w-4 h-4 text-[#0FA975] stroke-[3] mr-2.5 shrink-0 mt-0.5" />
-                    <span>Monthly Masika E-Magazine & 3D Reader</span>
-                  </li>
-                  <li className="flex items-start text-xs sm:text-sm text-gray-800 leading-snug">
-                    <Check className="w-4 h-4 text-[#0FA975] stroke-[3] mr-2.5 shrink-0 mt-0.5" />
-                    <span>Digital archives, author audio & discussions</span>
-                  </li>
-                </ul>
-              </div>
-            </div>
-
-            <div className="mt-8 pt-4">
-              <Button
-                type="button"
-                onClick={onStudentApply}
-                variant="secondary"
-                size="md"
-                className="w-full text-xs sm:text-sm font-semibold border-2 border-[#0FA975] text-[#0FA975] hover:bg-emerald-50 rounded-xl cursor-pointer"
-              >
-                {loggedIn ? "Apply for Free Student Pass" : "Sign in for Student Pass"}
-              </Button>
-            </div>
-          </div>
-
-          {/* Card 3: 6-Month Pass (₹1) */}
-          <div className="bg-[#22B573] rounded-3xl p-6 sm:p-7 flex flex-col justify-between text-white shadow-lg hover:bg-[#1fa769] transition-all relative">
-            <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gray-950 text-white text-[10px] font-bold px-3.5 py-1 rounded-full flex items-center gap-1.5 shadow-xs uppercase tracking-wider whitespace-nowrap">
-              <Sparkles className="w-3.5 h-3.5 text-emerald-400" /> Best Value
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between mt-1">
-                <span className="text-xs font-bold text-white/90 tracking-wider uppercase">
-                  6-Month Pass
-                </span>
-                <span className="bg-white/20 text-white text-[11px] font-bold px-2.5 py-0.5 rounded-full">
-                  Full All-Access
-                </span>
-              </div>
-
-              <div className="mt-4 mb-2 flex items-baseline">
-                <span className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">₹1</span>
-                <span className="text-xs text-white/80 font-medium ml-1.5">/ 6 months</span>
-              </div>
-
-              <p className="text-xs sm:text-sm text-white/95 font-normal leading-relaxed mb-6">
-                Unlimited all-access reading pass for 6 months across all publications, videos, and digital editions.
-              </p>
-
-              <div className="border-t border-white/20 pt-5">
-                <span className="text-[11px] font-bold text-white uppercase tracking-wider block mb-3">
-                  Full All-Access Included
-                </span>
-                <ul className="space-y-2.5">
-                  <li className="flex items-start text-xs sm:text-sm text-white leading-snug">
-                    <Check className="w-4 h-4 text-white stroke-[3] mr-2.5 shrink-0 mt-0.5" />
-                    <span>Full 100% reading of all stories & articles</span>
-                  </li>
-                  <li className="flex items-start text-xs sm:text-sm text-white leading-snug">
-                    <Check className="w-4 h-4 text-white stroke-[3] mr-2.5 shrink-0 mt-0.5" />
-                    <span>Visual art, illustrations & photo essays</span>
-                  </li>
-                  <li className="flex items-start text-xs sm:text-sm text-white leading-snug">
-                    <Check className="w-4 h-4 text-white stroke-[3] mr-2.5 shrink-0 mt-0.5" />
-                    <span>Videos & multimedia productions</span>
-                  </li>
-                  <li className="flex items-start text-xs sm:text-sm text-white leading-snug">
-                    <Check className="w-4 h-4 text-white stroke-[3] mr-2.5 shrink-0 mt-0.5" />
-                    <span>Monthly Masika E-Magazine & 3D Reader</span>
-                  </li>
-                  <li className="flex items-start text-xs sm:text-sm text-white leading-snug">
-                    <Check className="w-4 h-4 text-white stroke-[3] mr-2.5 shrink-0 mt-0.5" />
-                    <span>Complete digital archive & audio recitals</span>
-                  </li>
-                </ul>
-              </div>
-            </div>
-
-            <div className="mt-8 pt-4">
-              <Button
-                type="button"
-                onClick={handleSubscribeClick}
-                variant="primary"
-                size="md"
-                className="w-full text-xs sm:text-sm font-semibold bg-gray-950 text-white hover:bg-black border-none rounded-xl shadow-md cursor-pointer"
-              >
-                {loggedIn ? "Subscribe Now — ₹1 / 6 Mo" : "Sign in to Subscribe — ₹1"}
-              </Button>
-            </div>
-          </div>
-        </div>
-
-        {/* ── Comparison Table Section Header ── */}
-        <div className="mb-6 pt-4 border-t border-gray-100">
-          <h3 className="text-2xl sm:text-3xl font-bold text-dark-bg tracking-tight">
-            Compare All Features in Detail
-          </h3>
-          <p className="text-xs sm:text-sm text-gray-500 mt-1">
-            Side-by-side feature comparison between Reader Member, Student Scholarship Pass, and 6-Month Pass.
-          </p>
-        </div>
-
         {/* ── Features Comparison Table Container ────────────────── */}
-        <div className="w-full mx-auto bg-white border border-gray-200/90 rounded-[20px] sm:rounded-[28px] overflow-x-auto shadow-xs">
+        <div className="w-full mx-auto bg-white border border-gray-200/90 rounded-[20px] sm:rounded-[28px] overflow-x-auto">
           <div className="min-w-[640px]">
             {/* Table Header */}
             <div className="grid grid-cols-12 items-center px-4 sm:px-8 py-4 sm:py-6 bg-white border-b border-gray-200/80">
@@ -748,9 +419,6 @@ export const ReadingPlansSection: React.FC<ReadingPlansSectionProps> = ({
                 <div className="text-xs sm:text-base font-semibold text-dark-bg">
                   Free <span className="block sm:inline text-[9px] sm:text-xs text-gray-400 font-normal">/ forever</span>
                 </div>
-                <span className="text-[9px] sm:text-[10px] text-amber-800 font-semibold bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full inline-block mt-1">
-                  15% Preview
-                </span>
               </div>
               <div className="col-span-2 text-center">
                 <span className="block text-[10px] sm:text-xs font-bold text-[#0FA975] uppercase tracking-normal sm:tracking-wider mb-0.5 sm:mb-1 leading-tight">
@@ -759,9 +427,6 @@ export const ReadingPlansSection: React.FC<ReadingPlansSectionProps> = ({
                 <div className="text-xs sm:text-base font-semibold text-emerald-800">
                   ₹0 <span className="block sm:inline text-[9px] sm:text-xs text-emerald-600 font-normal">/ verified ID</span>
                 </div>
-                <span className="text-[9px] sm:text-[10px] text-emerald-800 font-semibold bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full inline-block mt-1">
-                  Full All-Access
-                </span>
               </div>
               <div className="col-span-3 text-center">
                 <span className="block text-[10px] sm:text-xs font-bold text-[#22B573] uppercase tracking-normal sm:tracking-wider mb-0.5 sm:mb-1 leading-tight">
@@ -770,9 +435,6 @@ export const ReadingPlansSection: React.FC<ReadingPlansSectionProps> = ({
                 <div className="text-xs sm:text-base font-semibold text-dark-bg">
                   ₹1 <span className="block sm:inline text-[9px] sm:text-xs text-gray-400 font-normal">/ 6 months</span>
                 </div>
-                <span className="text-[9px] sm:text-[10px] text-[#0a8750] font-semibold bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full inline-block mt-1">
-                  Full All-Access
-                </span>
               </div>
             </div>
 
@@ -796,15 +458,35 @@ export const ReadingPlansSection: React.FC<ReadingPlansSectionProps> = ({
                       </div>
 
                       <div className="col-span-2 flex justify-center items-center">
-                        {renderPlanCell(item.readerMember, "reader")}
+                        {item.readerMember ? (
+                          <Check className="w-4 h-4 text-gray-800 stroke-[2.5]" />
+                        ) : (
+                          <span className="text-gray-300 font-light text-base select-none">—</span>
+                        )}
                       </div>
 
                       <div className="col-span-2 flex justify-center items-center">
-                        {renderPlanCell(item.studentPass ?? item.masikaPass, "student")}
+                        {item.masikaPass ? (
+                          <Check
+                            className={`w-4 h-4 stroke-[2.5] ${
+                              !item.readerMember ? "text-[#0FA975]" : "text-gray-800"
+                            }`}
+                          />
+                        ) : (
+                          <span className="text-gray-300 font-light text-base select-none">—</span>
+                        )}
                       </div>
 
                       <div className="col-span-3 flex justify-center items-center">
-                        {renderPlanCell(item.masikaPass, "premium")}
+                        {item.masikaPass ? (
+                          <Check
+                            className={`w-4 h-4 stroke-[2.5] ${
+                              !item.readerMember ? "text-[#22B573]" : "text-gray-800"
+                            }`}
+                          />
+                        ) : (
+                          <span className="text-gray-300 font-light text-base select-none">—</span>
+                        )}
                       </div>
                     </div>
                   ))}
