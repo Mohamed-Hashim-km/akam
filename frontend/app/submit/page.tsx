@@ -1236,6 +1236,7 @@ export default function SubmitWorkPage() {
                   );
                 })}
               </div>
+              {/* Auto-fill testing helper commented out
               <div className="flex items-center justify-between mt-3 px-1 text-xs text-gray-500">
                 <span>Presenting or testing?</span>
                 <button
@@ -1247,6 +1248,7 @@ export default function SubmitWorkPage() {
                   Auto-fill {submissionType === "STORY" ? "Article" : submissionType === "PAINTING" ? "Visual Arts" : "Video"}
                 </button>
               </div>
+              */}
             </div>
           )}
 
