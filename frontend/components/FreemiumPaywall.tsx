@@ -158,7 +158,7 @@ const FreemiumPaywall: React.FC<FreemiumPaywallProps> = ({
           isOpen={payUOpen}
           onClose={() => setPayUOpen(false)}
           planName="Akam Digital Pass"
-          priceAmount={0.1}
+          priceAmount={1}
           billingCycle="sixmonth"
           onSuccess={handleSubscribeSuccess}
         />

@@ -62,7 +62,7 @@ export class SubscriptionController {
       name: user.name || undefined,
       phone: body.phone,
       planType: body.planType || 'SIX_MONTH',
-      amount: typeof body.amount === 'number' && body.amount > 0 ? body.amount : 0.1,
+      amount: typeof body.amount === 'number' && body.amount > 0 ? body.amount : 1,
     });
 
     return payload;
@@ -92,7 +92,7 @@ export class SubscriptionController {
       name: user.name || undefined,
       phone: body.phone,
       planType: body.planType || 'SIX_MONTH',
-      amount: typeof body.amount === 'number' && body.amount > 0 ? body.amount : 0.1,
+      amount: typeof body.amount === 'number' && body.amount > 0 ? body.amount : 1,
     });
 
     return payload;

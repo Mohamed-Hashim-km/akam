@@ -109,7 +109,7 @@ export class PayUService {
     const randSuffix = Math.random().toString(36).substring(2, 6).toUpperCase();
     const txnid = `AKAM_${timestamp.slice(-8)}_${randSuffix}`;
 
-    const amountNum = typeof data.amount === 'number' && data.amount > 0 ? data.amount : 0.1;
+    const amountNum = typeof data.amount === 'number' && data.amount > 0 ? data.amount : 1;
     const formattedAmount = amountNum.toFixed(2);
 
     const productinfo = data.productInfo
@@ -182,7 +182,7 @@ export class PayUService {
       ? `EVT_${timestamp.slice(-8)}_${randSuffix}`
       : `AKAM_${timestamp.slice(-8)}_${randSuffix}`;
 
-    const amountNum = typeof data.amount === 'number' && data.amount > 0 ? data.amount : 0.1;
+    const amountNum = typeof data.amount === 'number' && data.amount > 0 ? data.amount : 1;
     const formattedAmount = amountNum.toFixed(2);
 
     const productinfo = data.productInfo
