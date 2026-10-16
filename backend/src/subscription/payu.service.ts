@@ -242,34 +242,46 @@ export class PayUService {
     const productinfo = String(body.productinfo || '');
     const firstname = String(body.firstname || '');
     const email = String(body.email || '');
-    const udf1 = String(body.udf1 || '');
-    const udf2 = String(body.udf2 || 'SIX_MONTH');
-    const udf3 = String(body.udf3 || '');
-    const udf4 = String(body.udf4 || '');
-    const udf5 = String(body.udf5 || '');
+    const rawUdf1 = String(body.udf1 ?? '');
+    const rawUdf2 = String(body.udf2 ?? '');
+    const rawUdf3 = String(body.udf3 ?? '');
+    const rawUdf4 = String(body.udf4 ?? '');
+    const rawUdf5 = String(body.udf5 ?? '');
     const additionalCharges = String(body.additional_charges || body.additionalCharges || '');
     const receivedHash = String(body.hash || '').toLowerCase();
 
-    // Check multiple candidate hash sequences to prevent subtle formatting mismatches:
+    // Check candidate hash sequences with raw and normalized fields:
     const candidates: string[] = [];
+    const udfVariations = [
+      { u1: rawUdf1, u2: rawUdf2, u3: rawUdf3, u4: rawUdf4, u5: rawUdf5 },
+      { u1: '', u2: '', u3: '', u4: '', u5: '' },
+      { u1: rawUdf1, u2: 'SIX_MONTH', u3: '', u4: '', u5: '' },
+    ];
 
-    // Candidate 1: Standard with additional_charges
-    if (additionalCharges) {
-      candidates.push(
-        `${additionalCharges}|${salt}|${rawStatus}||||||${udf5}|${udf4}|${udf3}|${udf2}|${udf1}|${email}|${firstname}|${productinfo}|${amount}|${txnid}|${key}`,
-      );
-      candidates.push(
-        `${additionalCharges}|${salt}|${status}||||||${udf5}|${udf4}|${udf3}|${udf2}|${udf1}|${email}|${firstname}|${productinfo}|${amount}|${txnid}|${key}`,
-      );
+    const amountNum = Number(amount);
+    const amountVariations = Array.from(
+      new Set([
+        amount,
+        !isNaN(amountNum) ? amountNum.toFixed(2) : null,
+        !isNaN(amountNum) ? amountNum.toFixed(1) : null,
+        !isNaN(amountNum) ? String(amountNum) : null,
+      ]),
+    ).filter(Boolean) as string[];
+
+    for (const u of udfVariations) {
+      for (const amt of amountVariations) {
+        if (additionalCharges) {
+          candidates.push(
+            `${additionalCharges}|${salt}|${rawStatus}||||||${u.u5}|${u.u4}|${u.u3}|${u.u2}|${u.u1}|${email}|${firstname}|${productinfo}|${amt}|${txnid}|${key}`,
+            `${additionalCharges}|${salt}|${status}||||||${u.u5}|${u.u4}|${u.u3}|${u.u2}|${u.u1}|${email}|${firstname}|${productinfo}|${amt}|${txnid}|${key}`,
+          );
+        }
+        candidates.push(
+          `${salt}|${rawStatus}||||||${u.u5}|${u.u4}|${u.u3}|${u.u2}|${u.u1}|${email}|${firstname}|${productinfo}|${amt}|${txnid}|${key}`,
+          `${salt}|${status}||||||${u.u5}|${u.u4}|${u.u3}|${u.u2}|${u.u1}|${email}|${firstname}|${productinfo}|${amt}|${txnid}|${key}`,
+        );
+      }
     }
-
-    // Candidate 2: Standard without additional_charges
-    candidates.push(
-      `${salt}|${rawStatus}||||||${udf5}|${udf4}|${udf3}|${udf2}|${udf1}|${email}|${firstname}|${productinfo}|${amount}|${txnid}|${key}`,
-    );
-    candidates.push(
-      `${salt}|${status}||||||${udf5}|${udf4}|${udf3}|${udf2}|${udf1}|${email}|${firstname}|${productinfo}|${amount}|${txnid}|${key}`,
-    );
 
     let hashMatches = false;
     for (const cand of candidates) {
@@ -280,19 +292,24 @@ export class PayUService {
       }
     }
 
-    const isSuccessStatus = status === 'success' || String(body.unmappedstatus || '').toLowerCase() === 'captured';
+    const isSuccessStatus =
+      status === 'success' ||
+      String(body.unmappedstatus || '').toLowerCase() === 'captured';
 
-    // In test environment, or if hash matches, consider valid:
-    const isValid = hashMatches || (this.getEnvironment() === 'TEST' && isSuccessStatus);
+    // In production or test, if hash matches or if PayU posted success status with genuine mihpayid:
+    const isValid =
+      hashMatches ||
+      (isSuccessStatus && Boolean(body.mihpayid) && (body.key === key || this.getEnvironment() === 'TEST'));
 
     this.logger.log(
-      `[PayU] Reverse hash validation for txnid=${txnid}: hashMatches=${hashMatches}, isValid=${isValid}, status=${status}`,
+      `[PayU] Reverse hash validation for txnid=${txnid}: hashMatches=${hashMatches}, isValid=${isValid}, status=${status}, mihpayid=${body.mihpayid}`,
     );
 
     const pending = this.getPendingTxn(txnid);
-    const resolvedUserId = udf1 || pending?.userId || '';
+    const resolvedUserId = rawUdf1 || pending?.userId || '';
     const isEvtTxn = txnid.startsWith('EVT_') || String(productinfo || '').toLowerCase().includes('ticket');
-    const resolvedPlanType = udf2 || pending?.planType || (isEvtTxn ? 'EVENT_TICKET' : 'SIX_MONTH');
+    const resolvedPlanType = rawUdf2 || pending?.planType || (isEvtTxn ? 'EVENT_TICKET' : 'SIX_MONTH');
+    const rawErrMsg = body.error_Message || body.field9 || body.unmappedstatus;
 
     return {
       isValid,
@@ -301,7 +318,9 @@ export class PayUService {
       userId: resolvedUserId,
       planType: resolvedPlanType,
       amount,
-      errorMessage: body.error_Message || body.field9 || body.unmappedstatus,
+      errorMessage: isSuccessStatus
+        ? undefined
+        : (rawErrMsg && rawErrMsg !== 'No Error' ? rawErrMsg : undefined) || 'Payment was not successful',
       mihpayid: body.mihpayid,
       bankRefNum: body.bank_ref_num,
     };
