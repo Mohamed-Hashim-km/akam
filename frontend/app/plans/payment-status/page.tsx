@@ -70,9 +70,6 @@ function PaymentStatusContent() {
             </span>
             <span className="text-sm font-semibold tracking-wide">PayU Payment Gateway</span>
           </div>
-          <span className="text-[10px] font-mono uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full">
-            SANDBOX TEST
-          </span>
         </div>
 
         <div className="p-6 sm:p-8 text-center">
