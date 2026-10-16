@@ -7,6 +7,7 @@ import {
   Check,
   Sparkles,
   GraduationCap,
+  Lock,
 } from "lucide-react";
 import Button from "./ui/Button";
 
@@ -48,20 +49,28 @@ export const AboutDigitalEdition: React.FC<AboutDigitalEditionProps> = ({
   ];
 
   const freeFeatures = [
-    "Unlimited access to all free stories",
-    "Save bookmarks to personal library",
-    "Participate in community discussion threads",
+    { text: "15% Article reading preview only", included: true },
+    { text: "Visual art, galleries & photo essays locked", included: false },
+    { text: "Video productions & multimedia locked", included: false },
+    { text: "Akam Masika E-Magazine locked", included: false },
+    { text: "Save bookmarks to personal library", included: true },
+    { text: "Participate in reader community discussions", included: true },
   ];
 
   const studentFeatures = [
-    "Complete access to monthly Masika digital magazine",
-
-    "Verified student scholarship pass (100% Free)",
+    { text: "Full 100% reading access to all stories", included: true },
+    { text: "Full access to visual art & photo essays", included: true },
+    { text: "Full access to video productions & media", included: true },
+    { text: "Complete monthly Masika digital magazine & 3D Reader", included: true },
+    { text: "Verified student scholarship pass (100% Free)", included: true },
   ];
 
   const premiumFeatures = [
-    "Full access to monthly Masika digital magazine",
-    "Read exclusive subscriber-only stories & deep dives",
+    { text: "Full 100% reading access to all stories", included: true },
+    { text: "Full access to visual art & photo essays", included: true },
+    { text: "Full access to video productions & media", included: true },
+    { text: "Complete monthly Masika digital magazine & 3D Reader", included: true },
+    { text: "Read exclusive subscriber-only stories & deep dives", included: true },
   ];
 
   return (
@@ -119,8 +128,8 @@ export const AboutDigitalEdition: React.FC<AboutDigitalEditionProps> = ({
                     <span className="text-[11px] font-bold text-gray-400 tracking-wider uppercase">
                       Reader Member
                     </span>
-                    <span className="bg-gray-100 text-gray-600 text-[10px] font-bold px-2.5 py-0.5 rounded-full">
-                      Community
+                    <span className="bg-amber-100 text-amber-800 text-[10px] font-bold px-2.5 py-0.5 rounded-full">
+                      15% Preview
                     </span>
                   </div>
 
@@ -130,7 +139,7 @@ export const AboutDigitalEdition: React.FC<AboutDigitalEditionProps> = ({
                   </div>
 
                   <p className="text-xs text-gray-500 font-normal leading-relaxed">
-                    Explore curated public stories, author discussions, and open reader circles.
+                    First 15% reading preview for stories. Visual art, video media, and Masika magazine require an active pass.
                   </p>
                 </div>
 
@@ -141,9 +150,13 @@ export const AboutDigitalEdition: React.FC<AboutDigitalEditionProps> = ({
                     </span>
                     <ul className="space-y-2">
                       {freeFeatures.map((item, idx) => (
-                        <li key={idx} className="flex items-start text-xs text-gray-600 leading-snug">
-                          <Check className="w-3.5 h-3.5 text-[#22B573] stroke-[3] mr-2 shrink-0 mt-0.5" />
-                          <span>{item}</span>
+                        <li key={idx} className={`flex items-start text-xs leading-snug ${item.included ? "text-gray-700 font-medium" : "text-gray-400"}`}>
+                          {item.included ? (
+                            <Check className="w-3.5 h-3.5 text-[#22B573] stroke-[3] mr-2 shrink-0 mt-0.5" />
+                          ) : (
+                            <Lock className="w-3.5 h-3.5 text-gray-400 mr-2 shrink-0 mt-0.5" />
+                          )}
+                          <span>{item.text}</span>
                         </li>
                       ))}
                     </ul>
@@ -176,7 +189,7 @@ export const AboutDigitalEdition: React.FC<AboutDigitalEditionProps> = ({
                   </div>
 
                   <p className="text-xs text-gray-600 font-normal leading-relaxed">
-                    Sponsored 6-month reading grant for enrolled college & university students.
+                    Sponsored 6-month reading grant for enrolled college & university students with full all-access.
                   </p>
                 </div>
 
@@ -189,7 +202,7 @@ export const AboutDigitalEdition: React.FC<AboutDigitalEditionProps> = ({
                       {studentFeatures.map((item, idx) => (
                         <li key={idx} className="flex items-start text-xs text-gray-700 leading-snug">
                           <Check className="w-3.5 h-3.5 text-[#0FA975] stroke-[3] mr-2 shrink-0 mt-0.5" />
-                          <span>{item}</span>
+                          <span>{item.text}</span>
                         </li>
                       ))}
                     </ul>
@@ -224,7 +237,7 @@ export const AboutDigitalEdition: React.FC<AboutDigitalEditionProps> = ({
                   </div>
 
                   <p className="text-xs text-white/95 font-normal leading-relaxed">
-                    Complete unhindered access to every edition, subscriber audio recitals, and interactive flipbook.
+                    Complete all-access pass for 6 months: full reading, visual art, video productions, and monthly Masika flipbook.
                   </p>
                 </div>
 
@@ -237,7 +250,7 @@ export const AboutDigitalEdition: React.FC<AboutDigitalEditionProps> = ({
                       {premiumFeatures.map((item, idx) => (
                         <li key={idx} className="flex items-start text-xs text-white leading-snug">
                           <Check className="w-3.5 h-3.5 text-white stroke-[3] mr-2 shrink-0 mt-0.5" />
-                          <span>{item}</span>
+                          <span>{item.text}</span>
                         </li>
                       ))}
                     </ul>
