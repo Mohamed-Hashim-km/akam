@@ -72,7 +72,7 @@ export default function PrivacyPolicyPage() {
       {/* Main Content Area */}
       <main className="flex-1 py-16 lg:py-24">
         <div className="container px-4 sm:px-6 lg:px-8 mx-auto max-w-5xl">
-          
+
           {/* Privacy Highlights Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-16">
             {privacyHighlights.map((item, idx) => (
@@ -97,7 +97,7 @@ export default function PrivacyPolicyPage() {
 
           {/* Detailed Policy Sections */}
           <div className="space-y-12 text-gray-700 leading-relaxed text-sm sm:text-base">
-            
+
             {/* Section 1 */}
             <section className="border-b border-gray-200/80 pb-10">
               <h2 className="text-2xl font-semibold text-[#040706] mb-4 flex items-center gap-3">
@@ -275,8 +275,8 @@ export default function PrivacyPolicyPage() {
                   <Mail className="w-5 h-5 text-[#22B573] shrink-0 mt-0.5" />
                   <div>
                     <div className="text-xs text-gray-500 uppercase font-semibold">Privacy Desk</div>
-                    <a href="mailto:contact@akam.in" className="text-sm font-medium text-dark-text hover:text-[#22B573]">
-                      contact@akam.in
+                    <a href="mailto:akamliveconnect@gmail.com" className="text-sm font-medium text-dark-text hover:text-[#22B573]">
+                      akamliveconnect@gmail.com
                     </a>
                   </div>
                 </div>

@@ -3,7 +3,7 @@ import ContactFormSection from "@/components/ContactFormSection";
 
 export const metadata = {
   title: "Contact AKAM — Reach Out To The Akam Team",
-  description: "Reach out to the Akam team. Email us at contact@akam.in or submit your inquiry through our contact form.",
+  description: "Reach out to the Akam team. Email us at akamliveconnect@gmail.com or submit your inquiry through our contact form.",
 };
 
 export default function ContactPage() {

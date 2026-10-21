@@ -10,7 +10,7 @@ export interface ContactSectionProps {
 
 export const ContactSection: React.FC<ContactSectionProps> = ({
   title = "Get in Touch",
-  email = "contact@akam.in",
+  email = "akamliveconnect@gmail.com",
 }) => {
   return (
     <section className="relative w-full bg-white pt-12 sm:pt-16 lg:pt-20 pb-0 font-poppins overflow-hidden">

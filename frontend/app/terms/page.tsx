@@ -72,7 +72,7 @@ export default function TermsOfServicePage() {
       {/* Main Content Area */}
       <main className="flex-1 py-16 lg:py-24">
         <div className="container px-4 sm:px-6 lg:px-8 mx-auto max-w-5xl">
-          
+
           {/* Key Principles Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-16">
             {keyPoints.map((item, idx) => (
@@ -97,7 +97,7 @@ export default function TermsOfServicePage() {
 
           {/* Legal Clauses */}
           <div className="space-y-12 text-gray-700 leading-relaxed text-sm sm:text-base">
-            
+
             {/* Clause 1 */}
             <section className="border-b border-gray-200/80 pb-10">
               <h2 className="text-2xl font-semibold text-[#040706] mb-4 flex items-center gap-3">
@@ -132,7 +132,7 @@ export default function TermsOfServicePage() {
                 <ul className="list-disc pl-6 space-y-2 text-gray-600">
                   <li>You must provide accurate, current, and complete registration information.</li>
                   <li>You are solely responsible for maintaining the confidentiality of your credentials and all activities occurring under your account.</li>
-                  <li>You agree to notify us immediately at <a href="mailto:contact@akam.in" className="text-[#22B573] underline">contact@akam.in</a> of any unauthorized use or security breach.</li>
+                  <li>You agree to notify us immediately at <a href="mailto:akamliveconnect@gmail.com" className="text-[#22B573] underline">akamliveconnect@gmail.com</a> of any unauthorized use or security breach.</li>
                 </ul>
               </div>
             </section>
@@ -249,8 +249,8 @@ export default function TermsOfServicePage() {
                   <Mail className="w-5 h-5 text-[#22B573] shrink-0 mt-0.5" />
                   <div>
                     <div className="text-xs text-gray-500 uppercase font-semibold">Email</div>
-                    <a href="mailto:contact@akam.in" className="text-sm font-medium text-dark-text hover:text-[#22B573]">
-                      contact@akam.in
+                    <a href="mailto:akamliveconnect@gmail.com" className="text-sm font-medium text-dark-text hover:text-[#22B573]">
+                      akamliveconnect@gmail.com
                     </a>
                   </div>
                 </div>
