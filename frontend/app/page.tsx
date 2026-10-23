@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { cookies } from "next/headers";
 import AuthHeroWrapper from "@/components/AuthHeroWrapper";
 import LatestStories from "@/components/LatestStories";
 import EditorsNote from "@/components/EditorsNote";
@@ -10,7 +9,9 @@ import UpcomingBookReleases from "@/components/UpcomingBookReleases";
 import ReaderReviews from "@/components/ReaderReviews";
 import { API_BASE_URL } from "@/lib/config";
 
-export const dynamic = "force-dynamic";
+// ISR: Incremental Static Regeneration with 60-second background revalidation fallback
+// and on-demand cache busting via /api/revalidate?path=/ or tags (stories, events, books, media, etc.)
+export const revalidate = 60;
 
 export const metadata: Metadata = {
   title: "Akam Digital — Storytelling, Literature & Cultural Platform",
@@ -143,19 +144,50 @@ async function getHomePageData() {
       ? featuredRaw
       : await safeJson(fallbackStoriesRes, pickArray, []);
 
-    const stories = rawStories.map((s: any) => ({
-      id:          s.id,
-      category:    (s.category || "Fiction").toUpperCase(),
-      badgeTextColor: getCategoryColor(s.category),
-      title:       s.title,
-      description: s.description || s.excerpt || s.summary || s.shortDescription || "",
-      author:      typeof s.author === "string" && s.author.startsWith("By ")
-                     ? s.author
-                     : `By ${s.authorName || s.authorEmail || "Unknown Author"}`,
-      imageSrc:    s.coverImageUrl || s.imageSrc || "/images/stories/ramachi.jpg",
-      href:        `/works/${s.slug || s.id}`,
-      contentType: (s.contentType || s.category || "STORY").toUpperCase(),
-    }));
+    const stories = rawStories.map((s: any) => {
+      const isVideo =
+        s.submissionType?.toUpperCase() === "VIDEO" ||
+        s.contentType?.toUpperCase() === "VIDEO" ||
+        (typeof s.category === "string" && s.category.trim().toUpperCase() === "VIDEO") ||
+        Boolean(
+          s.mediaUrl &&
+          (s.mediaUrl.includes("youtube.com") ||
+           s.mediaUrl.includes("youtu.be") ||
+           s.mediaUrl.includes("vimeo.com") ||
+           s.mediaUrl.endsWith(".mp4") ||
+           s.mediaUrl.endsWith(".webm") ||
+           s.submissionType?.toUpperCase() === "VIDEO")
+        );
+
+      let imageSrc = s.coverImageUrl || s.imageSrc;
+      if (!imageSrc && isVideo && s.mediaUrl) {
+        const ytMatch = s.mediaUrl.match(
+          /(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/
+        );
+        if (ytMatch && ytMatch[1]) {
+          imageSrc = `https://img.youtube.com/vi/${ytMatch[1]}/hqdefault.jpg`;
+        }
+      }
+      if (!imageSrc) {
+        imageSrc = s.mediaUrl || "/images/stories/ramachi.jpg";
+      }
+
+      return {
+        id:          s.id,
+        category:    (s.category || (isVideo ? "Video" : "Fiction")).toUpperCase(),
+        badgeTextColor: getCategoryColor(s.category),
+        title:       s.title,
+        description: s.description || s.excerpt || s.summary || s.shortDescription || "",
+        author:      typeof s.author === "string" && s.author.startsWith("By ")
+                       ? s.author
+                       : `By ${s.authorName || s.authorEmail || "Unknown Author"}`,
+        imageSrc,
+        href:        `/works/${s.slug || s.id}`,
+        contentType: isVideo ? "VIDEO" : (s.contentType || s.category || "STORY").toUpperCase(),
+        submissionType: s.submissionType || (isVideo ? "VIDEO" : undefined),
+        mediaUrl:    s.mediaUrl,
+      };
+    });
 
     const categories  = await safeJson(categoriesRes,  pickArray, []);
     const rawEvents   = await safeJson(eventsRes,       (j) => j?.data ?? (Array.isArray(j) ? j : []), []);
@@ -195,19 +227,16 @@ async function getHomePageData() {
 }
 
 export default async function Home() {
-  const cookieStore = await cookies();
-  const isLoggedInCookie = cookieStore.get("akam_logged_in")?.value === "true";
   const { stories, categories, events, books, videos, reviews, editorsNote } = await getHomePageData();
 
   return (
     <main className="min-h-screen flex flex-col font-poppins">
-      {/* Main Hero & About Akam Section - Only shown for unauthenticated / guest users */}
-      <AuthHeroWrapper initialIsLoggedIn={isLoggedInCookie} />
+      {/* Main Hero & About Akam Section - Shown for unauthenticated / guest users, auto-hidden client-side for logged-in users */}
+      <AuthHeroWrapper />
 
       {/* Latest Stories Section */}
       <LatestStories stories={stories} />
 
-    
       {/* Editor's Note Section */}
       <EditorsNote title={editorsNote.title} note={editorsNote.note} />
 
@@ -217,11 +246,11 @@ export default async function Home() {
       {/* Upcoming Events Section - Server-side fetched (top 8 upcoming events) */}
       <UpcomingEvents events={events} />
 
-      {/* Featured Video Section - fetches live from API (no ISR cache) */}
-      <FeaturedVideo />
+      {/* Featured Video Section - Server-side fetched with ISR cache */}
+      <FeaturedVideo initialVideos={videos} />
 
-      {/* Upcoming Book Releases Section - fetches live from API (no ISR cache) */}
-      <UpcomingBookReleases />
+      {/* Upcoming Book Releases Section - Server-side fetched with ISR cache */}
+      <UpcomingBookReleases releases={books} />
 
       {/* Reader Reviews Section */}
       <ReaderReviews reviews={reviews} />
