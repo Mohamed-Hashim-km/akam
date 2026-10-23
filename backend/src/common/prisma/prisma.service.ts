@@ -27,6 +27,14 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
     try {
       const client = await this.pool.connect();
       await client.query('SELECT 1');
+      await client.query('ALTER TABLE "user" ADD COLUMN IF NOT EXISTS "phone" TEXT;');
+      await client.query('ALTER TABLE "user" ADD COLUMN IF NOT EXISTS "privacyPolicyAccepted" BOOLEAN NOT NULL DEFAULT false;');
+      await client.query('ALTER TABLE "user" ADD COLUMN IF NOT EXISTS "isFeatured" BOOLEAN NOT NULL DEFAULT false;');
+      await client.query('ALTER TABLE "user" ADD COLUMN IF NOT EXISTS "sortOrder" INT NOT NULL DEFAULT 0;');
+      await client.query('ALTER TABLE "event" ADD COLUMN IF NOT EXISTS "images" TEXT[] DEFAULT ARRAY[]::TEXT[];');
+      await client.query('ALTER TABLE "event" ADD COLUMN IF NOT EXISTS "videoUrl" TEXT;');
+      await client.query('ALTER TABLE "event" ADD COLUMN IF NOT EXISTS "isPaid" BOOLEAN NOT NULL DEFAULT false;');
+      await client.query('ALTER TABLE "event" ADD COLUMN IF NOT EXISTS "price" NUMERIC NOT NULL DEFAULT 0;');
       await client.query('ALTER TABLE story ADD COLUMN IF NOT EXISTS description TEXT;');
       await client.query('ALTER TABLE story ADD COLUMN IF NOT EXISTS category TEXT DEFAULT \'Fiction\';');
       await client.query('ALTER TABLE story ALTER COLUMN category DROP NOT NULL;');
