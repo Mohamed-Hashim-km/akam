@@ -16,11 +16,22 @@ import {
   ArrowRight,
 } from "lucide-react";
 import Button from "@/components/ui/Button";
+import type { Metadata } from "next";
 
-export const metadata = {
+export const metadata: Metadata = {
   title: "Terms of Service — AKAM Digital",
   description:
     "Read the Terms of Service for AKAM Digital — India's premier digital literary channel for Malayalam literature, serialized stories, Masika digital pass, and editorial publishing.",
+  alternates: {
+    canonical: "https://akamdigital.in/terms",
+  },
+  openGraph: {
+    title: "Terms of Service — AKAM Digital",
+    description:
+      "Read the Terms of Service for AKAM Digital — India's premier digital literary channel for Malayalam literature, serialized stories, Masika digital pass, and editorial publishing.",
+    url: "https://akamdigital.in/terms",
+    type: "website",
+  },
 };
 
 export default function TermsOfServicePage() {

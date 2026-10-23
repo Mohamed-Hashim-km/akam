@@ -1,0 +1,31 @@
+# AKAM Digital
+
+> AKAM Digital (https://akamdigital.in) is Kerala's premier digital literary publication, storytelling platform, and monthly journal (Akam Masika). Published in collaboration with Kairali Books, AKAM elevates contemporary Malayalam serialized fiction, short stories, poetry, cultural essays, and visual arts above social media noise into a curated, elevated digital medium.
+
+## Core Sections
+
+- [AKAM Home](https://akamdigital.in): The central literary gateway featuring curated featured stories, the Editor's Note, upcoming releases from Kairali Books, upcoming literary events, and reader reviews.
+- [Curated Works](https://akamdigital.in/works): The complete searchable archive of serialized fiction, stories, poems, artwork, and video recitals with category filtering and search.
+- [Akam Masika (E-Magazine)](https://akamdigital.in/emagazine): The flagship monthly digital journal of AKAM featuring serialized literary works, essays, and cover art accessible via an interactive 3D digital reader.
+- [Literary Events](https://akamdigital.in/events): Calendar of upcoming reading sessions, masterclasses, author meetups, and past archives.
+- [Communities](https://akamdigital.in/communities): Dedicated discussion forums across Fiction, Malayalam Literature, Poetry, Novellas, Children's Literature, Translations, and Cultural Studies.
+- [Featured Authors](https://akamdigital.in/authors): Profiles of acclaimed Malayalam writers, Jnanpith laureates, Sahitya Akademi awardees, and emerging storytellers.
+- [Akam Media](https://akamdigital.in/media): Interviews, discussions, debates, oral histories, and cultural video discourses with regional thinkers.
+- [Membership Plans](https://akamdigital.in/plans): Reader subscription tiers including Free Reader preview, 6-Month All-Access pass, Annual membership, and Free Student Scholar Passes.
+- [Editorial Guidelines](https://akamdigital.in/editorial-guidelines): Standards, submission criteria, and ethical principles for contributing writers and artists.
+- [About AKAM](https://akamdigital.in/about): Background, literary philosophy, and vision for Malayalam digital publishing.
+- [Contact Editorial Desk](https://akamdigital.in/contact): Communication channels for authors, presses, and reader support.
+
+## Content Formats
+
+- **Articles & Fiction**: Handcrafted long-form serialized novels, short stories, and analytical essays.
+- **Poetry**: Contemporary verse, classical translations, and audio recitations.
+- **Visual Arts**: Digital painting exhibitions, cover illustrations, and curated photo essays.
+- **Video & Multimedia**: Author interviews, poetry readings, and literary discourses.
+- **Digital Journal (Masika)**: Printable and 3D flipbook digital magazine editions published on a regular monthly cadence.
+
+## Language & Accessibility
+
+- **Languages**: Primary language is Malayalam (മലയാളം, UTF-8 Malayalam script) with accompanying English translation summaries, commentary, and metadata.
+- **OpenGraph & Social**: Canonical URL is https://akamdigital.in.
+- **API & Feeds**: https://akamdigital.in/sitemap.xml

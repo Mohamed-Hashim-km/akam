@@ -13,31 +13,34 @@ import { API_BASE_URL } from "@/lib/config";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Akam Digital — Storytelling, Literature & Cultural Platform",
+  title: "AKAM Digital — Malayalam Literature, Stories, Essays & E-Magazine",
   description:
-    "Discover authentic Malayalam stories, essay collections, poetry, regional events, and literary discourse on Akam Digital.",
+    "Discover authentic Malayalam stories, serialized fiction, poetry, regional events, and monthly literary journals on AKAM Digital.",
+  alternates: {
+    canonical: "https://akamdigital.in",
+  },
   openGraph: {
-    title: "Akam Digital — Storytelling, Literature & Cultural Platform",
+    title: "AKAM Digital — Malayalam Literature, Stories, Essays & E-Magazine",
     description:
-      "Discover authentic Malayalam stories, essay collections, poetry, regional events, and literary discourse on Akam Digital.",
-    url: "https://akamdigital.vercel.app",
-    siteName: "Akam Digital",
+      "Discover authentic Malayalam stories, serialized fiction, poetry, regional events, and monthly literary journals on AKAM Digital.",
+    url: "https://akamdigital.in",
+    siteName: "AKAM Digital",
     images: [
       {
-        url: "https://akamdigital.vercel.app/images/ogImage/ogImage.png",
+        url: "/images/ogImage/ogImage.png",
         width: 1200,
         height: 630,
-        alt: "Akam Digital",
+        alt: "AKAM Digital",
       },
     ],
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Akam Digital — Storytelling, Literature & Cultural Platform",
+    title: "AKAM Digital — Malayalam Literature, Stories, Essays & E-Magazine",
     description:
-      "Discover authentic Malayalam stories, essay collections, poetry, regional events, and literary discourse on Akam Digital.",
-    images: ["https://akamdigital.vercel.app/images/ogImage/ogImage.png"],
+      "Discover authentic Malayalam stories, serialized fiction, poetry, regional events, and monthly literary journals on AKAM Digital.",
+    images: ["/images/ogImage/ogImage.png"],
   },
 };
 
