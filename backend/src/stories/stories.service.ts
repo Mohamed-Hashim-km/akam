@@ -142,7 +142,7 @@ export class StoriesService {
       <p>Thank you for contributing to AKAM Digital and sharing your creative voice with our reader community.</p>
       
       <div style="text-align: center; margin-top: 25px;">
-        <a href="https://akamdigital.vercel.app/profile" class="btn">View on Your Profile</a>
+        <a href="https://akamdigital.in/profile" class="btn">View on Your Profile</a>
       </div>
     </div>
     <div class="footer">

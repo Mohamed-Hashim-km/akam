@@ -16,11 +16,22 @@ import {
   Send,
 } from "lucide-react";
 import Button from "@/components/ui/Button";
+import type { Metadata } from "next";
 
-export const metadata = {
+export const metadata: Metadata = {
   title: "Editorial Guidelines — AKAM Digital",
   description:
     "Learn about AKAM's editorial standards, submission guidelines, curation philosophy, and review process for Malayalam literature, essays, and stories.",
+  alternates: {
+    canonical: "https://akamdigital.in/editorial-guidelines",
+  },
+  openGraph: {
+    title: "Editorial Guidelines — AKAM Digital",
+    description:
+      "Learn about AKAM's editorial standards, submission guidelines, curation philosophy, and review process for Malayalam literature, essays, and stories.",
+    url: "https://akamdigital.in/editorial-guidelines",
+    type: "website",
+  },
 };
 
 export default function EditorialGuidelinesPage() {

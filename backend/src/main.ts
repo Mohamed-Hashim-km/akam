@@ -20,6 +20,8 @@ async function bootstrap() {
 
   const allowedOrigins = Array.from(
     new Set([
+      'https://akamdigital.in',
+      'https://www.akamdigital.in',
       'https://akamdigital.vercel.app',
       'http://localhost:3000',
       'http://localhost:3001',

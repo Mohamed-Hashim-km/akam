@@ -3,10 +3,22 @@ import EditorialVow from "@/components/EditorialVow";
 import AuthorsOfAkam from "@/components/AuthorsOfAkam";
 import AboutKairaliBooks from "@/components/AboutKairaliBooks";
 
-export const metadata = {
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
   title: "About AKAM — Preserving Heritage, Championing Modern Voices",
   description:
     "At our core, we believe that literature is the mirror of a society's soul. Rooted in the rich linguistic tradition of Malayalam.",
+  alternates: {
+    canonical: "https://akamdigital.in/about",
+  },
+  openGraph: {
+    title: "About AKAM — Preserving Heritage, Championing Modern Voices",
+    description:
+      "At our core, we believe that literature is the mirror of a society's soul. Rooted in the rich linguistic tradition of Malayalam.",
+    url: "https://akamdigital.in/about",
+    type: "website",
+  },
 };
 
 export default function AboutPage() {

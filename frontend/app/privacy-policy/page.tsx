@@ -16,11 +16,22 @@ import {
   RefreshCw,
 } from "lucide-react";
 import Button from "@/components/ui/Button";
+import type { Metadata } from "next";
 
-export const metadata = {
+export const metadata: Metadata = {
   title: "Privacy Policy — AKAM Digital",
   description:
     "Learn how AKAM Digital collects, uses, and safeguards your personal information, reading history, author submissions, and subscription data in compliance with India's DPDP Act.",
+  alternates: {
+    canonical: "https://akamdigital.in/privacy-policy",
+  },
+  openGraph: {
+    title: "Privacy Policy — AKAM Digital",
+    description:
+      "Learn how AKAM Digital collects, uses, and safeguards your personal information, reading history, author submissions, and subscription data in compliance with India's DPDP Act.",
+    url: "https://akamdigital.in/privacy-policy",
+    type: "website",
+  },
 };
 
 export default function PrivacyPolicyPage() {

@@ -206,6 +206,14 @@ export default function WorkDetailPage() {
     }
   }, [isSubscribed, story?.hasFullAccess, fetchStoryData]);
 
+  // Dynamic SEO title
+  useEffect(() => {
+    if (story?.title) {
+      const authorText = story.authorName ? ` — ${story.authorName}` : "";
+      document.title = `${story.title}${authorText} | AKAM Digital`;
+    }
+  }, [story]);
+
   useEffect(() => {
     const handleUserUpdated = () => {
       loadUser();
@@ -625,6 +633,40 @@ export default function WorkDetailPage() {
 
   return (
     <div className="min-h-screen bg-[#F9FAFB] font-poppins relative">
+      {/* Schema.org Article JSON-LD for Search Engines & LLMs */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "Article",
+            headline: story.title,
+            description: story.description || (story.content ? story.content.slice(0, 160) : story.title),
+            image: story.coverImageUrl ? [formatAssetUrl(story.coverImageUrl)] : undefined,
+            datePublished: story.createdAt || undefined,
+            dateModified: story.updatedAt || story.createdAt || undefined,
+            inLanguage: "ml",
+            author: {
+              "@type": "Person",
+              name: story.authorName || "Akam Author",
+            },
+            publisher: {
+              "@type": "Organization",
+              name: "AKAM Digital",
+              url: "https://akamdigital.in",
+              logo: {
+                "@type": "ImageObject",
+                url: "https://akamdigital.in/icon.png",
+              },
+            },
+            mainEntityOfPage: {
+              "@type": "WebPage",
+              "@id": `https://akamdigital.in/works/${story.slug || story.id}`,
+            },
+          }),
+        }}
+      />
+
       {/* Top Reading Progress Bar */}
       <div className="fixed top-0 left-0 right-0 h-1 bg-gray-100 z-50">
         <div

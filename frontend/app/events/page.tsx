@@ -8,29 +8,34 @@ import PastEventArchive from "@/components/PastEventArchive";
 export const revalidate = 60;
 
 export const metadata: Metadata = {
-  title: "Literary Events & Workshops | Akam Digital",
+  title: "Literary Events & Workshops | AKAM Digital",
   description:
-    "Explore upcoming reading sessions, author discussions, creative writing masterclasses, film screenings, and past literary archives on Akam.",
+    "Explore upcoming reading sessions, author discussions, creative writing masterclasses, film screenings, and past literary archives on AKAM Digital.",
+  alternates: {
+    canonical: "https://akamdigital.in/events",
+  },
   openGraph: {
-    title: "Literary Events & Workshops | Akam Digital",
+    title: "Literary Events & Workshops | AKAM Digital",
     description:
-      "Explore upcoming reading sessions, author discussions, creative writing masterclasses, film screenings, and past literary archives on Akam.",
+      "Explore upcoming reading sessions, author discussions, creative writing masterclasses, film screenings, and past literary archives on AKAM Digital.",
+    url: "https://akamdigital.in/events",
+    siteName: "AKAM Digital",
     images: [
       {
-        url: "https://akamdigital.vercel.app/images/ogImage/ogImage.png",
+        url: "/images/ogImage/ogImage.png",
         width: 1200,
         height: 630,
-        alt: "Akam Digital Events",
+        alt: "AKAM Digital Events",
       },
     ],
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Literary Events & Workshops | Akam Digital",
+    title: "Literary Events & Workshops | AKAM Digital",
     description:
-      "Explore upcoming reading sessions, author discussions, creative writing masterclasses, film screenings, and past literary archives on Akam.",
-    images: ["https://akamdigital.vercel.app/images/ogImage/ogImage.png"],
+      "Explore upcoming reading sessions, author discussions, creative writing masterclasses, film screenings, and past literary archives on AKAM Digital.",
+    images: ["/images/ogImage/ogImage.png"],
   },
 };
 
