@@ -5,26 +5,25 @@ export const dynamic = "force-dynamic";
 
 const HOMEPAGE_TAGS = ["homepage", "stories", "categories", "events", "books", "media", "comments", "editors-note", "reviews"];
 
-function performRevalidation(path: string, tag: string | null, profile: string = "max") {
+function performRevalidation(path: string, tag: string | null) {
   const revalidatedTags: string[] = [];
 
-  const targetProfile = profile || "max";
-
+  // 1. Invalidate specific tag immediately
   if (tag) {
     try {
-      revalidateTag(tag, targetProfile);
+      revalidateTag(tag, { expire: 0 });
       revalidatedTags.push(tag);
     } catch (e) {
-      // Ignore
+      console.error(`revalidateTag failed for ${tag}:`, e);
     }
   }
 
-  // Always revalidate homepage data tags if revalidating the root path "/" or if no tag was explicitly passed
+  // 2. Always revalidate all homepage data tags if revalidating the root path "/" or if no tag was explicitly passed
   if (path === "/" || !tag) {
     for (const t of HOMEPAGE_TAGS) {
       if (!revalidatedTags.includes(t)) {
         try {
-          revalidateTag(t, targetProfile);
+          revalidateTag(t, { expire: 0 });
           revalidatedTags.push(t);
         } catch (e) {
           // Ignore if tag revalidation fails
@@ -33,11 +32,13 @@ function performRevalidation(path: string, tag: string | null, profile: string =
     }
   }
 
+  // 3. Purge path cache for both page and layout to bust static generation & router cache immediately
   if (path) {
     try {
-      revalidatePath(path);
+      revalidatePath(path, "page");
+      revalidatePath(path, "layout");
     } catch (e) {
-      // Ignore
+      console.error(`revalidatePath failed for ${path}:`, e);
     }
   }
 
@@ -47,10 +48,9 @@ function performRevalidation(path: string, tag: string | null, profile: string =
 export async function GET(request: NextRequest) {
   const path = request.nextUrl.searchParams.get("path") || "/";
   const tag = request.nextUrl.searchParams.get("tag");
-  const profile = request.nextUrl.searchParams.get("profile") || "max";
 
   try {
-    const revalidatedTags = performRevalidation(path, tag, profile);
+    const revalidatedTags = performRevalidation(path, tag);
 
     return NextResponse.json(
       {
@@ -58,7 +58,6 @@ export async function GET(request: NextRequest) {
         path,
         tag: tag || null,
         tags: revalidatedTags,
-        profile,
         timestamp: Date.now(),
       },
       {
@@ -81,9 +80,8 @@ export async function POST(request: NextRequest) {
     const body = await request.json().catch(() => ({}));
     const path = body.path || request.nextUrl.searchParams.get("path") || "/";
     const tag = body.tag || request.nextUrl.searchParams.get("tag");
-    const profile = body.profile || request.nextUrl.searchParams.get("profile") || "max";
 
-    const revalidatedTags = performRevalidation(path, tag, profile);
+    const revalidatedTags = performRevalidation(path, tag);
 
     return NextResponse.json(
       {
@@ -91,7 +89,6 @@ export async function POST(request: NextRequest) {
         path,
         tag: tag || null,
         tags: revalidatedTags,
-        profile,
         timestamp: Date.now(),
       },
       {
