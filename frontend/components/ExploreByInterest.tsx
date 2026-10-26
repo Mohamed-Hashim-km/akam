@@ -530,7 +530,7 @@ export const ExploreByInterest: React.FC<ExploreByInterestProps> = ({
           style={{ backgroundColor: bgColor }}
         >
           <div>
-            <h3 className="text-base sm:text-lg font-bold text-gray-950 tracking-tight leading-snug mb-2 font-poppins">
+            <h3 className="text-base sm:text-lg font-semibold text-gray-950 tracking-tight leading-snug mb-2 font-poppins">
               {cat.title}
             </h3>
             <p className="text-xs text-gray-800/85 font-normal leading-relaxed mb-5 font-poppins">
