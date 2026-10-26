@@ -1,0 +1,78 @@
+name: Deploy Akam Digital
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy-vps:
+    name: Deploy to Hostinger VPS (akam.digital)
+    runs-on: [self-hosted, akam-vps]
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Sync Code to Application Directory
+        run: |
+          echo "📦 Syncing repository code to /var/www/akam-digital..."
+          rsync -av --delete \
+            --exclude '.git' \
+            --exclude '.github' \
+            --exclude '.env*' \
+            --exclude 'node_modules' \
+            --exclude 'backend/node_modules' \
+            --exclude 'frontend/node_modules' \
+            --exclude 'backend/dist' \
+            --exclude 'frontend/.next' \
+            --exclude 'backend/uploads' \
+            --exclude 'uploads' \
+            ./ /var/www/akam-digital/
+
+      - name: Ensure Directory Structure
+        run: |
+          echo "📁 Ensuring required upload directories exist..."
+          mkdir -p /var/www/akam-digital/backend/uploads/avatars
+          mkdir -p /var/www/akam-digital/backend/uploads/books
+          mkdir -p /var/www/akam-digital/backend/uploads/covers
+          mkdir -p /var/www/akam-digital/backend/uploads/inline-images
+          mkdir -p /var/www/akam-digital/backend/uploads/pdfs
+
+      - name: Build & Prepare Backend
+        run: |
+          echo "⚙️ Installing backend dependencies..."
+          cd /var/www/akam-digital/backend
+          npm ci --prefer-offline || npm install
+          echo "🗄️ Generating Prisma client & syncing schema..."
+          npx prisma generate
+          npx prisma db push --accept-data-loss || true
+          echo "🔨 Building NestJS backend..."
+          npm run build
+
+      - name: Build Frontend
+        run: |
+          echo "⚙️ Installing frontend dependencies..."
+          cd /var/www/akam-digital/frontend
+          npm ci --prefer-offline || npm install
+          echo "🔨 Building Next.js frontend..."
+          npm run build
+
+      - name: Reload PM2 Services
+        env:
+          RUNNER_TRACKING_ID: ""
+        run: |
+          echo "🚀 Reloading PM2 services 'akam-backend' and 'akam-frontend'..."
+          cd /var/www/akam-digital
+          if [ -f "ecosystem.config.cjs" ]; then
+            pm2 startOrReload ecosystem.config.cjs --update-env || (
+              pm2 reload akam-backend --update-env || pm2 restart akam-backend --update-env
+              pm2 reload akam-frontend --update-env || pm2 restart akam-frontend --update-env
+            )
+          else
+            cd /var/www/akam-digital/backend
+            pm2 reload akam-backend --update-env || pm2 restart akam-backend --update-env || pm2 start dist/main.js --name "akam-backend"
+            cd /var/www/akam-digital/frontend
+            pm2 reload akam-frontend --update-env || pm2 restart akam-frontend --update-env || pm2 start npm --name "akam-frontend" -- start
+          fi
+          pm2 status
