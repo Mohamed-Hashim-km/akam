@@ -8,6 +8,7 @@ import { Search, X, Bell, User, Menu, ChevronRight, CheckCheck, LogOut, Loader2,
 import Button from "./ui/Button";
 import AuthModal from "./AuthModal";
 import { API_BASE_URL, apiFetch } from "@/lib/config";
+import akamLogo from "@/public/images/akamdigital.png";
 
 export interface NavbarProps {
   onSearch?: (query: string) => void;
@@ -762,10 +763,8 @@ export const Navbar: React.FC<NavbarProps> = ({
           <div className="flex items-center gap-8 lg:gap-10">
             <Link href="/" className="flex items-center shrink-0 group">
               <Image
-                src="/images/akamdigital.png"
+                src={akamLogo}
                 alt="AKAM Digital Logo"
-                width={300}
-                height={100}
                 priority
                 className="h-10 sm:h-14 w-auto object-contain transition-transform"
               />
@@ -1291,10 +1290,8 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <div className="flex items-center justify-between px-4 py-3.5 border-b border-[#A4A4A4] bg-white">
                   <Link href="/" onClick={() => setMobileMenuOpen(false)} className="flex items-center shrink-0">
                     <Image
-                      src="/images/akamdigital.png"
+                      src={akamLogo}
                       alt="AKAM Digital Logo"
-                      width={300}
-                      height={100}
                       priority
                       className="h-10 sm:h-14 w-auto object-contain transition-transform"
                     />

@@ -55,6 +55,8 @@ jobs:
           echo "⚙️ Installing frontend dependencies..."
           cd /var/www/akam-digital/frontend
           npm ci --prefer-offline || npm install
+          echo "🧹 Clearing stale Next.js image cache..."
+          rm -rf .next/cache/images
           echo "🔨 Building Next.js frontend..."
           npm run build
 

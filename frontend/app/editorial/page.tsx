@@ -3,6 +3,7 @@
 import React, { useState, useEffect, Suspense } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import akamLogo from "@/public/images/akamdigital.png";
 import { useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 
@@ -3460,7 +3461,7 @@ function EditorialDashboardContent() {
       {/* Mobile Top Navbar (Single Clean Bar) */}
       <div className="lg:hidden bg-white border-b border-gray-200 text-gray-900 p-4 flex items-center justify-between shrink-0 z-40 shadow-xs">
         <Link href="/" className="flex items-center shrink-0 group">
-          <Image src="/images/akamdigital.png" alt="AKAM Digital Logo" width={300} height={100} priority className="h-10 w-auto object-contain" />
+          <Image src={akamLogo} alt="AKAM Digital Logo" priority className="h-10 w-auto object-contain" />
         </Link>
         <button
           onClick={() => setMobileSidebarOpen(!mobileSidebarOpen)}
@@ -3486,7 +3487,7 @@ function EditorialDashboardContent() {
           {/* Logo & Space Identifier */}
           <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-100">
             <Link href="/" className="flex items-center shrink-0 group">
-              <Image src="/images/akamdigital.png" alt="AKAM Digital Logo" width={300} height={100} priority className="h-10 w-auto object-contain" />
+              <Image src={akamLogo} alt="AKAM Digital Logo" priority className="h-10 w-auto object-contain" />
             </Link>
             <div className="flex items-center gap-1">
               <Link href="/" title="View Public Site" className="p-2 bg-gray-50 hover:bg-gray-100 rounded-full text-gray-600 transition-colors">
