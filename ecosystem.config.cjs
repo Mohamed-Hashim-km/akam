@@ -3,7 +3,7 @@ const path = require('path');
 module.exports = {
   apps: [
     {
-      name: 'akam-backend',
+      name: 'akam-digital-api',
       cwd: path.join(__dirname, 'backend'),
       script: 'dist/main.js',
       instances: 1,
@@ -12,21 +12,21 @@ module.exports = {
       max_memory_restart: '1G',
       env: {
         NODE_ENV: 'production',
-        PORT: 3000,
+        PORT: 3005,
       },
     },
     {
-      name: 'akam-frontend',
+      name: 'akam-digital-web',
       cwd: path.join(__dirname, 'frontend'),
-      script: 'node_modules/next/dist/bin/next',
-      args: 'start -p 3002',
+      script: '/usr/bin/npm',
+      args: 'start -- -p 3004',
       instances: 1,
       autorestart: true,
       watch: false,
       max_memory_restart: '1G',
       env: {
         NODE_ENV: 'production',
-        PORT: 3002,
+        PORT: 3004,
       },
     },
   ],
