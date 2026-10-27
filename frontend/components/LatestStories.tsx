@@ -59,11 +59,20 @@ function getCategoryBadge(cat?: string) {
 
 function normalizeStory(s: any): Story {
   const isVideo =
-    s.submissionType === "VIDEO" ||
-    s.contentType === "VIDEO" ||
-    (typeof s.category === "string" && s.category.toUpperCase() === "VIDEO");
+    s.submissionType?.toUpperCase() === "VIDEO" ||
+    s.contentType?.toUpperCase() === "VIDEO" ||
+    (typeof s.category === "string" && s.category.trim().toUpperCase() === "VIDEO") ||
+    Boolean(
+      s.mediaUrl &&
+      (s.mediaUrl.includes("youtube.com") ||
+       s.mediaUrl.includes("youtu.be") ||
+       s.mediaUrl.includes("vimeo.com") ||
+       s.mediaUrl.endsWith(".mp4") ||
+       s.mediaUrl.endsWith(".webm") ||
+       s.submissionType?.toUpperCase() === "VIDEO")
+    );
 
-  const cat = (s.category || s.contentType || (isVideo ? "Video" : "Story")).toUpperCase();
+  const cat = (s.category || (isVideo ? "Video" : (s.contentType || "Story"))).toUpperCase();
   const rawAuthor =
     s.authorName || s.authorEmail || s.author || "Unknown Author";
   const author =
@@ -107,7 +116,7 @@ function normalizeStory(s: any): Story {
     imageSrc: img,
     href: s.href || `/works/${s.slug || s.id}`,
     contentType: isVideo ? "VIDEO" : (s.contentType || s.submissionType || cat).toUpperCase(),
-    submissionType: s.submissionType,
+    submissionType: s.submissionType || (isVideo ? "VIDEO" : undefined),
     mediaUrl: s.mediaUrl,
   };
 }
@@ -122,7 +131,7 @@ export const LatestStories: React.FC<LatestStoriesProps> = ({
   const [isEnd, setIsEnd] = useState<boolean>(false);
 
   const [stories, setStories] = useState<Story[]>(() => {
-    if (propStories !== undefined && propStories.length > 0) {
+    if (propStories !== undefined) {
       return propStories.map(normalizeStory);
     }
     return [];
@@ -131,16 +140,15 @@ export const LatestStories: React.FC<LatestStoriesProps> = ({
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (propStories !== undefined && propStories.length > 0) {
+    if (propStories !== undefined) {
       setStories(propStories.map(normalizeStory));
+      return;
     }
 
     let isMounted = true;
 
     const fetchFeaturedPublishedStories = async () => {
-      if (!propStories || propStories.length === 0) {
-        setLoading(true);
-      }
+      setLoading(true);
 
       try {
         const res = await apiFetch(
@@ -160,17 +168,15 @@ export const LatestStories: React.FC<LatestStoriesProps> = ({
         }
 
         // Fallback: If no stories are explicitly marked as featured, fallback to latest approved
-        if (!propStories || propStories.length === 0) {
-          const fallbackRes = await apiFetch(
-            `${API_BASE_URL}/stories?status=APPROVED&limit=10`,
-            { cache: "no-store" }
-          );
-          if (fallbackRes.ok) {
-            const fallbackJson = await fallbackRes.json();
-            const fallbackItems = fallbackJson.data || (Array.isArray(fallbackJson) ? fallbackJson : []);
-            if (Array.isArray(fallbackItems) && isMounted) {
-              setStories(fallbackItems.map(normalizeStory));
-            }
+        const fallbackRes = await apiFetch(
+          `${API_BASE_URL}/stories?status=APPROVED&limit=10`,
+          { cache: "no-store" }
+        );
+        if (fallbackRes.ok) {
+          const fallbackJson = await fallbackRes.json();
+          const fallbackItems = fallbackJson.data || (Array.isArray(fallbackJson) ? fallbackJson : []);
+          if (Array.isArray(fallbackItems) && isMounted) {
+            setStories(fallbackItems.map(normalizeStory));
           }
         }
       } catch (err) {
@@ -269,9 +275,17 @@ export const LatestStories: React.FC<LatestStoriesProps> = ({
               {stories.map((story, index) => {
                 const badge = getCategoryBadge(story.category);
                 const isVideo =
-                  story.contentType === "VIDEO" ||
-                  story.submissionType === "VIDEO" ||
-                  story.category === "VIDEO";
+                  story.contentType?.toUpperCase() === "VIDEO" ||
+                  story.submissionType?.toUpperCase() === "VIDEO" ||
+                  story.category?.toUpperCase() === "VIDEO" ||
+                  Boolean(
+                    story.mediaUrl &&
+                    (story.mediaUrl.includes("youtube.com") ||
+                     story.mediaUrl.includes("youtu.be") ||
+                     story.mediaUrl.includes("vimeo.com") ||
+                     story.mediaUrl.endsWith(".mp4") ||
+                     story.mediaUrl.endsWith(".webm"))
+                  );
 
                 return (
                   <SwiperSlide key={story.id} className="h-auto">
@@ -294,7 +308,7 @@ export const LatestStories: React.FC<LatestStoriesProps> = ({
                         {/* Video play indicator */}
                         {isVideo && (
                           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                            <div className="w-12 h-12 rounded-full bg-white/75 backdrop-blur-xs flex items-center justify-center shadow-md group-hover/card:scale-110 transition-transform">
+                            <div className="w-12 h-12 rounded-full bg-white/85 backdrop-blur-xs flex items-center justify-center shadow-md group-hover/card:scale-110 transition-transform">
                               <Play className="w-5 h-5 fill-current ml-0.5 text-gray-900" />
                             </div>
                           </div>
@@ -307,8 +321,9 @@ export const LatestStories: React.FC<LatestStoriesProps> = ({
                           {story.title}
                         </h3>
                         <span
-                          className={`${badge.bg} ${badge.text} font-bold text-[10px] sm:text-[11px] tracking-wider uppercase px-2.5 py-0.5 rounded-lg shrink-0 shadow-2xs`}
+                          className={`${badge.bg} ${badge.text} font-bold text-[10px] sm:text-[11px] tracking-wider uppercase px-2.5 py-0.5 rounded-lg shrink-0 shadow-2xs flex items-center gap-1`}
                         >
+                          {isVideo && <Video className="w-3 h-3 shrink-0" />}
                           {story.category}
                         </span>
                       </div>
