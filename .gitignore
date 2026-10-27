@@ -13,10 +13,15 @@ backend/dist/
 
 # Environment files
 .env
-.env*.local
+.env*
 *.env
-frontend/.env
-backend/.env
+*.env.*
+.env.local
+.env.*.local
+.env.example
+.env*.example
+frontend/.env*
+backend/.env*
 
 # Logs & temp
 *.log
