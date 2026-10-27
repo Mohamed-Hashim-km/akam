@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Poppins, Open_Sans } from "next/font/google";
 import LayoutShell from "@/components/LayoutShell";
 import "./globals.css";
@@ -19,6 +19,12 @@ const openSans = Open_Sans({
 });
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://akamdigital.in";
+
+export const viewport: Viewport = {
+  themeColor: "#22B573",
+  width: "device-width",
+  initialScale: 1,
+};
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -58,6 +64,13 @@ export const metadata: Metadata = {
   alternates: {
     canonical: SITE_URL,
   },
+  icons: {
+    icon: [
+      { url: "/icon.png", sizes: "any" },
+      { url: "/images/akamdigital.png", type: "image/png" },
+    ],
+    apple: [{ url: "/icon.png", sizes: "180x180", type: "image/png" }],
+  },
   openGraph: {
     title: "AKAM Digital | Malayalam Literature, Stories, Essays & E-Magazine",
     description:
@@ -65,7 +78,7 @@ export const metadata: Metadata = {
     url: SITE_URL,
     siteName: "AKAM Digital",
     locale: "ml_IN",
-    alternateLocale: ["en_US"],
+    alternateLocale: ["en_US", "en_IN"],
     type: "website",
     images: [
       {
@@ -78,6 +91,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
+    site: "@akamdigital",
+    creator: "@akamdigital",
     title: "AKAM Digital | Malayalam Literature, Stories, Essays & E-Magazine",
     description:
       "Explore curated contemporary Malayalam serialized fiction, short stories, poetry, cultural essays, and monthly Akam Masika digital editions.",
@@ -129,12 +144,42 @@ const jsonLdWebsite = {
         url: `${SITE_URL}/images/akamdigital.png`,
       },
       sameAs: [
-        "https://www.facebook.com/akamdigital",
-        "https://www.instagram.com/akamdigital",
-        "https://twitter.com/akamdigital",
+        "https://www.facebook.com/people/AKAM/61577932417864",
+        "https://www.instagram.com/akam_digital",
+        "https://www.youtube.com/@akamvideo2025",
       ],
       description:
         "Digital storytelling platform and monthly literary publication for contemporary Malayalam literature.",
+    },
+    {
+      "@type": "SiteNavigationElement",
+      name: "Works & Stories",
+      url: `${SITE_URL}/works`,
+    },
+    {
+      "@type": "SiteNavigationElement",
+      name: "Akam Masika (E-Magazine)",
+      url: `${SITE_URL}/emagazine`,
+    },
+    {
+      "@type": "SiteNavigationElement",
+      name: "Literary Communities",
+      url: `${SITE_URL}/communities`,
+    },
+    {
+      "@type": "SiteNavigationElement",
+      name: "Events",
+      url: `${SITE_URL}/events`,
+    },
+    {
+      "@type": "SiteNavigationElement",
+      name: "Authors",
+      url: `${SITE_URL}/authors`,
+    },
+    {
+      "@type": "SiteNavigationElement",
+      name: "Cultural Media",
+      url: `${SITE_URL}/media`,
     },
   ],
 };
@@ -150,6 +195,8 @@ export default function RootLayout({
       className={`${poppins.variable} ${openSans.variable} h-full antialiased`}
     >
       <head>
+        <link rel="alternate" type="text/plain" href="/llms.txt" title="LLMs Context" />
+        <link rel="alternate" type="text/plain" href="/llms-full.txt" title="Full LLMs Documentation" />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLdWebsite) }}

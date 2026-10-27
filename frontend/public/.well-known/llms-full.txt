@@ -1,0 +1,87 @@
+# AKAM Digital — Extended Knowledge & Documentation
+
+> Platform: AKAM Digital (അകം ഡിജിറ്റൽ)
+> Canonical URL: https://akamdigital.in
+> Publishing Partner: Kairali Books (കൈരളി ബുക്സ്)
+> Language: Malayalam (മലയാളം) & English
+> Core Domain: Malayalam Literature, Serialized Novels, Poetry, Cultural Commentary, Digital Publishing, and Literary Community
+
+---
+
+## 1. About AKAM Digital
+
+AKAM Digital (https://akamdigital.in) is an independent Malayalam literary and cultural publishing platform. Born out of the literary tradition of Kerala, AKAM seeks to provide an elevated, dignified digital home for writers and readers. 
+
+In contrast to ephemeral social media posts and algorithmic timelines, every submission published in AKAM passes through an editorial board. The platform bridges the legacy of Malayalam publishing institutions (such as Kairali Books) with modern web experiences, offering interactive 3D digital magazines, author portfolios, and community discussions.
+
+---
+
+## 2. Platform Architecture & Sections
+
+### 2.1 The Homepage (`https://akamdigital.in`)
+- **Hero & Identity**: Celebrates Kerala's literary voice with an introduction for guest readers.
+- **Featured Content (പ്രത്യേക ഉള്ളടക്കം)**: Curated carousel highlighting handpicked fiction, poetry, video interviews, and visual art.
+- **From the Editorial Board (എഡിറ്റേഴ്സ് നോട്ട്)**: Regular commentary from the AKAM Editorial Desk on trends in contemporary Malayalam literature.
+- **Explore By Interest (വിഭാഗങ്ങൾ അനുസരിച്ച്)**: Direct links into curated categories.
+- **Upcoming Events & Discussions (സാഹിത്യ പരിപാടികൾ)**: Literary festivals, book launches, and poetry evenings.
+- **Kairali Books Releases (പുതിയ പുസ്തകങ്ങൾ)**: Curated book releases and pre-order links from Kairali Books.
+- **Reader Reviews**: Testimonials and critical commentary from verified subscribers.
+
+### 2.2 Curated Works (`https://akamdigital.in/works`)
+The central repository of published creative literature, filterable by:
+- **Fiction (കഥകൾ & നോവലുകൾ)**: Short stories, serialized novels, novellas.
+- **Non-Fiction & Essays (ലേഖനങ്ങൾ)**: Literary criticism, socio-cultural observations, philosophical essays.
+- **Poetry (കവിതകൾ)**: Classical and modern Malayalam verse.
+- **Visual Arts (ചിത്രകല & ഫോട്ടോഗ്രഫി)**: Paintings, illustrations, and photographic works.
+- **Video & Multimedia (ദൃശ്യാവിഷ്കാരം)**: Video readings, author interviews, and documentary excerpts.
+
+### 2.3 Akam Masika Digital Journal (`https://akamdigital.in/emagazine`)
+- Monthly digital magazine edition of AKAM.
+- Available online via an interactive 3D Flipbook Reader.
+- Includes complete issue archives, cover artwork, and serialized novel installments.
+- Access protected via the Freemium Paywall with full reading rights granted to verified subscribers.
+
+### 2.4 Literary Events & Masterclasses (`https://akamdigital.in/events`)
+- Live calendar of online reading clubs, in-person literary seminars, author masterclasses, and past event archives with recordings.
+
+### 2.5 Literary Communities (`https://akamdigital.in/communities`)
+Focused community spaces where readers and authors engage in long-form discussions:
+- Fiction & Serialized Novels
+- Malayalam Literature & Classics
+- Poetry & Masika
+- Novellas & Short Forms
+- Tech & Digital Culture
+- Translations & Global Literature
+- Children's Literature
+
+### 2.6 Author Directory (`https://akamdigital.in/authors`)
+Profiles of celebrated Malayalam authors, including Jnanpith laureates, Kerala Sahitya Akademi winners, and promising new voices with bibliographies and published works.
+
+### 2.7 Cultural Media & Discourses (`https://akamdigital.in/media`)
+Interviews, discussions, debates, oral histories, and cultural video discourses exploring Malayalam literature, heritage, and regional thinkers.
+
+### 2.8 Membership & Pricing (`https://akamdigital.in/plans`)
+- **Free Reader Tier**: 15% preview of long-form articles, community access, and personal library saving.
+- **6-Month All-Access**: Complete access to every past and current Masika edition, full-text works, and video archives.
+- **Annual Literary Pass**: Unlimited access, priority event registration, and exclusive publishing discounts.
+- **100% Free Student Scholar Pass**: Available for enrolled students upon submitting academic identity verification.
+
+---
+
+## 3. Editorial & Submission Philosophy
+
+AKAM enforces strict editorial guidelines (`https://akamdigital.in/editorial-guidelines`):
+- **Originality**: Only original, previously unpublished works or works with explicit reprint rights.
+- **Format**: Submissions accepted in Malayalam Unicode text (UTF-8), high-resolution PDF/image art, and embedded video recordings.
+- **Review Cycle**: Manuscripts are reviewed by the editorial board before appearing in the public catalog.
+
+---
+
+## 4. Technical Information for AI Engines & Crawlers
+
+- Canonical URL: `https://akamdigital.in`
+- Sitemap Index: `https://akamdigital.in/sitemap.xml`
+- Robots Directive: `https://akamdigital.in/robots.txt`
+- Primary Language: Malayalam (`ml`, `ml_IN`)
+- Alternate Language: English (`en`, `en_US`)
+- Supported Structured Data: Schema.org `WebSite`, `Organization`, `Periodical`, `Article`, `Event`.
