@@ -340,14 +340,6 @@ function EditorialDashboardContent() {
     currentPageRef.current = currentPage;
   }, [currentPage]);
 
-  // Clear selections when switching tab or page
-  useEffect(() => {
-    setSelectedCatalogIds([]);
-    setSelectedAuthorIds([]);
-    setSelectedEventIds([]);
-    setSelectedBookIds([]);
-  }, [activeTab, currentPage]);
-
   useEffect(() => {
     const tabFromUrl = searchParams.get("tab") as TabType;
     const pageFromUrlStr = searchParams.get("page");
@@ -822,14 +814,6 @@ function EditorialDashboardContent() {
   const [submittingBook, setSubmittingBook] = useState(false);
   const [uploadingBookCover, setUploadingBookCover] = useState(false);
 
-  // Multi-select & Bulk Delete State for Catalog, Authors, Events, Books
-  const [selectedCatalogIds, setSelectedCatalogIds] = useState<string[]>([]);
-  const [selectedAuthorIds, setSelectedAuthorIds] = useState<string[]>([]);
-  const [selectedEventIds, setSelectedEventIds] = useState<string[]>([]);
-  const [selectedBookIds, setSelectedBookIds] = useState<string[]>([]);
-  const [bulkDeleting, setBulkDeleting] = useState(false);
-  const [clearingCommunityPosts, setClearingCommunityPosts] = useState(false);
-
   const resetBookForm = () => {
     setEditingBookId(null);
     setBookFormTitle("");
@@ -928,193 +912,6 @@ function EditorialDashboardContent() {
       }
     } catch (err) {
       console.error("Failed to delete book", err);
-    }
-  };
-
-  // ── Multi-select & Bulk Delete Handlers ─────────────────────────────────────
-  const handleToggleSelectCatalog = (id: string) => {
-    setSelectedCatalogIds((prev) =>
-      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
-    );
-  };
-
-  const handleSelectAllCatalog = () => {
-    const pageIds = allStories.map((s) => s.id);
-    const allSelected = pageIds.length > 0 && pageIds.every((id) => selectedCatalogIds.includes(id));
-    if (allSelected) {
-      setSelectedCatalogIds((prev) => prev.filter((id) => !pageIds.includes(id)));
-    } else {
-      setSelectedCatalogIds((prev) => Array.from(new Set([...prev, ...pageIds])));
-    }
-  };
-
-  const handleBulkDeleteCatalog = async () => {
-    if (selectedCatalogIds.length === 0) return;
-    const count = selectedCatalogIds.length;
-    if (
-      !confirm(
-        `Are you sure you want to permanently delete ${count} selected works? This action cannot be undone.`
-      )
-    ) {
-      return;
-    }
-    setBulkDeleting(true);
-    let successCount = 0;
-    try {
-      for (const id of selectedCatalogIds) {
-        try {
-          const res = await apiFetch(`${API_BASE_URL}/stories/${id}`, { method: "DELETE" });
-          if (res.ok) successCount++;
-        } catch (e) {
-          console.error(`Failed to delete story ${id}:`, e);
-        }
-      }
-      setSelectedCatalogIds([]);
-      setFeedbackMessage(`Successfully deleted ${successCount} of ${count} works.`);
-      fetch("/api/revalidate?path=/&tag=stories").catch(() => {});
-      fetchDashboardData("catalog", currentPage, searchQuery);
-      fetchCatalogCounts();
-      setTimeout(() => setFeedbackMessage(null), 4000);
-    } finally {
-      setBulkDeleting(false);
-    }
-  };
-
-  const handleToggleSelectAuthor = (id: string) => {
-    setSelectedAuthorIds((prev) =>
-      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
-    );
-  };
-
-  const handleSelectAllAuthors = () => {
-    const pageIds = allUsers.filter((u) => u.id !== user?.id).map((u) => u.id);
-    const allSelected = pageIds.length > 0 && pageIds.every((id) => selectedAuthorIds.includes(id));
-    if (allSelected) {
-      setSelectedAuthorIds((prev) => prev.filter((id) => !pageIds.includes(id)));
-    } else {
-      setSelectedAuthorIds((prev) => Array.from(new Set([...prev, ...pageIds])));
-    }
-  };
-
-  const handleBulkDeleteAuthors = async () => {
-    if (selectedAuthorIds.length === 0) return;
-    const count = selectedAuthorIds.length;
-    if (
-      !confirm(
-        `Are you sure you want to permanently delete ${count} selected user accounts? This will remove their profiles.`
-      )
-    ) {
-      return;
-    }
-    setBulkDeleting(true);
-    let successCount = 0;
-    try {
-      for (const id of selectedAuthorIds) {
-        try {
-          const res = await apiFetch(`${API_BASE_URL}/users/${id}`, { method: "DELETE" });
-          if (res.ok) successCount++;
-        } catch (e) {
-          console.error(`Failed to delete user ${id}:`, e);
-        }
-      }
-      setSelectedAuthorIds([]);
-      setFeedbackMessage(`Successfully deleted ${successCount} of ${count} user accounts.`);
-      fetchDashboardData("authors", currentPage, searchQuery);
-      setTimeout(() => setFeedbackMessage(null), 4000);
-    } finally {
-      setBulkDeleting(false);
-    }
-  };
-
-  const handleToggleSelectEvent = (id: string) => {
-    setSelectedEventIds((prev) =>
-      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
-    );
-  };
-
-  const handleSelectAllEvents = () => {
-    const pageIds = eventsList.map((ev) => ev.id);
-    const allSelected = pageIds.length > 0 && pageIds.every((id) => selectedEventIds.includes(id));
-    if (allSelected) {
-      setSelectedEventIds((prev) => prev.filter((id) => !pageIds.includes(id)));
-    } else {
-      setSelectedEventIds((prev) => Array.from(new Set([...prev, ...pageIds])));
-    }
-  };
-
-  const handleBulkDeleteEvents = async () => {
-    if (selectedEventIds.length === 0) return;
-    const count = selectedEventIds.length;
-    if (
-      !confirm(
-        `Are you sure you want to permanently delete ${count} selected events?`
-      )
-    ) {
-      return;
-    }
-    setBulkDeleting(true);
-    let successCount = 0;
-    try {
-      for (const id of selectedEventIds) {
-        try {
-          const res = await apiFetch(`${API_BASE_URL}/editorial/events/${id}`, { method: "DELETE" });
-          if (res.ok) successCount++;
-        } catch (e) {
-          console.error(`Failed to delete event ${id}:`, e);
-        }
-      }
-      setSelectedEventIds([]);
-      setFeedbackMessage(`Successfully deleted ${successCount} of ${count} events.`);
-      fetchDashboardData("events", currentPage, searchQuery);
-      setTimeout(() => setFeedbackMessage(null), 4000);
-    } finally {
-      setBulkDeleting(false);
-    }
-  };
-
-  const handleToggleSelectBook = (id: string) => {
-    setSelectedBookIds((prev) =>
-      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
-    );
-  };
-
-  const handleSelectAllBooks = () => {
-    const pageIds = booksList.map((b) => b.id);
-    const allSelected = pageIds.length > 0 && pageIds.every((id) => selectedBookIds.includes(id));
-    if (allSelected) {
-      setSelectedBookIds((prev) => prev.filter((id) => !pageIds.includes(id)));
-    } else {
-      setSelectedBookIds((prev) => Array.from(new Set([...prev, ...pageIds])));
-    }
-  };
-
-  const handleBulkDeleteBooks = async () => {
-    if (selectedBookIds.length === 0) return;
-    const count = selectedBookIds.length;
-    if (
-      !confirm(
-        `Are you sure you want to permanently delete ${count} selected book releases?`
-      )
-    ) {
-      return;
-    }
-    setBulkDeleting(true);
-    let successCount = 0;
-    try {
-      for (const id of selectedBookIds) {
-        try {
-          const res = await apiFetch(`${API_BASE_URL}/editorial/books/${id}`, { method: "DELETE" });
-          if (res.ok) successCount++;
-        } catch (e) {
-          console.error(`Failed to delete book ${id}:`, e);
-        }
-      }
-      setSelectedBookIds([]);
-      setFeedbackMessage(`Successfully deleted ${successCount} of ${count} book releases.`);
-      fetchDashboardData("books", currentPage, searchQuery);
-      setTimeout(() => setFeedbackMessage(null), 4000);
-    } finally {
-      setBulkDeleting(false);
     }
   };
 
@@ -2277,91 +2074,6 @@ function EditorialDashboardContent() {
       }
     } catch (e) {
       console.error(e);
-    }
-  };
-
-  const handleClearAllCommunityPosts = async () => {
-    const totalPostsCount = communitiesList.reduce((acc, c) => acc + (Number(c.postCount) || 0), 0);
-    const confirmed = confirm(
-      `Are you sure you want to CLEAR ALL community posts across all communities?\n\nThis will permanently delete all ${
-        totalPostsCount > 0 ? totalPostsCount + " " : ""
-      }posts, comments, and reports. This action cannot be undone.`
-    );
-    if (!confirmed) return;
-
-    setClearingCommunityPosts(true);
-    try {
-      // 1. Call backend bulk clear endpoint
-      const res = await apiFetch(`${API_BASE_URL}/editorial/community/posts/clear-all`, {
-        method: "DELETE",
-      });
-
-      // 2. If endpoint not yet deployed on remote backend, fallback to deleting via backend community posts endpoint
-      if (!res.ok && res.status === 404) {
-        for (const comm of communitiesList) {
-          try {
-            const listRes = await apiFetch(`${API_BASE_URL}/communities/${comm.slug}/posts?limit=100`);
-            if (listRes.ok) {
-              const postsData = await listRes.json();
-              const posts = Array.isArray(postsData) ? postsData : postsData.data || [];
-              for (const p of posts) {
-                await apiFetch(`${API_BASE_URL}/communities/${comm.slug}/posts/${p.id}`, {
-                  method: "DELETE",
-                });
-              }
-            }
-          } catch (err) {
-            console.error(`Failed clearing posts for r/${comm.slug}:`, err);
-          }
-        }
-      }
-
-      setFeedbackMessage("All community posts cleared successfully.");
-      await fetchDashboardData("communities", currentPage, searchQuery);
-      setTimeout(() => setFeedbackMessage(null), 3500);
-    } catch (e: any) {
-      console.error(e);
-      alert("Failed to clear community posts: " + (e?.message || "Unknown error"));
-    } finally {
-      setClearingCommunityPosts(false);
-    }
-  };
-
-  const handleClearCommunityPosts = async (commSlug: string, commName: string) => {
-    const confirmed = confirm(
-      `Are you sure you want to clear all posts for "${commName}" (r/${commSlug})?\n\nThis cannot be undone.`
-    );
-    if (!confirmed) return;
-
-    setClearingCommunityPosts(true);
-    try {
-      // 1. Call backend endpoint to clear by community
-      const res = await apiFetch(`${API_BASE_URL}/editorial/community/posts/by-community/${commSlug}`, {
-        method: "DELETE",
-      });
-
-      // 2. Fallback to deleting per-post via backend API if bulk endpoint not yet deployed
-      if (!res.ok && res.status === 404) {
-        const listRes = await apiFetch(`${API_BASE_URL}/communities/${commSlug}/posts?limit=100`);
-        if (listRes.ok) {
-          const postsData = await listRes.json();
-          const posts = Array.isArray(postsData) ? postsData : postsData.data || [];
-          for (const p of posts) {
-            await apiFetch(`${API_BASE_URL}/communities/${commSlug}/posts/${p.id}`, {
-              method: "DELETE",
-            });
-          }
-        }
-      }
-
-      setFeedbackMessage(`Cleared posts for r/${commSlug}.`);
-      await fetchDashboardData("communities", currentPage, searchQuery);
-      setTimeout(() => setFeedbackMessage(null), 3500);
-    } catch (e: any) {
-      console.error(e);
-      alert("Failed to clear posts: " + (e?.message || "Unknown error"));
-    } finally {
-      setClearingCommunityPosts(false);
     }
   };
 
@@ -5133,56 +4845,6 @@ function EditorialDashboardContent() {
           {/* TAB 2: PUBLISHED CATALOG */}
           {activeTab === "catalog" && (
             <div className="space-y-6 font-poppins">
-              {/* Bulk Selection Bar for Catalog */}
-              {selectedCatalogIds.length > 0 && (
-                <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3 shadow-xs animate-in fade-in">
-                  <div className="flex items-center gap-3">
-                    <div className="w-3 h-3 rounded-full bg-rose-500 animate-ping" />
-                    <span className="text-xs font-bold text-rose-950">
-                      {selectedCatalogIds.length} {selectedCatalogIds.length === 1 ? "work" : "works"} selected
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedCatalogIds([])}
-                      className="text-[11px] font-semibold text-rose-700 hover:text-rose-900 underline ml-2 cursor-pointer"
-                    >
-                      Clear selection
-                    </button>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      onClick={handleSelectAllCatalog}
-                      className="text-xs font-semibold py-1.5 px-3 border border-rose-200 text-rose-900 hover:bg-rose-100 cursor-pointer"
-                    >
-                      {allStories.length > 0 && allStories.every((s) => selectedCatalogIds.includes(s.id)) ? "Deselect Page" : "Select All on Page"}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      disabled={bulkDeleting}
-                      onClick={handleBulkDeleteCatalog}
-                      className="text-xs font-bold py-1.5 px-4 bg-rose-600 hover:bg-rose-700 text-white border-transparent shadow-xs cursor-pointer flex items-center gap-1.5"
-                    >
-                      {bulkDeleting ? (
-                        <>
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          <span>Deleting...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Trash2 className="w-3.5 h-3.5" />
-                          <span>Delete Selected ({selectedCatalogIds.length})</span>
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                </div>
-              )}
-
               {/* Top Controls: Search, Status Badges, Medium Filter, Category Filter, Sort Order */}
               <div className="bg-white border border-gray-200 rounded-[28px] p-5 shadow-xs space-y-4">
                 <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4">
@@ -5320,22 +4982,9 @@ function EditorialDashboardContent() {
                   </div>
 
                   {/* Total loaded vs total count */}
-                  <div className="flex items-center gap-3">
-                    {allStories.length > 0 && (
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        size="sm"
-                        onClick={handleSelectAllCatalog}
-                        className="text-xs font-semibold py-1 px-3 border border-gray-200 text-gray-700 hover:bg-gray-100 cursor-pointer"
-                      >
-                        {allStories.every((s) => selectedCatalogIds.includes(s.id)) ? "Deselect Page" : "Select Multiple"}
-                      </Button>
-                    )}
-                    <div className="text-xs font-medium text-gray-500">
-                      Showing <strong className="text-gray-950 font-bold">{allStories.length}</strong> of{" "}
-                      <strong className="text-gray-950 font-bold">{catalogMeta.total}</strong> works
-                    </div>
+                  <div className="text-xs font-medium text-gray-500">
+                    Showing <strong className="text-gray-950 font-bold">{allStories.length}</strong> of{" "}
+                    <strong className="text-gray-950 font-bold">{catalogMeta.total}</strong> works
                   </div>
                 </div>
               </div>
@@ -5343,54 +4992,40 @@ function EditorialDashboardContent() {
               {/* Mobile Card List View (< 640px) */}
               <div className="block sm:hidden space-y-4">
                 {allStories.map((s) => (
-                  <div
-                    key={s.id}
-                    className={`bg-white border rounded-2xl p-4 shadow-xs space-y-3 transition-colors ${
-                      selectedCatalogIds.includes(s.id) ? "border-rose-400 bg-rose-50/20" : "border-gray-200"
-                    }`}
-                  >
+                  <div key={s.id} className="bg-white border border-gray-200 rounded-2xl p-4 shadow-xs space-y-3">
                     <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-start gap-2.5 min-w-0">
-                        <input
-                          type="checkbox"
-                          checked={selectedCatalogIds.includes(s.id)}
-                          onChange={() => handleToggleSelectCatalog(s.id)}
-                          className="mt-1 w-4 h-4 rounded text-black border-gray-300 cursor-pointer accent-black shrink-0"
-                          title="Select work"
-                        />
-                        <div>
-                          <h3 className="font-bold text-gray-900 text-sm leading-snug">{s.title}</h3>
-                          {s.submissionType !== "PAINTING" && s.submissionType !== "VIDEO" && s.category && (
-                            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mt-0.5 block">Category: {s.category}</span>
+                      <div>
+                        <h3 className="font-bold text-gray-900 text-sm leading-snug">{s.title}</h3>
+                        {s.submissionType !== "PAINTING" && s.submissionType !== "VIDEO" && s.category && (
+                          <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mt-0.5 block">Category: {s.category}</span>
+                        )}
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                          {s.submissionType === "PAINTING" ? (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-purple-700 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-lg">
+                              <Palette className="w-3 h-3" /> Visual Arts
+                            </span>
+                          ) : s.submissionType === "VIDEO" ? (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-lg">
+                              <Video className="w-3 h-3" /> Video
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-gray-600 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded-lg">
+                              <FileText className="w-3 h-3" /> Article
+                            </span>
                           )}
-                          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                            {s.submissionType === "PAINTING" ? (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-purple-700 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-lg">
-                                <Palette className="w-3 h-3" /> Visual Arts
-                              </span>
-                            ) : s.submissionType === "VIDEO" ? (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-lg">
-                                <Video className="w-3 h-3" /> Video
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-gray-600 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded-lg">
-                                <FileText className="w-3 h-3" /> Article
-                              </span>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => handleToggleFeaturedStory(s.id)}
-                              className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-lg border transition-all cursor-pointer ${
-                                s.isFeatured
-                                  ? "bg-[#E4F953] text-[#040706] border-[#cce42e] shadow-xs"
-                                  : "bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200"
-                              }`}
-                              title={s.isFeatured ? "Featured on Homepage" : "Click to feature"}
-                            >
-                              <Star className={`w-3 h-3 ${s.isFeatured ? "fill-[#040706]" : ""}`} />
-                              <span>{s.isFeatured ? "Featured" : "Feature"}</span>
-                            </button>
-                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleToggleFeaturedStory(s.id)}
+                            className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-lg border transition-all cursor-pointer ${
+                              s.isFeatured
+                                ? "bg-[#E4F953] text-[#040706] border-[#cce42e] shadow-xs"
+                                : "bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200"
+                            }`}
+                            title={s.isFeatured ? "Featured on Homepage" : "Click to feature"}
+                          >
+                            <Star className={`w-3 h-3 ${s.isFeatured ? "fill-[#040706]" : ""}`} />
+                            <span>{s.isFeatured ? "Featured" : "Feature"}</span>
+                          </button>
                         </div>
                       </div>
                       {s.status === "UNPUBLISHED" ? (
@@ -5457,18 +5092,9 @@ function EditorialDashboardContent() {
               {/* Desktop Table View (>= 640px) */}
               <div className="hidden sm:block bg-white border border-gray-200 rounded-[28px] overflow-hidden shadow-xs">
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs border-collapse min-w-[750px]">
+                  <table className="w-full text-left text-xs border-collapse min-w-[700px]">
                     <thead>
                       <tr className="bg-gray-50 border-b border-gray-200 text-gray-500 font-semibold uppercase tracking-wider">
-                        <th className="py-4 px-4 w-12 text-center">
-                          <input
-                            type="checkbox"
-                            checked={allStories.length > 0 && allStories.every((s) => selectedCatalogIds.includes(s.id))}
-                            onChange={handleSelectAllCatalog}
-                            className="w-4 h-4 rounded text-black border-gray-300 cursor-pointer accent-black"
-                            title="Select/Deselect All on this page"
-                          />
-                        </th>
                         <th className="py-4 px-6">Title</th>
                         <th className="py-4 px-6">Type</th>
                         <th className="py-4 px-6">Category</th>
@@ -5482,26 +5108,13 @@ function EditorialDashboardContent() {
                     <tbody className="divide-y divide-gray-100 text-gray-800">
                       {allStories.length === 0 ? (
                         <tr>
-                          <td colSpan={9} className="py-12 text-center text-gray-400 font-medium">
+                          <td colSpan={8} className="py-12 text-center text-gray-400 font-medium">
                             No published works found matching the selected filter criteria.
                           </td>
                         </tr>
                       ) : (
                         allStories.map((s) => (
-                          <tr
-                            key={s.id}
-                            className={`hover:bg-gray-50/80 transition-colors ${
-                              selectedCatalogIds.includes(s.id) ? "bg-rose-50/40" : ""
-                            }`}
-                          >
-                            <td className="py-4 px-4 w-12 text-center">
-                              <input
-                                type="checkbox"
-                                checked={selectedCatalogIds.includes(s.id)}
-                                onChange={() => handleToggleSelectCatalog(s.id)}
-                                className="w-4 h-4 rounded text-black border-gray-300 cursor-pointer accent-black"
-                              />
-                            </td>
+                          <tr key={s.id} className="hover:bg-gray-50/80 transition-colors">
                             <td className="py-4 px-6 font-semibold text-gray-900">{s.title}</td>
                             <td className="py-4 px-6 whitespace-nowrap">
                               {s.submissionType === "PAINTING" ? (
@@ -5619,56 +5232,6 @@ function EditorialDashboardContent() {
           {/* TAB 3: USER & AUTHOR ROSTER */}
           {activeTab === "authors" && (
             <div className="space-y-6 font-poppins">
-              {/* Bulk Selection Bar for Authors */}
-              {selectedAuthorIds.length > 0 && (
-                <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3 shadow-xs animate-in fade-in">
-                  <div className="flex items-center gap-3">
-                    <div className="w-3 h-3 rounded-full bg-rose-500 animate-ping" />
-                    <span className="text-xs font-bold text-rose-950">
-                      {selectedAuthorIds.length} {selectedAuthorIds.length === 1 ? "user" : "users"} selected
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedAuthorIds([])}
-                      className="text-[11px] font-semibold text-rose-700 hover:text-rose-900 underline ml-2 cursor-pointer"
-                    >
-                      Clear selection
-                    </button>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      onClick={handleSelectAllAuthors}
-                      className="text-xs font-semibold py-1.5 px-3 border border-rose-200 text-rose-900 hover:bg-rose-100 cursor-pointer"
-                    >
-                      {allUsers.length > 0 && allUsers.every((u) => u.id === user?.id || selectedAuthorIds.includes(u.id)) ? "Deselect Page" : "Select All on Page"}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      disabled={bulkDeleting}
-                      onClick={handleBulkDeleteAuthors}
-                      className="text-xs font-bold py-1.5 px-4 bg-rose-600 hover:bg-rose-700 text-white border-transparent shadow-xs cursor-pointer flex items-center gap-1.5"
-                    >
-                      {bulkDeleting ? (
-                        <>
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          <span>Deleting...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Trash2 className="w-3.5 h-3.5" />
-                          <span>Delete Selected ({selectedAuthorIds.length})</span>
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                </div>
-              )}
-
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
                 <div className="relative max-w-md w-full">
                   <Search className="absolute left-3.5 top-3 w-4 h-4 text-gray-400" />
@@ -5682,18 +5245,6 @@ function EditorialDashboardContent() {
                 </div>
 
                 <div className="flex items-center gap-3 flex-wrap justify-between sm:justify-end">
-                  {allUsers.length > 0 && (
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      onClick={handleSelectAllAuthors}
-                      className="shadow-xs text-xs font-semibold px-3.5 py-2.5 border border-gray-200 text-gray-700 hover:bg-gray-50 cursor-pointer"
-                    >
-                      {allUsers.length > 0 && allUsers.every((u) => u.id === user?.id || selectedAuthorIds.includes(u.id)) ? "Deselect Page" : "Select Multiple"}
-                    </Button>
-                  )}
-
                   <Button
                     type="button"
                     variant="primary"
@@ -5714,28 +5265,11 @@ function EditorialDashboardContent() {
 
               {/* Mobile Card List View (< 640px) */}
               <div className="block sm:hidden space-y-3.5">
-                {allUsers.map((u) => {
-                  const isCurrentUser = u.id === user?.id;
-                  const isSelected = selectedAuthorIds.includes(u.id);
-                  return (
-                    <div
-                      key={u.id}
-                      className={`bg-white border rounded-2xl p-4 shadow-xs space-y-3 transition-colors ${
-                        isSelected ? "border-rose-400 bg-rose-50/20" : "border-gray-200"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-3 min-w-0">
-                          {!isCurrentUser && (
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              onChange={() => handleToggleSelectAuthor(u.id)}
-                              className="w-4 h-4 rounded text-rose-600 accent-rose-600 cursor-pointer shrink-0"
-                              title="Select user for deletion"
-                            />
-                          )}
-                          <div className="relative w-10 h-10 rounded-full overflow-hidden bg-gray-900 text-white flex items-center justify-center font-bold text-xs shrink-0 border border-gray-200 shadow-2xs">
+                {allUsers.map((u) => (
+                  <div key={u.id} className="bg-white border border-gray-200 rounded-2xl p-4 shadow-xs space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="relative w-10 h-10 rounded-full overflow-hidden bg-gray-900 text-white flex items-center justify-center font-bold text-xs shrink-0 border border-gray-200 shadow-2xs">
                           {u.avatarUrl ? (
                             <Image src={u.avatarUrl} alt="Avatar" fill className="object-cover" unoptimized />
                           ) : (
@@ -5837,8 +5371,7 @@ function EditorialDashboardContent() {
                       </div>
                     </div>
                   </div>
-                );
-              })}
+                ))}
               </div>
 
               {/* Desktop Streamlined Table View (>= 640px) */}
@@ -5847,18 +5380,6 @@ function EditorialDashboardContent() {
                   <table className="w-full text-left text-xs border-collapse">
                     <thead>
                       <tr className="bg-gray-50 border-b border-gray-200 text-gray-500 font-semibold uppercase tracking-wider whitespace-nowrap">
-                        <th className="py-3.5 px-4 w-10 text-center">
-                          <input
-                            type="checkbox"
-                            checked={
-                              allUsers.filter((u) => u.id !== user?.id).length > 0 &&
-                              allUsers.filter((u) => u.id !== user?.id).every((u) => selectedAuthorIds.includes(u.id))
-                            }
-                            onChange={handleSelectAllAuthors}
-                            className="w-4 h-4 rounded text-rose-600 accent-rose-600 cursor-pointer"
-                            title="Select/Deselect All on page"
-                          />
-                        </th>
                         <th className="py-3.5 px-5">User / Author</th>
                         <th className="py-3.5 px-5">
                           <button
@@ -5922,28 +5443,9 @@ function EditorialDashboardContent() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 text-gray-800">
-                      {allUsers.map((u) => {
-                        const isCurrentUser = u.id === user?.id;
-                        const isSelected = selectedAuthorIds.includes(u.id);
-                        return (
-                          <tr
-                            key={u.id}
-                            className={`hover:bg-gray-50/80 transition-colors ${
-                              isSelected ? "bg-rose-50/40" : u.isShadowBanned ? "bg-rose-50/30" : ""
-                            }`}
-                          >
-                            <td className="py-3.5 px-4 text-center">
-                              {!isCurrentUser && (
-                                <input
-                                  type="checkbox"
-                                  checked={isSelected}
-                                  onChange={() => handleToggleSelectAuthor(u.id)}
-                                  className="w-4 h-4 rounded text-rose-600 accent-rose-600 cursor-pointer"
-                                  title="Select user"
-                                />
-                              )}
-                            </td>
-                            {/* User Info */}
+                      {allUsers.map((u) => (
+                        <tr key={u.id} className={`hover:bg-gray-50/80 transition-colors ${u.isShadowBanned ? "bg-rose-50/30" : ""}`}>
+                          {/* User Info */}
                           <td className="py-3.5 px-5 font-semibold text-gray-900">
                             <div className="flex items-center gap-3">
                               <div className="relative w-9 h-9 rounded-full overflow-hidden bg-gray-900 text-white flex items-center justify-center font-bold text-xs shrink-0 border border-gray-200 shadow-2xs">
@@ -6047,8 +5549,7 @@ function EditorialDashboardContent() {
                             </div>
                           </td>
                         </tr>
-                      );
-                    })}
+                      ))}
                     </tbody>
                   </table>
                 </div>
@@ -6637,40 +6138,23 @@ function EditorialDashboardContent() {
           {activeTab === "communities" && (
             <div className="space-y-6 font-poppins">
               {/* Subtab Toggle Header */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-200 pb-3">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <button
-                    onClick={() => setCommSubTab("reports")}
-                    className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                      commSubTab === "reports" ? "bg-black text-white shadow-xs" : "bg-white border border-gray-200 text-gray-700 hover:bg-gray-100"
-                    }`}
-                  >
-                    Flagged Community Queue ({commReportsMeta.total})
-                  </button>
-                  <button
-                    onClick={() => setCommSubTab("communities")}
-                    className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                      commSubTab === "communities" ? "bg-black text-white shadow-xs" : "bg-white border border-gray-200 text-gray-700 hover:bg-gray-100"
-                    }`}
-                  >
-                    Active Communities Roster ({communitiesList.length})
-                  </button>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <Button
-                    type="button"
-                    variant="primary"
-                    size="sm"
-                    icon={clearingCommunityPosts ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-                    iconPosition="left"
-                    onClick={handleClearAllCommunityPosts}
-                    disabled={clearingCommunityPosts}
-                    className="text-xs font-semibold bg-rose-600 hover:bg-rose-700 text-white cursor-pointer shadow-xs whitespace-nowrap px-3.5 py-2"
-                  >
-                    {clearingCommunityPosts ? "Clearing Posts..." : "Clear All Community Posts"}
-                  </Button>
-                </div>
+              <div className="flex items-center gap-2 border-b border-gray-200 pb-3">
+                <button
+                  onClick={() => setCommSubTab("reports")}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    commSubTab === "reports" ? "bg-black text-white shadow-xs" : "bg-white border border-gray-200 text-gray-700 hover:bg-gray-100"
+                  }`}
+                >
+                  Flagged Community Queue ({commReportsMeta.total})
+                </button>
+                <button
+                  onClick={() => setCommSubTab("communities")}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    commSubTab === "communities" ? "bg-black text-white shadow-xs" : "bg-white border border-gray-200 text-gray-700 hover:bg-gray-100"
+                  }`}
+                >
+                  Active Communities Roster ({communitiesList.length})
+                </button>
               </div>
 
               {/* Subtab 1: Community Flagged Queue */}
@@ -6842,18 +6326,11 @@ function EditorialDashboardContent() {
                                 <Pencil className="w-4 h-4" />
                               </button>
                               <button
-                                onClick={() => handleClearCommunityPosts(comm.slug, comm.name)}
-                                title="Clear Posts in this Community"
+                                onClick={() => handleDeleteCommunity(comm.slug, comm.name)}
+                                title="Delete Community"
                                 className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
                               >
-                                <Trash2 className="w-4 h-4 text-rose-500" />
-                              </button>
-                              <button
-                                onClick={() => handleDeleteCommunity(comm.slug, comm.name)}
-                                title="Delete Entire Community"
-                                className="p-1.5 text-gray-400 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                              >
-                                <X className="w-4 h-4" />
+                                <Trash2 className="w-4 h-4" />
                               </button>
                             </div>
                           </div>
@@ -6862,21 +6339,9 @@ function EditorialDashboardContent() {
                         </div>
 
                         <div className="pt-3 border-t border-gray-100 flex items-center justify-between">
-                          <div className="text-[11px] text-gray-500 font-medium flex items-center gap-2">
-                            <span>
-                              <span className="font-semibold text-gray-900">{comm.memberCount}</span> members ·{" "}
-                              <span className="font-semibold text-gray-900">{comm.postCount}</span> posts
-                            </span>
-                            {comm.postCount > 0 && (
-                              <button
-                                type="button"
-                                onClick={() => handleClearCommunityPosts(comm.slug, comm.name)}
-                                className="text-[10px] font-semibold text-rose-600 hover:text-rose-800 hover:underline cursor-pointer"
-                                title="Clear all posts in this community"
-                              >
-                                Clear posts
-                              </button>
-                            )}
+                          <div className="text-[11px] text-gray-500 font-medium">
+                            <span className="font-semibold text-gray-900">{comm.memberCount}</span> members ·{" "}
+                            <span className="font-semibold text-gray-900">{comm.postCount}</span> posts
                           </div>
 
                           <Link
@@ -6898,56 +6363,6 @@ function EditorialDashboardContent() {
           {/* TAB 9: EVENTS & WORKSHOPS */}
           {(activeTab as string) === "events" && (
             <div className="space-y-6 font-poppins">
-              {/* Bulk Selection Bar */}
-              {selectedEventIds.length > 0 && (
-                <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 shadow-xs animate-in fade-in duration-200">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse" />
-                    <span className="text-xs font-bold text-rose-950">
-                      {selectedEventIds.length} {selectedEventIds.length === 1 ? "event" : "events"} selected
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedEventIds([])}
-                      className="ml-2 text-[11px] font-semibold text-rose-700 hover:text-rose-900 underline cursor-pointer"
-                    >
-                      Clear selection
-                    </button>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      onClick={handleSelectAllEvents}
-                      className="text-xs font-semibold border-rose-200 text-rose-900 hover:bg-rose-100 bg-white cursor-pointer"
-                    >
-                      {eventsList.length > 0 && eventsList.every((ev) => selectedEventIds.includes(ev.id)) ? "Deselect Page" : "Select All on Page"}
-                    </Button>
-
-                    <Button
-                      type="button"
-                      variant="primary"
-                      size="sm"
-                      icon={<Trash2 className="w-4 h-4" />}
-                      iconPosition="left"
-                      onClick={handleBulkDeleteEvents}
-                      disabled={bulkDeleting}
-                      className="text-xs font-semibold bg-rose-600 hover:bg-rose-700 text-white cursor-pointer"
-                    >
-                      {bulkDeleting ? (
-                        <span className="flex items-center gap-1.5">
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" /> Deleting...
-                        </span>
-                      ) : (
-                        <span>Delete Selected ({selectedEventIds.length})</span>
-                      )}
-                    </Button>
-                  </div>
-                </div>
-              )}
-
               {/* Header Action & Search Controls Bar */}
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white border border-gray-200 rounded-2xl p-4 shadow-xs">
                 {/* Search Bar for Events (Server-Side) */}
@@ -6971,35 +6386,21 @@ function EditorialDashboardContent() {
                   )}
                 </div>
 
-                <div className="flex items-center gap-2.5 flex-wrap">
-                  {eventsList.length > 0 && (
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      onClick={handleSelectAllEvents}
-                      className="text-xs font-semibold shadow-xs border border-gray-200 text-gray-700 hover:bg-gray-50 cursor-pointer"
-                    >
-                      {eventsList.every((ev) => selectedEventIds.includes(ev.id)) ? "Deselect Page" : "Select Multiple"}
-                    </Button>
-                  )}
-
-                  {/* Add Event Button */}
-                  <Button
-                    type="button"
-                    variant="primary"
-                    size="sm"
-                    icon={<Plus className="w-4 h-4" />}
-                    iconPosition="left"
-                    onClick={() => {
-                      resetEventForm();
-                      setShowAddEventModal(true);
-                    }}
-                    className="text-xs font-semibold cursor-pointer shadow-xs whitespace-nowrap px-4 py-2.5"
-                  >
-                    Add Event
-                  </Button>
-                </div>
+                {/* Add Event Button */}
+                <Button
+                  type="button"
+                  variant="primary"
+                  size="sm"
+                  icon={<Plus className="w-4 h-4" />}
+                  iconPosition="left"
+                  onClick={() => {
+                    resetEventForm();
+                    setShowAddEventModal(true);
+                  }}
+                  className="text-xs font-semibold cursor-pointer shadow-xs whitespace-nowrap px-4 py-2.5"
+                >
+                  Add Event
+                </Button>
               </div>
 
               {/* Category Filter Pills */}
@@ -7058,38 +6459,15 @@ function EditorialDashboardContent() {
                       ? `${API_BASE_URL.replace(/\/api$/, "")}${ev.imageSrc}`
                       : ev.imageSrc
                     : null;
-                  const isSelected = selectedEventIds.includes(ev.id);
 
                   return (
                     <div
                       key={ev.id}
-                      className={`bg-white border rounded-3xl p-6 shadow-xs flex flex-col justify-between hover:shadow-md transition-all font-poppins relative ${
-                        isSelected ? "border-rose-400 bg-rose-50/20 ring-1 ring-rose-400" : "border-gray-200"
-                      }`}
+                      className="bg-white border border-gray-200 rounded-3xl p-6 shadow-xs flex flex-col justify-between hover:shadow-md transition-all font-poppins"
                     >
                       <div>
                         {/* Image Preview Banner Container */}
                         <div className="relative w-full h-52 sm:h-60 rounded-2xl overflow-hidden mb-4 bg-gray-100 border border-gray-200/80 shadow-xs group">
-                          {/* Bulk Selection Checkbox Pill */}
-                          <label
-                            onClick={(e) => e.stopPropagation()}
-                            className={`absolute top-3 left-3 z-20 flex items-center gap-1.5 px-2.5 py-1 rounded-full cursor-pointer shadow-md transition-all ${
-                              isSelected
-                                ? "bg-rose-600 text-white ring-2 ring-white"
-                                : "bg-black/70 hover:bg-black/90 text-white backdrop-blur-md"
-                            }`}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              onChange={() => handleToggleSelectEvent(ev.id)}
-                              className="w-4 h-4 rounded text-rose-600 accent-rose-600 cursor-pointer"
-                            />
-                            <span className="text-[10px] font-bold tracking-wider">
-                              {isSelected ? "SELECTED" : "SELECT"}
-                            </span>
-                          </label>
-
                           {fullImgUrl ? (
                             <img
                               src={fullImgUrl}
@@ -7265,56 +6643,6 @@ function EditorialDashboardContent() {
           {/* Upcoming Book Releases Tab Panel */}
           {activeTab === "books" && (
             <div className="space-y-6 font-poppins">
-              {/* Bulk Selection Bar */}
-              {selectedBookIds.length > 0 && (
-                <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 shadow-xs animate-in fade-in duration-200">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse" />
-                    <span className="text-xs font-bold text-rose-950">
-                      {selectedBookIds.length} {selectedBookIds.length === 1 ? "book" : "books"} selected
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedBookIds([])}
-                      className="ml-2 text-[11px] font-semibold text-rose-700 hover:text-rose-900 underline cursor-pointer"
-                    >
-                      Clear selection
-                    </button>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      onClick={handleSelectAllBooks}
-                      className="text-xs font-semibold border-rose-200 text-rose-900 hover:bg-rose-100 bg-white cursor-pointer"
-                    >
-                      {booksList.length > 0 && booksList.every((b) => selectedBookIds.includes(b.id)) ? "Deselect Page" : "Select All on Page"}
-                    </Button>
-
-                    <Button
-                      type="button"
-                      variant="primary"
-                      size="sm"
-                      icon={<Trash2 className="w-4 h-4" />}
-                      iconPosition="left"
-                      onClick={handleBulkDeleteBooks}
-                      disabled={bulkDeleting}
-                      className="text-xs font-semibold bg-rose-600 hover:bg-rose-700 text-white cursor-pointer"
-                    >
-                      {bulkDeleting ? (
-                        <span className="flex items-center gap-1.5">
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" /> Deleting...
-                        </span>
-                      ) : (
-                        <span>Delete Selected ({selectedBookIds.length})</span>
-                      )}
-                    </Button>
-                  </div>
-                </div>
-              )}
-
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-white p-6 sm:p-8 rounded-[28px] border border-gray-200/80 shadow-xs">
                 <div>
                   <span className="bg-purple-100 text-purple-800 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider">
@@ -7324,32 +6652,18 @@ function EditorialDashboardContent() {
                   <p className="text-xs text-gray-500 mt-1">Manage physical book showcase cards & links displayed on the homepage.</p>
                 </div>
 
-                <div className="flex items-center gap-2.5 flex-wrap">
-                  {booksList.length > 0 && (
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      onClick={handleSelectAllBooks}
-                      className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-xl shadow-xs cursor-pointer text-xs font-semibold shrink-0"
-                    >
-                      {booksList.every((b) => selectedBookIds.includes(b.id)) ? "Deselect Page" : "Select Multiple"}
-                    </Button>
-                  )}
-
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    icon={<Plus className="w-4 h-4" />}
-                    onClick={() => {
-                      resetBookForm();
-                      setShowAddBookModal(true);
-                    }}
-                    className="px-5 py-2.5 bg-black hover:bg-gray-800 text-white rounded-xl shadow-xs cursor-pointer shrink-0"
-                  >
-                    Add Book Release
-                  </Button>
-                </div>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  icon={<Plus className="w-4 h-4" />}
+                  onClick={() => {
+                    resetBookForm();
+                    setShowAddBookModal(true);
+                  }}
+                  className="px-5 py-2.5 bg-black hover:bg-gray-800 text-white rounded-xl shadow-xs cursor-pointer shrink-0"
+                >
+                  Add Book Release
+                </Button>
               </div>
 
               {/* Search Bar for Books */}
@@ -7385,42 +6699,15 @@ function EditorialDashboardContent() {
                 </div>
               ) : (
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
-                  {booksList.map((book) => {
-                    const isSelected = selectedBookIds.includes(book.id);
-                    return (
-                      <div
-                        key={book.id}
-                        className={`group bg-white rounded-2xl p-2.5 sm:p-3 border shadow-xs flex flex-col justify-between hover:shadow-md transition-all duration-200 relative ${
-                          isSelected
-                            ? "border-rose-400 bg-rose-50/20 ring-1 ring-rose-400"
-                            : "border-gray-200/80 hover:border-gray-300"
-                        }`}
-                      >
-                        <div>
-                          {/* Cover Image with Floating Status Badge */}
-                          <div className="relative w-full aspect-[3/4.2] rounded-xl overflow-hidden mb-2 bg-gradient-to-br from-purple-50 to-indigo-50 border border-gray-100">
-                            {/* Selection Checkbox Pill */}
-                            <label
-                              onClick={(e) => e.stopPropagation()}
-                              className={`absolute top-1.5 left-1.5 z-20 flex items-center gap-1 px-1.5 py-0.5 rounded-full cursor-pointer shadow-xs backdrop-blur-md transition-all ${
-                                isSelected
-                                  ? "bg-rose-600 text-white ring-1 ring-white"
-                                  : "bg-black/70 hover:bg-black/90 text-white"
-                              }`}
-                              title="Select book for bulk deletion"
-                            >
-                              <input
-                                type="checkbox"
-                                checked={isSelected}
-                                onChange={() => handleToggleSelectBook(book.id)}
-                                className="w-3.5 h-3.5 rounded text-rose-600 accent-rose-600 cursor-pointer"
-                              />
-                              <span className="text-[8px] font-bold">
-                                {isSelected ? "SEL" : "+"}
-                              </span>
-                            </label>
-
-                            {book.coverImage ? (
+                  {booksList.map((book) => (
+                    <div
+                      key={book.id}
+                      className="group bg-white rounded-2xl p-2.5 sm:p-3 border border-gray-200/80 shadow-xs flex flex-col justify-between hover:shadow-md hover:border-gray-300 transition-all duration-200"
+                    >
+                      <div>
+                        {/* Cover Image with Floating Status Badge */}
+                        <div className="relative w-full aspect-[3/4.2] rounded-xl overflow-hidden mb-2 bg-gradient-to-br from-purple-50 to-indigo-50 border border-gray-100">
+                          {book.coverImage ? (
                             <Image
                               src={formatAssetUrl(book.coverImage)}
                               alt={book.title}
@@ -7508,8 +6795,7 @@ function EditorialDashboardContent() {
                         </div>
                       </div>
                     </div>
-                  );
-                })}
+                  ))}
                 </div>
               )}
 

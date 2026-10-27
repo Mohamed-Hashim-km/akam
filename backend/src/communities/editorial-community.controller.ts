@@ -2,7 +2,6 @@ import {
   Controller,
   Get,
   Patch,
-  Delete,
   Param,
   Body,
   Query,
@@ -195,57 +194,5 @@ export class EditorialCommunityController {
       [req.user.id, commentId],
     );
     return { success: true, commentId, isRemoved: true };
-  }
-
-  // ─── Bulk Clear Community Posts ──────────────────────────────────────────
-  @Delete('posts/clear-all')
-  @ApiOperation({ summary: '[EDITOR/ADMIN] Bulk clear/delete all community posts across all communities' })
-  async clearAllPosts() {
-    const countRow = await this.prisma.queryOne<{ count: string }>(
-      `SELECT COUNT(*) AS count FROM community_post`,
-    );
-    const count = parseInt(countRow?.count ?? '0', 10);
-
-    await this.prisma.execute(`DELETE FROM community_post`);
-    await this.prisma.execute(
-      `UPDATE community SET "postCount" = 0, "updatedAt" = now()`,
-    );
-
-    return {
-      success: true,
-      message: `Cleared ${count} community posts successfully.`,
-      clearedCount: count,
-    };
-  }
-
-  @Delete('posts/by-community/:slug')
-  @ApiOperation({ summary: '[EDITOR/ADMIN] Bulk clear/delete all posts for a specific community' })
-  async clearCommunityPosts(@Param('slug') slug: string) {
-    const community = await this.prisma.queryOne<{ id: string; name: string }>(
-      `SELECT id, name FROM community WHERE slug = $1`,
-      [slug],
-    );
-    if (!community) throw new NotFoundException('Community not found');
-
-    const countRow = await this.prisma.queryOne<{ count: string }>(
-      `SELECT COUNT(*) AS count FROM community_post WHERE "communityId" = $1`,
-      [community.id],
-    );
-    const count = parseInt(countRow?.count ?? '0', 10);
-
-    await this.prisma.execute(
-      `DELETE FROM community_post WHERE "communityId" = $1`,
-      [community.id],
-    );
-    await this.prisma.execute(
-      `UPDATE community SET "postCount" = 0, "updatedAt" = now() WHERE id = $1`,
-      [community.id],
-    );
-
-    return {
-      success: true,
-      message: `Cleared ${count} posts for r/${slug}.`,
-      clearedCount: count,
-    };
   }
 }
