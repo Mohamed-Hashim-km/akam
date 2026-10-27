@@ -33,13 +33,53 @@ async function bootstrap() {
 
   const isOriginAllowed = (origin?: string) => {
     if (!origin) return true;
-    if (allowedOrigins.includes(origin)) return true;
+    const cleanOrigin = origin.replace(/\/+$/, '');
+    if (allowedOrigins.some((o) => cleanOrigin === o.replace(/\/+$/, ''))) return true;
+    if (cleanOrigin.endsWith('.akamdigital.in') || cleanOrigin === 'https://akamdigital.in') return true;
+    if (cleanOrigin.endsWith('.vercel.app')) return true;
     if (origin.includes('payu.in') || origin.includes('payu')) return true;
     return false;
   };
 
-  // Block direct unauthenticated downloads of raw PDFs from static uploads
-  app.use('/uploads/pdfs', (_req: any, res: any) => {
+  // Handle /uploads/pdfs with proper CORS and anti-download protection
+  app.use('/uploads/pdfs', (req: any, res: any, next: any) => {
+    const origin = req.headers.origin;
+    if (origin && isOriginAllowed(origin)) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Range');
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+      res.setHeader('Accept-Ranges', 'bytes');
+      res.setHeader('Content-Disposition', 'inline; filename="edition-reader.pdf"');
+      if (req.method === 'OPTIONS') {
+        return res.status(204).end();
+      }
+      return next();
+    }
+
+    if (req.method === 'OPTIONS') {
+      if (origin) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
+      }
+      res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Range');
+      return res.status(204).end();
+    }
+
+    const referer = req.headers.referer;
+    if (
+      referer &&
+      (allowedOrigins.some((o) => referer.startsWith(o)) ||
+        referer.includes('akamdigital.in') ||
+        referer.includes('vercel.app') ||
+        referer.includes('localhost'))
+    ) {
+      res.setHeader('Accept-Ranges', 'bytes');
+      res.setHeader('Content-Disposition', 'inline; filename="edition-reader.pdf"');
+      return next();
+    }
+
     return res.status(403).json({
       statusCode: 403,
       message: 'Direct download of PDF files is prohibited. Please read via the authenticated reader.',

@@ -6,8 +6,8 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import * as nodemailer from 'nodemailer';
 import { PrismaService } from '../common/prisma/prisma.service.js';
+import { MailService } from '../mail/mail.service.js';
 import { RequestOtpDto } from './dto/request-otp.dto.js';
 import { VerifyOtpDto } from './dto/verify-otp.dto.js';
 import { CheckEmailDto } from './dto/check-email.dto.js';
@@ -15,42 +15,13 @@ import { CheckEmailDto } from './dto/check-email.dto.js';
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
-  private transporter: nodemailer.Transporter | null = null;
 
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
     private configService: ConfigService,
+    private mailService: MailService,
   ) {}
-
-  private getTransporter(): nodemailer.Transporter {
-    if (!this.transporter) {
-      const host = this.configService.get<string>('SMTP_HOST') || 'smtp.gmail.com';
-      const port = parseInt(this.configService.get<string>('SMTP_PORT') || '587', 10);
-      const secureConfig = this.configService.get<string>('SMTP_SECURE');
-      const secure = secureConfig !== undefined ? secureConfig === 'true' : port === 465;
-      const user = this.configService.get<string>('SMTP_USER');
-      const pass = this.configService.get<string>('SMTP_PASS');
-
-      this.transporter = nodemailer.createTransport({
-        pool: true, // Keep connections alive for instant email dispatch
-        maxConnections: 5,
-        maxMessages: 100,
-        host,
-        port,
-        secure,
-        auth: {
-          user,
-          pass,
-        },
-        connectionTimeout: 8000,
-        greetingTimeout: 8000,
-        socketTimeout: 10000,
-        family: 4, // Force IPv4 to prevent ENETUNREACH IPv6 errors on cloud hosts
-      } as any);
-    }
-    return this.transporter;
-  }
 
   private generateOtp(): string {
     return Math.floor(100000 + Math.random() * 900000).toString();
@@ -138,28 +109,12 @@ export class AuthService {
       </div>
     `;
 
-    try {
-      const transporter = this.getTransporter();
-      const fromAddress =
-        this.configService.get<string>('SMTP_FROM') ||
-        `"AKAM Digital" <${this.configService.get('SMTP_USER')}>`;
-
-      const info = await transporter.sendMail({
-        from: fromAddress,
-        to: email,
-        subject: `${code} is your AKAM Digital verification code`,
-        html: htmlTemplate,
-      });
-      this.logger.log(`✅ [OTP] Email dispatched to ${email}. MessageId: ${info.messageId}`);
-    } catch (error) {
-      this.logger.error(
-        `❌ [OTP] Failed to send email to ${email}: ${(error as Error).message}`,
-        (error as Error).stack,
-      );
-      if (this.configService.get('NODE_ENV') !== 'production') {
-        this.logger.log(`[DEV FALLBACK] OTP for ${email}: ${code}`);
-      }
-    }
+    await this.mailService.sendMail({
+      to: email,
+      subject: `${code} is your AKAM Digital verification code`,
+      html: htmlTemplate,
+      fromName: 'AKAM Digital',
+    });
   }
 
   async requestOtp(dto: RequestOtpDto): Promise<{ message: string }> {

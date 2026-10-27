@@ -7,11 +7,11 @@ import {
   Optional,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import * as nodemailer from 'nodemailer';
 import { PrismaService } from '../common/prisma/prisma.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
 import { UploadsService } from '../uploads/uploads.service.js';
 import { SubscriptionService } from '../subscription/subscription.service.js';
+import { MailService } from '../mail/mail.service.js';
 import { CreateStoryDto } from './dto/create-story.dto.js';
 import { UpdateStoryDto } from './dto/update-story.dto.js';
 import { ReviewStoryDto } from './dto/review-story.dto.js';
@@ -57,31 +57,9 @@ export class StoriesService {
     private notificationsService: NotificationsService,
     private uploadsService: UploadsService,
     private configService: ConfigService,
+    private mailService: MailService,
     @Optional() private subscriptionService?: SubscriptionService,
   ) {}
-
-  private getTransporter(): nodemailer.Transporter {
-    const host = this.configService.get<string>('SMTP_HOST') || 'smtp.gmail.com';
-    const port = parseInt(this.configService.get<string>('SMTP_PORT') || '587', 10);
-    const secureConfig = this.configService.get<string>('SMTP_SECURE');
-    const secure = secureConfig !== undefined ? secureConfig === 'true' : port === 465;
-    const user = this.configService.get<string>('SMTP_USER');
-    const pass = this.configService.get<string>('SMTP_PASS');
-
-    return nodemailer.createTransport({
-      host,
-      port,
-      secure,
-      auth: {
-        user,
-        pass,
-      },
-      connectionTimeout: 10000,
-      greetingTimeout: 10000,
-      socketTimeout: 15000,
-      family: 4,
-    } as any);
-  }
 
   private async sendStoryPublishedEmail(story: StoryRow, type: 'EMAGAZINE' | 'WEB'): Promise<boolean> {
     const email = story.authorEmail;
@@ -153,71 +131,12 @@ export class StoriesService {
 </html>
     `;
 
-    // 1. Try ZeptoMail
-    const zeptoToken =
-      this.configService.get<string>('ZEPTOMAIL_TOKEN') ||
-      this.configService.get<string>('ZEPTO_API_KEY');
-
-    if (zeptoToken) {
-      try {
-        const response = await fetch('https://api.zeptomail.in/v1.1/email', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Zoho-enczapikey ${zeptoToken}`,
-          },
-          body: JSON.stringify({
-            from: {
-              address:
-                this.configService.get<string>('SMTP_FROM_EMAIL') ||
-                this.configService.get<string>('SMTP_USER') ||
-                'noreply@akamdigital.com',
-              name: 'AKAM Digital Editorial Desk',
-            },
-            to: [
-              {
-                email_address: {
-                  address: email,
-                  name: authorName,
-                },
-              },
-            ],
-            subject,
-            htmlbody: html,
-          }),
-        });
-
-        if (response.ok) {
-          this.logger.log(`✅ Story published email sent to ${email} via ZeptoMail`);
-          return true;
-        } else {
-          const errBody = await response.text();
-          this.logger.warn(`ZeptoMail HTTP failed (${response.status}): ${errBody}`);
-        }
-      } catch (e) {
-        this.logger.warn(`ZeptoMail HTTP error: ${(e as Error).message}`);
-      }
-    }
-
-    // 2. Fallback to SMTP
-    try {
-      const transporter = this.getTransporter();
-      const fromAddress =
-        this.configService.get<string>('SMTP_FROM') ||
-        `"AKAM Digital" <${this.configService.get('SMTP_USER')}>`;
-
-      const info = await transporter.sendMail({
-        from: fromAddress,
-        to: `"${authorName}" <${email}>`,
-        subject,
-        html,
-      });
-      this.logger.log(`✅ Story published email sent to ${email} via SMTP. MsgId: ${info.messageId}`);
-      return true;
-    } catch (error) {
-      this.logger.error(`❌ Failed to send published email to ${email}: ${(error as Error).message}`);
-      return false;
-    }
+    return this.mailService.sendMail({
+      to: email,
+      subject,
+      html,
+      fromName: 'AKAM Digital Editorial Desk',
+    });
   }
 
   async findAll(

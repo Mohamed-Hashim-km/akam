@@ -1,9 +1,9 @@
 import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import nodemailer from 'nodemailer';
 import { PrismaService } from '../common/prisma/prisma.service.js';
 import { UploadsService } from '../uploads/uploads.service.js';
 import { PayUService } from '../subscription/payu.service.js';
+import { MailService } from '../mail/mail.service.js';
 import { CreateEventDto } from './dto/create-event.dto.js';
 import { UpdateEventDto } from './dto/update-event.dto.js';
 import { RegisterEventDto } from './dto/register-event.dto.js';
@@ -35,7 +35,6 @@ const SELECT_FIELDS = `id, type, title, description, location, time, day, "month
 @Injectable()
 export class EventsService {
   private readonly logger = new Logger(EventsService.name);
-  private transporter: nodemailer.Transporter | null = null;
   private readonly pendingEventRegistrations = new Map<
     string,
     {
@@ -56,6 +55,7 @@ export class EventsService {
     private readonly uploadsService: UploadsService,
     private readonly payUService: PayUService,
     private readonly configService: ConfigService,
+    private readonly mailService: MailService,
   ) {}
 
   // ── Public Endpoints ─────────────────────────────────────────────────────
@@ -258,35 +258,6 @@ export class EventsService {
     };
   }
 
-  private getTransporter(): nodemailer.Transporter {
-    if (!this.transporter) {
-      const host = this.configService.get<string>('SMTP_HOST') || 'smtp.gmail.com';
-      const port = parseInt(this.configService.get<string>('SMTP_PORT') || '587', 10);
-      const secureConfig = this.configService.get<string>('SMTP_SECURE');
-      const secure = secureConfig !== undefined ? secureConfig === 'true' : port === 465;
-      const user = this.configService.get<string>('SMTP_USER');
-      const pass = this.configService.get<string>('SMTP_PASS');
-
-      this.transporter = nodemailer.createTransport({
-        pool: true,
-        maxConnections: 5,
-        maxMessages: 100,
-        host,
-        port,
-        secure,
-        auth: {
-          user,
-          pass,
-        },
-        connectionTimeout: 8000,
-        greetingTimeout: 8000,
-        socketTimeout: 10000,
-        family: 4,
-      } as any);
-    }
-    return this.transporter;
-  }
-
   async sendEventRegistrationEmail(params: {
     event: EventItem;
     registration: {
@@ -311,33 +282,12 @@ export class EventsService {
 
     const { subject, html } = this.buildEventRegistrationEmailTemplate(params, frontendUrl);
 
-    try {
-      const transporter = this.getTransporter();
-      const fromAddress =
-        this.configService.get<string>('SMTP_FROM') ||
-        `"AKAM Digital Events" <${this.configService.get('SMTP_USER')}>`;
-
-      const info = await transporter.sendMail({
-        from: fromAddress,
-        to: `"${params.registration.name || email.split('@')[0]}" <${email}>`,
-        subject,
-        html,
-      });
-
-      this.logger.log(
-        `✅ [Event] Registration confirmation email delivered to ${email} for "${params.event.title}". MessageId: ${info.messageId}`,
-      );
-      return true;
-    } catch (error) {
-      this.logger.error(
-        `❌ [Event] Failed to send registration email to ${email}: ${(error as Error).message}`,
-        (error as Error).stack,
-      );
-      if (this.configService.get('NODE_ENV') !== 'production') {
-        this.logger.log(`[DEV FALLBACK] Event registration email for ${email}: subject="${subject}"`);
-      }
-      return false;
-    }
+    return this.mailService.sendMail({
+      to: email,
+      subject,
+      html,
+      fromName: 'AKAM Digital Events',
+    });
   }
 
   private buildEventRegistrationEmailTemplate(

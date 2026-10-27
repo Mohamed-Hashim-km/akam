@@ -306,9 +306,14 @@ export default function PrivacyPolicyPage() {
                   <MapPin className="w-5 h-5 text-[#22B573] shrink-0 mt-0.5" />
                   <div>
                     <div className="text-xs text-gray-500 uppercase font-semibold">Headquarters</div>
-                    <div className="text-sm font-medium text-dark-text">
+                    <a
+                      href="https://maps.app.goo.gl/ABjSw3ZFVQc2bW2J7"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm font-medium text-dark-text hover:text-[#22B573] transition-colors"
+                    >
                       Kairali Books Building, Kannur, Kerala
-                    </div>
+                    </a>
                   </div>
                 </div>
               </div>

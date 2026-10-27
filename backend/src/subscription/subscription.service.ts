@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../common/prisma/prisma.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
-import * as nodemailer from 'nodemailer';
+import { MailService } from '../mail/mail.service.js';
 
 export interface SubscriptionRow {
   id: string;
@@ -25,30 +25,8 @@ export class SubscriptionService {
     private prisma: PrismaService,
     private configService: ConfigService,
     private notificationsService: NotificationsService,
+    private mailService: MailService,
   ) {}
-
-  private getTransporter(): nodemailer.Transporter {
-    const host = this.configService.get<string>('SMTP_HOST') || 'smtp.gmail.com';
-    const port = parseInt(this.configService.get<string>('SMTP_PORT') || '587', 10);
-    const secureConfig = this.configService.get<string>('SMTP_SECURE');
-    const secure = secureConfig !== undefined ? secureConfig === 'true' : port === 465;
-    const user = this.configService.get<string>('SMTP_USER');
-    const pass = this.configService.get<string>('SMTP_PASS');
-
-    return nodemailer.createTransport({
-      host,
-      port,
-      secure,
-      auth: {
-        user,
-        pass,
-      },
-      connectionTimeout: 10000,
-      greetingTimeout: 10000,
-      socketTimeout: 15000,
-      family: 4,
-    } as any);
-  }
 
   async getByUserId(userId: string): Promise<SubscriptionRow | null> {
     const sub = await this.prisma.queryOne<SubscriptionRow>(
@@ -569,83 +547,12 @@ export class SubscriptionService {
 
     const { subject, html } = this.buildSubscriptionEmailTemplate(params, frontendUrl);
 
-    // 1. Try ZeptoMail HTTPS API (Port 443 — reliable across cloud host firewalls)
-    const zeptoToken = this.configService.get<string>('ZEPTO_MAIL_TOKEN');
-    if (zeptoToken) {
-      const zeptoUrl =
-        this.configService.get<string>('ZEPTO_MAIL_URL') ||
-        'https://api.zeptomail.in/v1.1/email';
-      try {
-        const response = await fetch(zeptoUrl, {
-          method: 'POST',
-          headers: {
-            Accept: 'application/json',
-            'Content-Type': 'application/json',
-            Authorization: zeptoToken,
-          },
-          body: JSON.stringify({
-            from: {
-              address:
-                this.configService.get<string>('ZEPTO_MAIL_FROM_EMAIL') ||
-                'no-reply@megamind.studio',
-              name:
-                this.configService.get<string>('ZEPTO_MAIL_FROM_NAME') ||
-                'AKAM Digital Editorial Desk',
-            },
-            to: [
-              {
-                email_address: {
-                  address: email,
-                  name: params.userName || email.split('@')[0],
-                },
-              },
-            ],
-            subject,
-            htmlbody: html,
-          }),
-        });
-
-        if (response.ok) {
-          this.logger.log(
-            `✅ Subscription granted email delivered to ${email} via ZeptoMail`,
-          );
-          return true;
-        } else {
-          const errBody = await response.text();
-          this.logger.warn(`ZeptoMail HTTP send returned ${response.status}: ${errBody}`);
-        }
-      } catch (e) {
-        this.logger.warn(`ZeptoMail HTTP send error: ${(e as Error).message}`);
-      }
-    }
-
-    // 2. Fallback to Nodemailer SMTP
-    try {
-      const transporter = this.getTransporter();
-      const fromAddress =
-        this.configService.get<string>('SMTP_FROM') ||
-        `"AKAM Digital" <${this.configService.get('SMTP_USER')}>`;
-
-      const info = await transporter.sendMail({
-        from: fromAddress,
-        to: `"${params.userName || email.split('@')[0]}" <${email}>`,
-        subject,
-        html,
-      });
-      this.logger.log(
-        `✅ Subscription granted email delivered to ${email} via SMTP. MessageId: ${info.messageId}`,
-      );
-      return true;
-    } catch (error) {
-      this.logger.error(
-        `❌ Failed to send subscription granted email to ${email}: ${(error as Error).message}`,
-        (error as Error).stack,
-      );
-      if (this.configService.get('NODE_ENV') !== 'production') {
-        this.logger.log(`[DEV FALLBACK] Subscription granted email for ${email}: subject="${subject}"`);
-      }
-      return false;
-    }
+    return this.mailService.sendMail({
+      to: email,
+      subject,
+      html,
+      fromName: 'AKAM Digital Editorial Desk',
+    });
   }
 
   private buildSubscriptionEmailTemplate(

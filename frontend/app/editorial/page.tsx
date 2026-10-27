@@ -9621,7 +9621,11 @@ function EditorialDashboardContent() {
 
       {/* Masika Edition Flipbook Modal */}
       {openFlipbookEdition && (
-        <EditionFlipbook pdfUrl={openFlipbookEdition.pdfUrl} title={openFlipbookEdition.title} onClose={() => setOpenFlipbookEdition(null)} />
+        <EditionFlipbook
+          pdfUrl={openFlipbookEdition.id ? `/api/editions/${openFlipbookEdition.id}/read-pdf` : openFlipbookEdition.pdfUrl}
+          title={openFlipbookEdition.title}
+          onClose={() => setOpenFlipbookEdition(null)}
+        />
       )}
 
       {/* Register New Author Modal */}
