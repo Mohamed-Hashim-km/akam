@@ -27,7 +27,6 @@ export class SettingsController {
   constructor(private readonly settingsService: SettingsService) {}
 
   @Get('settings/editors-note')
-  @Header('Cache-Control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=300')
   @ApiOperation({ summary: 'Get current Editor Note (Public)' })
   async getEditorsNote() {
     return this.settingsService.getEditorsNote();

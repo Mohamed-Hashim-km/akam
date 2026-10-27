@@ -318,6 +318,13 @@ function EditorialDashboardContent() {
     return "queue";
   });
 
+  const triggerRevalidation = (tag?: string) => {
+    const url = tag ? `/api/revalidate?path=/&tag=${encodeURIComponent(tag)}` : `/api/revalidate?path=/`;
+    fetch(url, { method: "POST" }).catch(() => {
+      fetch(url).catch(() => {});
+    });
+  };
+
   const [currentPage, setCurrentPage] = useState<number>(() => {
     if (typeof window !== "undefined") {
       const urlPage = searchParams.get("page");
@@ -867,7 +874,7 @@ function EditorialDashboardContent() {
       });
       if (res.ok) {
         setFeedbackMessage(editingBookId ? "Book release updated successfully!" : "Book release created successfully!");
-        fetch("/api/revalidate?path=/").catch(() => {});
+        triggerRevalidation("books");
         setShowAddBookModal(false);
         resetBookForm();
         fetchDashboardData("books", currentPage, searchQuery);
@@ -891,6 +898,7 @@ function EditorialDashboardContent() {
       });
       if (res.ok) {
         setFeedbackMessage("Book release publication status updated.");
+        triggerRevalidation("books");
         fetchDashboardData("books", currentPage, searchQuery);
         setTimeout(() => setFeedbackMessage(null), 3000);
       }
@@ -907,6 +915,7 @@ function EditorialDashboardContent() {
       });
       if (res.ok) {
         setFeedbackMessage("Book release deleted successfully.");
+        triggerRevalidation("books");
         fetchDashboardData("books", currentPage, searchQuery);
         setTimeout(() => setFeedbackMessage(null), 3000);
       }
@@ -1094,6 +1103,7 @@ function EditorialDashboardContent() {
 
       if (res.ok) {
         setFeedbackMessage(editingMediaId ? "Media video updated successfully!" : "Media video created successfully!");
+        triggerRevalidation("media");
         setShowAddMediaModal(false);
         resetMediaForm();
         fetchDashboardData("media", currentPage, searchQuery);
@@ -1117,6 +1127,7 @@ function EditorialDashboardContent() {
       });
       if (res.ok) {
         setFeedbackMessage("Media video publication status updated.");
+        triggerRevalidation("media");
         fetchDashboardData("media", currentPage, searchQuery);
         setTimeout(() => setFeedbackMessage(null), 3000);
       }
@@ -1132,6 +1143,7 @@ function EditorialDashboardContent() {
       });
       if (res.ok) {
         setFeedbackMessage("Media video homepage featured status updated.");
+        triggerRevalidation("media");
         fetchDashboardData("media", currentPage, searchQuery);
         setTimeout(() => setFeedbackMessage(null), 3000);
       } else {
@@ -1152,6 +1164,7 @@ function EditorialDashboardContent() {
       });
       if (res.ok) {
         setFeedbackMessage("Media video deleted successfully.");
+        triggerRevalidation("media");
         fetchDashboardData("media", currentPage, searchQuery);
         setTimeout(() => setFeedbackMessage(null), 3000);
       }
@@ -1555,7 +1568,7 @@ function EditorialDashboardContent() {
 
       if (res.ok) {
         setFeedbackMessage(editingReviewId ? "Review updated successfully!" : "Review created successfully!");
-        fetch("/api/revalidate?path=/").catch(() => {});
+        triggerRevalidation("reviews");
         setShowAddReviewModal(false);
         resetReviewForm();
         fetchDashboardData("reviews", currentPage, searchQuery);
@@ -1577,6 +1590,7 @@ function EditorialDashboardContent() {
       const res = await apiFetch(`${API_BASE_URL}/editorial/reviews/${id}/toggle-publish`, { method: "PATCH" });
       if (res.ok) {
         setFeedbackMessage("Review publication status updated.");
+        triggerRevalidation("reviews");
         fetchDashboardData("reviews", currentPage, searchQuery);
         setTimeout(() => setFeedbackMessage(null), 3000);
       }
@@ -1591,6 +1605,7 @@ function EditorialDashboardContent() {
       const res = await apiFetch(`${API_BASE_URL}/editorial/reviews/${id}`, { method: "DELETE" });
       if (res.ok) {
         setFeedbackMessage("Review deleted successfully.");
+        triggerRevalidation("reviews");
         fetchDashboardData("reviews", currentPage, searchQuery);
         setTimeout(() => setFeedbackMessage(null), 3000);
       }
@@ -1773,7 +1788,7 @@ function EditorialDashboardContent() {
 
       if (res.ok) {
         setFeedbackMessage(editingEventId ? "Event updated successfully!" : "Event created successfully!");
-        fetch("/api/revalidate?path=/").catch(() => {});
+        triggerRevalidation("events");
         setShowAddEventModal(false);
         resetEventForm();
         fetchDashboardData("events");
@@ -1797,6 +1812,7 @@ function EditorialDashboardContent() {
       });
       if (res.ok) {
         setFeedbackMessage("Event publishing status updated.");
+        triggerRevalidation("events");
         fetchDashboardData("events");
         setTimeout(() => setFeedbackMessage(null), 3000);
       }
@@ -1813,6 +1829,7 @@ function EditorialDashboardContent() {
       });
       if (res.ok) {
         setFeedbackMessage(`Event "${title}" deleted.`);
+        triggerRevalidation("events");
         fetchDashboardData("events");
         setTimeout(() => setFeedbackMessage(null), 3000);
       }
@@ -2134,6 +2151,7 @@ function EditorialDashboardContent() {
             ? `Community '${newCommName}' updated successfully!`
             : `Community '${newCommName}' created successfully!`
         );
+        triggerRevalidation("categories");
         setShowAddCommModal(false);
         setEditingCommSlug(null);
         setNewCommName("");
@@ -2160,6 +2178,7 @@ function EditorialDashboardContent() {
       const res = await apiFetch(`${API_BASE_URL}/communities/${slug}`, { method: "DELETE" });
       if (res.ok) {
         setFeedbackMessage(`Community '${name}' deleted.`);
+        triggerRevalidation("categories");
         fetchDashboardData("communities", currentPage, searchQuery);
         setTimeout(() => setFeedbackMessage(null), 3000);
       } else {
@@ -2689,9 +2708,9 @@ function EditorialDashboardContent() {
       });
 
       if (res.ok) {
+        triggerRevalidation("stories");
         if (decision === "APPROVED") {
           setFeedbackMessage("Submission approved and published to public works catalog.");
-          fetch("/api/revalidate?path=/").catch(() => {});
         } else if (decision === "PUBLISHED_EMAGAZINE") {
           setFeedbackMessage("Submission officially published to AKAM Magazine.");
         } else if (decision === "APPROVED_EMAGAZINE") {
@@ -3101,7 +3120,7 @@ function EditorialDashboardContent() {
       });
       if (res.ok) {
         setFeedbackMessage("Content deleted successfully.");
-        fetch("/api/revalidate?path=/&tag=stories").catch(() => {});
+        triggerRevalidation("stories");
         fetchDashboardData();
         fetchPendingReportsCount();
       }
@@ -3135,7 +3154,7 @@ function EditorialDashboardContent() {
         setAllStories((prev) =>
           prev.map((s) => (s.id === unpublishTarget.id ? { ...s, status: "UNPUBLISHED" as const } : s))
         );
-        fetch("/api/revalidate?path=/&tag=stories").catch(() => {});
+        triggerRevalidation("stories");
         fetchDashboardData(activeTab, currentPage, searchQuery);
         setUnpublishTarget(null);
         setTimeout(() => setFeedbackMessage(null), 4000);
@@ -3165,7 +3184,7 @@ function EditorialDashboardContent() {
         setAllStories((prev) =>
           prev.map((s) => (s.id === storyId ? { ...s, status: "APPROVED" as const } : s))
         );
-        fetch("/api/revalidate?path=/&tag=stories").catch(() => {});
+        triggerRevalidation("stories");
         fetchDashboardData(activeTab, currentPage, searchQuery);
         setTimeout(() => setFeedbackMessage(null), 3000);
       } else {
@@ -3197,7 +3216,7 @@ function EditorialDashboardContent() {
             ? "Story marked as Featured on homepage!"
             : "Story removed from Featured."
         );
-        fetch("/api/revalidate?path=/&tag=stories").catch(() => {});
+        triggerRevalidation("stories");
         setTimeout(() => setFeedbackMessage(null), 3000);
       } else {
         // Revert on failure

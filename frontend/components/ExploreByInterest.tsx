@@ -462,17 +462,18 @@ export const ExploreByInterest: React.FC<ExploreByInterestProps> = ({
   const router = useRouter();
   const sectionRef = useRef<HTMLElement>(null);
   const [categoriesList, setCategoriesList] = useState<CategoryItem[]>(
-    initialPropCategories && initialPropCategories.length > 0
+    initialPropCategories !== undefined
       ? normalizeCategories(initialPropCategories)
       : []
   );
-  const [loading, setLoading] = useState<boolean>(!initialPropCategories || initialPropCategories.length === 0);
+  const [loading, setLoading] = useState<boolean>(initialPropCategories === undefined);
   const [showAll, setShowAll] = useState<boolean>(false);
   const [swiperInstance, setSwiperInstance] = useState<SwiperClass | null>(null);
 
   useEffect(() => {
-    if (initialPropCategories && initialPropCategories.length > 0) {
+    if (initialPropCategories !== undefined) {
       setCategoriesList(normalizeCategories(initialPropCategories));
+      return;
     }
 
     let isMounted = true;
