@@ -278,3 +278,8 @@ button {
   display: none !important;
 }
 
+/* 5. Zero-flicker: Immediately hide unauthenticated hero/about sections for logged-in users before React hydration */
+html.akam-logged-in #akam-auth-hero-container {
+  display: none !important;
+}
+

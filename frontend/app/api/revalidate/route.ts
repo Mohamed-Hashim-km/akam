@@ -3,10 +3,39 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
-const HOMEPAGE_TAGS = ["homepage", "stories", "categories", "events", "books", "media", "comments", "editors-note", "reviews"];
+const ALL_DATA_TAGS = [
+  "homepage",
+  "stories",
+  "categories",
+  "events",
+  "books",
+  "media",
+  "comments",
+  "editors-note",
+  "reviews",
+  "editions",
+  "authors",
+  "about",
+  "emagazine",
+];
+
+const TAG_TO_PATHS: Record<string, string[]> = {
+  events: ["/events", "/"],
+  media: ["/media", "/"],
+  editions: ["/emagazine", "/"],
+  emagazine: ["/emagazine", "/"],
+  authors: ["/about", "/authors", "/emagazine", "/"],
+  about: ["/about", "/authors"],
+  stories: ["/"],
+  categories: ["/"],
+  books: ["/"],
+  reviews: ["/"],
+  homepage: ["/"],
+};
 
 function performRevalidation(path: string, tag: string | null) {
   const revalidatedTags: string[] = [];
+  const pathsToRevalidate = new Set<string>();
 
   // 1. Invalidate specific tag immediately
   if (tag) {
@@ -16,11 +45,17 @@ function performRevalidation(path: string, tag: string | null) {
     } catch (e) {
       console.error(`revalidateTag failed for ${tag}:`, e);
     }
+
+    // Auto-map tag to affected paths
+    const mapped = TAG_TO_PATHS[tag];
+    if (mapped) {
+      mapped.forEach((p) => pathsToRevalidate.add(p));
+    }
   }
 
-  // 2. Always revalidate all homepage data tags if revalidating the root path "/" or if no tag was explicitly passed
+  // 2. If revalidating root "/" or if no tag explicitly passed, revalidate all tags & primary static pages
   if (path === "/" || !tag) {
-    for (const t of HOMEPAGE_TAGS) {
+    for (const t of ALL_DATA_TAGS) {
       if (!revalidatedTags.includes(t)) {
         try {
           revalidateTag(t, { expire: 0 });
@@ -30,15 +65,25 @@ function performRevalidation(path: string, tag: string | null) {
         }
       }
     }
+
+    // Also purge all key static pages
+    ["/", "/events", "/media", "/emagazine", "/about", "/authors"].forEach((p) =>
+      pathsToRevalidate.add(p)
+    );
   }
 
-  // 3. Purge path cache for both page and layout to bust static generation & router cache immediately
+  // 3. Add explicit path if passed
   if (path) {
+    pathsToRevalidate.add(path);
+  }
+
+  // 4. Purge path cache for page and layout
+  for (const p of pathsToRevalidate) {
     try {
-      revalidatePath(path, "page");
-      revalidatePath(path, "layout");
+      revalidatePath(p, "page");
+      revalidatePath(p, "layout");
     } catch (e) {
-      console.error(`revalidatePath failed for ${path}:`, e);
+      console.error(`revalidatePath failed for ${p}:`, e);
     }
   }
 

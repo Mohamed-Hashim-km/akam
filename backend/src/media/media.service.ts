@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service.js';
+import { RevalidateService } from '../common/revalidate/revalidate.service.js';
 import { CreateMediaDto } from './dto/create-media.dto.js';
 import { UpdateMediaDto } from './dto/update-media.dto.js';
 import { randomUUID } from 'crypto';
@@ -28,7 +29,10 @@ export function normalizeMediaCategory(category?: string): string {
 
 @Injectable()
 export class MediaService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly revalidateService: RevalidateService,
+  ) {}
 
   private async checkFeaturedLimit(excludeId?: string) {
     const params: any[] = [];
@@ -174,7 +178,7 @@ export class MediaService {
       RETURNING *
     `;
 
-    return this.prisma.queryOne<any>(sql, [
+    const result = await this.prisma.queryOne<any>(sql, [
       id,
       dto.title,
       dto.description,
@@ -184,6 +188,8 @@ export class MediaService {
       isPublished,
       isFeatured,
     ]);
+    this.revalidateService.revalidate('media', '/media');
+    return result;
   }
 
   async update(id: string, dto: UpdateMediaDto) {
@@ -208,7 +214,7 @@ export class MediaService {
       RETURNING *
     `;
 
-    return this.prisma.queryOne<any>(sql, [
+    const result = await this.prisma.queryOne<any>(sql, [
       id,
       title,
       description,
@@ -218,6 +224,8 @@ export class MediaService {
       isPublished,
       isFeatured,
     ]);
+    this.revalidateService.revalidate('media', '/media');
+    return result;
   }
 
   async togglePublish(id: string) {
@@ -229,7 +237,9 @@ export class MediaService {
       WHERE "id" = $1
       RETURNING *
     `;
-    return this.prisma.queryOne<any>(sql, [id, newStatus]);
+    const result = await this.prisma.queryOne<any>(sql, [id, newStatus]);
+    this.revalidateService.revalidate('media', '/media');
+    return result;
   }
 
   async toggleFeatured(id: string) {
@@ -246,13 +256,16 @@ export class MediaService {
       WHERE "id" = $1
       RETURNING *
     `;
-    return this.prisma.queryOne<any>(sql, [id, newStatus]);
+    const result = await this.prisma.queryOne<any>(sql, [id, newStatus]);
+    this.revalidateService.revalidate('media', '/media');
+    return result;
   }
 
   async remove(id: string) {
     await this.findOne(id);
     const sql = `DELETE FROM "media_video" WHERE "id" = $1`;
     await this.prisma.query(sql, [id]);
+    this.revalidateService.revalidate('media', '/media');
     return { message: 'Media video deleted successfully', id };
   }
 }

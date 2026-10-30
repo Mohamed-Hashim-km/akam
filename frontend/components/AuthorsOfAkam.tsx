@@ -21,6 +21,7 @@ export interface AuthorsOfAkamProps {
   limit?: number;
   showViewMore?: boolean;
   viewMoreHref?: string;
+  initialHasMore?: boolean;
 }
 
 export const AuthorsOfAkam: React.FC<AuthorsOfAkamProps> = ({
@@ -30,12 +31,15 @@ export const AuthorsOfAkam: React.FC<AuthorsOfAkamProps> = ({
   limit = 8,
   showViewMore = true,
   viewMoreHref = "/authors",
+  initialHasMore,
 }) => {
   const [displayAuthors, setDisplayAuthors] = useState<AuthorItem[]>(
     propAuthors ? propAuthors.slice(0, limit) : []
   );
   const [loading, setLoading] = useState(!propAuthors || propAuthors.length === 0);
-  const [hasMore, setHasMore] = useState(false);
+  const [hasMore, setHasMore] = useState(
+    initialHasMore !== undefined ? initialHasMore : (propAuthors ? propAuthors.length >= limit : false)
+  );
 
   // Author Profile Modal State
   const [selectedAuthor, setSelectedAuthor] = useState<AuthorItem | null>(null);
@@ -53,7 +57,7 @@ export const AuthorsOfAkam: React.FC<AuthorsOfAkamProps> = ({
   useEffect(() => {
     if (propAuthors && propAuthors.length > 0) {
       setDisplayAuthors(propAuthors.slice(0, limit));
-      setHasMore(propAuthors.length > limit);
+      setHasMore(initialHasMore !== undefined ? initialHasMore : propAuthors.length >= limit);
       setLoading(false);
       return;
     }

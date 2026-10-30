@@ -31,6 +31,7 @@ export interface SessionItem {
 export interface EventSessionsProps {
   sessions?: SessionItem[];
   isLoading?: boolean;
+  initialHasMore?: boolean;
 }
 
 // Tab → backend EventType mapping
@@ -146,6 +147,7 @@ const PAGE_LIMIT = 6;
 export const EventSessions: React.FC<EventSessionsProps> = ({
   sessions: initialSessions,
   isLoading: initialLoading = false,
+  initialHasMore,
 }) => {
   const [swiperInstance, setSwiperInstance] = useState<SwiperClass | null>(null);
   const [isBeginning, setIsBeginning] = useState<boolean>(true);
@@ -154,12 +156,27 @@ export const EventSessions: React.FC<EventSessionsProps> = ({
   const [selectedEventForReg, setSelectedEventForReg] = useState<SessionItem | null>(null);
 
   // Per-tab cache & pagination state
-  const [tabCache, setTabCache] = useState<Partial<Record<SessionItem["category"], SessionItem[]>>>({});
-  const [tabPages, setTabPages] = useState<Partial<Record<SessionItem["category"], number>>>({});
-  const [tabHasMore, setTabHasMore] = useState<Partial<Record<SessionItem["category"], boolean>>>({});
-  const [tabLoading, setTabLoading] = useState<boolean>(initialSessions === undefined || initialLoading);
+  const [tabCache, setTabCache] = useState<Partial<Record<SessionItem["category"], SessionItem[]>>>(() => {
+    if (initialSessions && initialSessions.length > 0) {
+      return { all: initialSessions };
+    }
+    return {};
+  });
+  const [tabPages, setTabPages] = useState<Partial<Record<SessionItem["category"], number>>>(() => {
+    if (initialSessions && initialSessions.length > 0) {
+      return { all: 1 };
+    }
+    return {};
+  });
+  const [tabHasMore, setTabHasMore] = useState<Partial<Record<SessionItem["category"], boolean>>>(() => {
+    if (initialSessions && initialSessions.length > 0) {
+      return { all: initialHasMore !== undefined ? initialHasMore : initialSessions.length >= PAGE_LIMIT };
+    }
+    return {};
+  });
+  const [tabLoading, setTabLoading] = useState<boolean>(initialSessions === undefined ? initialLoading : false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const [displaySessions, setDisplaySessions] = useState<SessionItem[]>([]);
+  const [displaySessions, setDisplaySessions] = useState<SessionItem[]>(() => initialSessions || []);
   useEffect(() => {
     if (typeof window === "undefined") return;
     try {
@@ -219,7 +236,7 @@ export const EventSessions: React.FC<EventSessionsProps> = ({
   // ── server-side prefetch page ───────────────────────────────────────────────
   const fetchPage = useCallback(
     async (tab: SessionItem["category"], pageToFetch: number) => {
-      if (isLoadingMoreRef.current || initialSessions !== undefined) return;
+      if (isLoadingMoreRef.current) return;
       const tabConfig = CATEGORY_TABS.find((t) => t.id === tab);
       if (!tabConfig) return;
 
@@ -291,21 +308,15 @@ export const EventSessions: React.FC<EventSessionsProps> = ({
   );
 
   const loadNextPage = useCallback(() => {
-    if (isLoadingMoreRef.current || tabLoading || initialSessions !== undefined) return;
+    if (isLoadingMoreRef.current || tabLoading) return;
     const hasMore = tabHasMoreRef.current[activeTab];
     if (!hasMore) return;
     const currentPage = tabPagesRef.current[activeTab] || tabPages[activeTab] || 1;
     fetchPage(activeTab, currentPage + 1);
-  }, [activeTab, tabLoading, tabPages, fetchPage, initialSessions]);
+  }, [activeTab, tabLoading, tabPages, fetchPage]);
 
   // ── server-side initial fetch per tab (Page 1) ──────────────────────────────
   const fetchTab = useCallback(async (tab: SessionItem["category"]) => {
-    // Use initialSessions prop path if provided (SSR-seed mode)
-    if (initialSessions !== undefined) {
-      setTabLoading(false);
-      return;
-    }
-
     // Serve from cache first
     if (tabCache[tab] !== undefined) {
       setDisplaySessions(tabCache[tab]!);
@@ -357,22 +368,12 @@ export const EventSessions: React.FC<EventSessionsProps> = ({
     } finally {
       setTabLoading(false);
     }
-  }, [initialSessions, tabCache, fetchPage]);
+  }, [tabCache, fetchPage]);
 
   // Fetch on mount and tab change
   useEffect(() => {
-    if (initialSessions !== undefined) {
-      // Props-provided path (if ever called with SSR data)
-      setDisplaySessions(
-        activeTab === "all"
-          ? initialSessions
-          : initialSessions.filter((s) => s.category === activeTab)
-      );
-      setTabLoading(false);
-      return;
-    }
     fetchTab(activeTab);
-  }, [activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activeTab, fetchTab]);
 
   const handleTabChange = (tab: SessionItem["category"]) => {
     if (tab === activeTab) return;

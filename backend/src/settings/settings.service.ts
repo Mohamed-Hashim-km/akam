@@ -592,33 +592,23 @@ export class SettingsService {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${isApproved ? 'Student Pass Approved' : 'Student Verification Update'}</title>
 </head>
-<body style="margin: 0; padding: 0; background-color: #040706; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; -webkit-font-smoothing: antialiased;">
+<body style="margin: 0; padding: 0; background-color: #F8FAFC; font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; -webkit-font-smoothing: antialiased;">
   <!-- Background Shell -->
-  <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #080D0B; padding: 36px 16px;">
+  <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #F8FAFC; padding: 36px 16px;">
     <tr>
       <td align="center">
         <!-- Main Card Container -->
-        <table width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 600px; background-color: #0E1613; border-radius: 28px; overflow: hidden; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5); border: 1px solid #1E2D27;">
+        <table width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 600px; background-color: #FFFFFF; border-radius: 24px; overflow: hidden; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05); border: 1px solid #E2E8F0;">
           
-          <!-- Top Brand Header -->
+          <!-- Top Brand Header with Navbar Logo -->
           <tr>
-            <td style="background: linear-gradient(135deg, #040706 0%, #0A261C 65%, #040706 100%); padding: 36px 32px 30px 32px; text-align: center;">
+            <td style="background-color: #FFFFFF; padding: 24px 28px; text-align: center; border-bottom: 3px solid #21B573;">
               <table width="100%" border="0" cellspacing="0" cellpadding="0">
                 <tr>
                   <td align="center">
-                    <!-- Brand Pill Badge -->
-                    <div style="display: inline-block; background: rgba(228, 249, 83, 0.12); border: 1px solid rgba(228, 249, 83, 0.35); border-radius: 9999px; padding: 5px 16px; margin-bottom: 14px;">
-                      <span style="color: #E4F953; font-size: 10px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase;">
-                        AKAM DIGITAL • SCHOLAR ACCESS
-                      </span>
-                    </div>
-                    <!-- Brand Bilingual Logo -->
-                    <h1 style="color: #FFFFFF; font-size: 28px; font-weight: 900; margin: 0; letter-spacing: -0.5px;">
-                      അകം <span style="font-weight: 300; color: #E4F953; font-size: 20px;">| AKAM</span>
-                    </h1>
-                    <p style="color: #9CA3AF; font-size: 11px; margin: 6px 0 0 0; letter-spacing: 0.8px; text-transform: uppercase;">
-                      Malayalam Literary Journal & Digital Archive
-                    </p>
+                    <a href="${frontendUrl}" target="_blank" style="text-decoration: none; display: inline-block;">
+                      <img src="https://akamdigital.in/images/akamdigital.png" alt="AKAM Digital Logo" style="height: 48px; width: auto; max-width: 230px; display: block; border: 0;" />
+                    </a>
                   </td>
                 </tr>
               </table>
@@ -627,7 +617,18 @@ export class SettingsService {
 
           <!-- Gradient Ribbon Separator -->
           <tr>
-            <td height="4" style="background: linear-gradient(90deg, #0FA975 0%, #E4F953 50%, #2DB76E 100%);"></td>
+            <td height="4" style="background: linear-gradient(90deg, #21B573 0%, #E4F953 50%, #21B573 100%);"></td>
+          </tr>
+
+          <!-- Sub Header Strip -->
+          <tr>
+            <td style="background-color: #F8FAFC; padding: 14px 24px; text-align: center; border-bottom: 1px solid #F1F5F9;">
+              <div style="display: inline-block; background: #ECFDF5; border: 1px solid #A7F3D0; border-radius: 9999px; padding: 5px 16px;">
+                <span style="color: #065F46; font-size: 10px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase;">
+                  AKAM DIGITAL • SCHOLAR ACCESS
+                </span>
+              </div>
+            </td>
           </tr>
 
           <!-- Hero Decision Section -->
@@ -637,26 +638,26 @@ export class SettingsService {
                 isApproved
                   ? `
                 <!-- APPROVED ICON & TITLE -->
-                <div style="display: inline-block; width: 68px; height: 68px; line-height: 68px; border-radius: 50%; background: linear-gradient(135deg, #0FA975 0%, #064E3B 100%); border: 2px solid #E4F953; font-size: 32px; text-align: center; margin-bottom: 18px; box-shadow: 0 8px 24px rgba(15, 169, 117, 0.35);">
+                <div style="display: inline-block; width: 68px; height: 68px; line-height: 68px; border-radius: 50%; background: #ECFDF5; border: 2px solid #21B573; font-size: 32px; text-align: center; margin-bottom: 18px;">
                   🎓
                 </div>
-                <h2 style="color: #FFFFFF; font-size: 24px; font-weight: 800; margin: 0 0 10px 0; letter-spacing: -0.5px;">
+                <h2 style="color: #040706; font-size: 24px; font-weight: 800; margin: 0 0 10px 0; letter-spacing: -0.5px;">
                   Verification Approved!
                 </h2>
-                <p style="color: #9CA3AF; font-size: 14px; margin: 0 auto; max-width: 460px; line-height: 1.6;">
-                  Dear <strong style="color: #FFFFFF;">${record.fullName}</strong>, congratulations! Your student credentials have been verified by the editorial board. Your <strong style="color: #E4F953;">100% Free Scholar Pass</strong> is now active.
+                <p style="color: #475569; font-size: 14px; margin: 0 auto; max-width: 460px; line-height: 1.6;">
+                  Dear <strong style="color: #040706;">${record.fullName}</strong>, congratulations! Your student credentials have been verified by the editorial board. Your <strong style="color: #21B573;">100% Free Scholar Pass</strong> is now active.
                 </p>
               `
                   : `
                 <!-- REJECTED ICON & TITLE -->
-                <div style="display: inline-block; width: 68px; height: 68px; line-height: 68px; border-radius: 50%; background: linear-gradient(135deg, #E11D48 0%, #881337 100%); border: 2px solid #FDA4AF; font-size: 30px; text-align: center; margin-bottom: 18px; box-shadow: 0 8px 24px rgba(225, 29, 72, 0.35);">
+                <div style="display: inline-block; width: 68px; height: 68px; line-height: 68px; border-radius: 50%; background: #FFF1F2; border: 2px solid #F43F5E; font-size: 30px; text-align: center; margin-bottom: 18px;">
                   📋
                 </div>
-                <h2 style="color: #FFFFFF; font-size: 24px; font-weight: 800; margin: 0 0 10px 0; letter-spacing: -0.5px;">
+                <h2 style="color: #040706; font-size: 24px; font-weight: 800; margin: 0 0 10px 0; letter-spacing: -0.5px;">
                   Verification Status Update
                 </h2>
-                <p style="color: #9CA3AF; font-size: 14px; margin: 0 auto; max-width: 460px; line-height: 1.6;">
-                  Dear <strong style="color: #FFFFFF;">${record.fullName}</strong>, thank you for your interest in AKAM Digital. After editorial review, your student identity verification could not be approved at this stage.
+                <p style="color: #475569; font-size: 14px; margin: 0 auto; max-width: 460px; line-height: 1.6;">
+                  Dear <strong style="color: #040706;">${record.fullName}</strong>, thank you for your interest in AKAM Digital. After editorial review, your student identity verification could not be approved at this stage.
                 </p>
               `
               }
@@ -666,16 +667,16 @@ export class SettingsService {
           <!-- Editorial Feedback Note Card -->
           <tr>
             <td style="padding: 0 32px 28px 32px;">
-              <div style="background-color: ${isApproved ? 'rgba(15, 169, 117, 0.08)' : 'rgba(225, 29, 72, 0.08)'}; border: 1px solid ${isApproved ? 'rgba(15, 169, 117, 0.3)' : 'rgba(225, 29, 72, 0.3)'}; border-radius: 18px; padding: 20px 22px;">
-                <div style="font-size: 10px; font-weight: 800; color: ${isApproved ? '#E4F953' : '#FDA4AF'}; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 6px;">
+              <div style="background-color: ${isApproved ? '#F0FDF4' : '#FFF1F2'}; border: 1px solid ${isApproved ? '#BBF7D0' : '#FECDD3'}; border-radius: 16px; padding: 20px 22px;">
+                <div style="font-size: 10px; font-weight: 800; color: ${isApproved ? '#166534' : '#9F1239'}; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 6px;">
                   ${isApproved ? 'EDITORIAL BOARD WELCOME NOTE' : 'REASON & EDITORIAL GUIDANCE'}
                 </div>
-                <p style="font-size: 13px; color: ${isApproved ? '#D1FAE5' : '#FFE4E6'}; margin: 0; line-height: 1.6; font-style: italic;">
+                <p style="font-size: 13px; color: ${isApproved ? '#15803D' : '#BE123C'}; margin: 0; line-height: 1.6; font-style: italic;">
                   &ldquo;${effectiveNotes}&rdquo;
                 </p>
                 ${
                   !isApproved
-                    ? `<p style="font-size: 11px; color: #9CA3AF; margin: 10px 0 0 0; line-height: 1.5;">
+                    ? `<p style="font-size: 11px; color: #64748B; margin: 10px 0 0 0; line-height: 1.5;">
                         💡 <strong>How to fix:</strong> You can submit a fresh, legible photo or scan of your valid student identity card by visiting our subscription plans page.
                       </p>`
                     : ''
@@ -687,54 +688,54 @@ export class SettingsService {
           <!-- Application Details Table -->
           <tr>
             <td style="padding: 0 32px 28px 32px;">
-              <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #121C18; border: 1px solid #1E2D27; border-radius: 18px; overflow: hidden;">
+              <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 16px; overflow: hidden;">
                 <tr>
-                  <td style="padding: 13px 18px; border-bottom: 1px solid #1E2D27; font-size: 12px; color: #6B7280; width: 40%;">
+                  <td style="padding: 13px 18px; border-bottom: 1px solid #E2E8F0; font-size: 12px; color: #64748B; width: 40%;">
                     Applicant Name
                   </td>
-                  <td style="padding: 13px 18px; border-bottom: 1px solid #1E2D27; font-size: 12px; font-weight: 700; color: #FFFFFF;">
+                  <td style="padding: 13px 18px; border-bottom: 1px solid #E2E8F0; font-size: 12px; font-weight: 700; color: #040706;">
                     ${record.fullName}
                   </td>
                 </tr>
                 <tr>
-                  <td style="padding: 13px 18px; border-bottom: 1px solid #1E2D27; font-size: 12px; color: #6B7280;">
+                  <td style="padding: 13px 18px; border-bottom: 1px solid #E2E8F0; font-size: 12px; color: #64748B;">
                     College / Institution
                   </td>
-                  <td style="padding: 13px 18px; border-bottom: 1px solid #1E2D27; font-size: 12px; font-weight: 600; color: #E5E7EB;">
+                  <td style="padding: 13px 18px; border-bottom: 1px solid #E2E8F0; font-size: 12px; font-weight: 600; color: #334155;">
                     ${record.institution}
                   </td>
                 </tr>
                 <tr>
-                  <td style="padding: 13px 18px; border-bottom: 1px solid #1E2D27; font-size: 12px; color: #6B7280;">
+                  <td style="padding: 13px 18px; border-bottom: 1px solid #E2E8F0; font-size: 12px; color: #64748B;">
                     Email
                   </td>
-                  <td style="padding: 13px 18px; border-bottom: 1px solid #1E2D27; font-size: 12px; font-weight: 600; color: #E5E7EB;">
+                  <td style="padding: 13px 18px; border-bottom: 1px solid #E2E8F0; font-size: 12px; font-weight: 600; color: #334155;">
                     ${record.email}
                   </td>
                 </tr>
                 <tr>
-                  <td style="padding: 13px 18px; border-bottom: 1px solid #1E2D27; font-size: 12px; color: #6B7280;">
+                  <td style="padding: 13px 18px; border-bottom: 1px solid #E2E8F0; font-size: 12px; color: #64748B;">
                     Application Reference
                   </td>
-                  <td style="padding: 13px 18px; border-bottom: 1px solid #1E2D27; font-size: 12px; font-weight: 700; color: #E4F953; font-family: monospace;">
+                  <td style="padding: 13px 18px; border-bottom: 1px solid #E2E8F0; font-size: 12px; font-weight: 700; color: #21B573; font-family: monospace;">
                     ${record.referenceId || record.id}
                   </td>
                 </tr>
                 ${
                   isApproved && record.endDate
                     ? `<tr>
-                  <td style="padding: 13px 18px; border-bottom: 1px solid #1E2D27; font-size: 12px; color: #6B7280;">
+                  <td style="padding: 13px 18px; border-bottom: 1px solid #E2E8F0; font-size: 12px; color: #64748B;">
                     Pass Duration
                   </td>
-                  <td style="padding: 13px 18px; border-bottom: 1px solid #1E2D27; font-size: 12px; font-weight: 700; color: #FFFFFF;">
+                  <td style="padding: 13px 18px; border-bottom: 1px solid #E2E8F0; font-size: 12px; font-weight: 700; color: #040706;">
                     ${Math.max(1, Math.round(Math.max(1, (new Date(record.endDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)) / 30))} Months
                   </td>
                 </tr>
                 <tr>
-                  <td style="padding: 13px 18px; border-bottom: 1px solid #1E2D27; font-size: 12px; color: #6B7280;">
+                  <td style="padding: 13px 18px; border-bottom: 1px solid #E2E8F0; font-size: 12px; color: #64748B;">
                     Access Valid Until
                   </td>
-                  <td style="padding: 13px 18px; border-bottom: 1px solid #1E2D27; font-size: 12px; font-weight: 700; color: #34D399;">
+                  <td style="padding: 13px 18px; border-bottom: 1px solid #E2E8F0; font-size: 12px; font-weight: 700; color: #21B573;">
                     ${new Date(record.endDate).toLocaleDateString('en-IN', {
                       day: 'numeric',
                       month: 'short',
@@ -745,14 +746,14 @@ export class SettingsService {
                     : ''
                 }
                 <tr>
-                  <td style="padding: 13px 18px; font-size: 12px; color: #6B7280;">
+                  <td style="padding: 13px 18px; font-size: 12px; color: #64748B;">
                     Current Status
                   </td>
                   <td style="padding: 13px 18px; font-size: 12px; font-weight: 700;">
                     <span style="display: inline-block; padding: 4px 12px; border-radius: 9999px; font-size: 10px; font-weight: 800; letter-spacing: 0.5px; ${
                       isApproved
-                        ? 'background-color: rgba(15, 169, 117, 0.2); color: #34D399; border: 1px solid #0FA975;'
-                        : 'background-color: rgba(225, 29, 72, 0.2); color: #FB7185; border: 1px solid #E11D48;'
+                        ? 'background-color: #ECFDF5; color: #065F46; border: 1px solid #A7F3D0;'
+                        : 'background-color: #FFF1F2; color: #9F1239; border: 1px solid #FECDD3;'
                     }">
                       ${isApproved ? '✓ APPROVED • 100% FREE SCHOLAR PASS' : '✕ REJECTED • RESUBMISSION WELCOME'}
                     </span>
@@ -769,17 +770,17 @@ export class SettingsService {
                 <tr>
                   <td align="center">
                     <a href="${isApproved ? `${frontendUrl}/library` : `${frontendUrl}/plans`}"
-                       style="display: inline-block; background: ${isApproved ? 'linear-gradient(135deg, #0FA975 0%, #064E3B 100%)' : 'linear-gradient(135deg, #E4F953 0%, #2DB76E 100%)'}; color: ${isApproved ? '#FFFFFF' : '#040706'}; font-size: 13px; font-weight: 800; text-decoration: none; padding: 15px 36px; border-radius: 9999px; letter-spacing: 0.5px; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4); text-transform: uppercase;">
+                       style="display: inline-block; background-color: #21B573; color: #FFFFFF; font-size: 13px; font-weight: 800; text-decoration: none; padding: 15px 36px; border-radius: 9999px; letter-spacing: 0.5px; box-shadow: 0 4px 12px rgba(33, 181, 115, 0.25); text-transform: uppercase;">
                       ${isApproved ? 'Access Digital Library & Read Now →' : 'Resubmit ID Card Verification →'}
                     </a>
                   </td>
                 </tr>
               </table>
-              <p style="font-size: 11px; color: #6B7280; margin: 16px 0 0 0; line-height: 1.5;">
+              <p style="font-size: 12px; color: #64748B; margin: 16px 0 0 0; line-height: 1.5;">
                 ${
                   isApproved
-                    ? `Log in using your registered email to immediately access all digital issues. You can view your pass details anytime at <a href="${frontendUrl}/profile" style="color: #0FA975; text-decoration: underline;">${frontendUrl}/profile</a>.`
-                    : 'Need assistance? You can directly reply to this email to reach our editorial desk.'
+                    ? `Log in using your registered email to immediately access all digital issues. You can view your pass details anytime at <a href="${frontendUrl}/profile" style="color: #21B573; text-decoration: underline;">${frontendUrl}/profile</a>.`
+                    : 'Need assistance? You can reach our editorial desk at <a href="mailto:editorial@akamdigital.in" style="color: #21B573; text-decoration: underline;">editorial@akamdigital.in</a>.'
                 }
               </p>
             </td>
@@ -787,16 +788,21 @@ export class SettingsService {
 
           <!-- Footer -->
           <tr>
-            <td style="background-color: #040706; padding: 26px 32px; text-align: center; border-top: 1px solid #1E2D27;">
-              <p style="color: #9CA3AF; font-size: 11px; font-weight: 700; margin: 0 0 6px 0; letter-spacing: 0.5px;">
+            <td style="background-color: #F8FAFC; padding: 26px 32px; text-align: center; border-top: 1px solid #E2E8F0;">
+              <p style="color: #64748B; font-size: 11px; margin: 0 0 10px 0; font-weight: 500;">
+                <em>This is an automated email. Please do not reply directly to this message.</em>
+              </p>
+              <p style="color: #475569; font-size: 11px; font-weight: 700; margin: 0 0 8px 0; letter-spacing: 0.5px;">
                 AKAM Digital Editorial Desk • Kairali Books
               </p>
-              <p style="color: #6B7280; font-size: 11px; margin: 0 0 14px 0;">
-                <a href="mailto:editorial@akamdigital.com" style="color: #0FA975; text-decoration: none;">editorial@akamdigital.com</a>
+              <p style="color: #64748B; font-size: 11px; margin: 0 0 12px 0;">
+                <a href="${frontendUrl}/privacy-policy" style="color: #21B573; text-decoration: none; font-weight: 600;">Privacy Policy</a>
                 &nbsp;•&nbsp;
-                <a href="${frontendUrl}" style="color: #9CA3AF; text-decoration: none;">akamdigital.com</a>
+                <a href="${frontendUrl}/terms" style="color: #21B573; text-decoration: none; font-weight: 600;">Terms of Service</a>
+                &nbsp;•&nbsp;
+                <a href="${frontendUrl}" style="color: #64748B; text-decoration: none;">akamdigital.in</a>
               </p>
-              <p style="color: #4B5563; font-size: 10px; margin: 0;">
+              <p style="color: #94A3B8; font-size: 10px; margin: 0;">
                 © ${new Date().getFullYear()} AKAM Digital. All rights reserved. Registered literature scholarship program.
               </p>
             </td>
@@ -822,28 +828,110 @@ export class SettingsService {
       this.configService.get<string>('SMTP_USER') || 'editorial@akamdigital.com';
 
     const subject = `[New Student Pass Application] ${record.fullName} (${record.institution})`;
+    const logoUrl = 'https://akamdigital.in/images/akamdigital.png';
     const html = `
-      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; background: #040706; color: #F7FBF9; padding: 32px; border-radius: 20px; border: 1px solid #16382B;">
-        <div style="display: flex; align-items: center; margin-bottom: 24px;">
-          <span style="font-size: 20px; font-weight: 800; letter-spacing: 0.15em; color: #E4F953;">AKAM</span>
-          <span style="font-size: 11px; margin-left: 10px; padding: 3px 8px; border-radius: 6px; background: #16382B; color: #39D39E; font-weight: 700;">EDITORIAL DESK</span>
-        </div>
-        <h2 style="color: #ffffff; margin: 0 0 12px; font-size: 20px;">New Student Scholar Pass Application</h2>
-        <p style="color: #94A3B8; font-size: 14px; line-height: 1.6; margin-bottom: 20px;">
-          A student has submitted their credentials for a 100% Free Scholar Pass. Please review their submitted identity card.
-        </p>
-        <div style="background: #0A120E; border: 1px solid #16382B; border-radius: 12px; padding: 18px; margin-bottom: 24px; font-size: 13px;">
-          <div style="margin-bottom: 8px;"><strong style="color: #E4F953;">Applicant:</strong> <span style="color: #ffffff;">${record.fullName}</span></div>
-          <div style="margin-bottom: 8px;"><strong style="color: #E4F953;">Institution:</strong> <span style="color: #ffffff;">${record.institution}</span></div>
-          <div style="margin-bottom: 8px;"><strong style="color: #E4F953;">Email:</strong> <span style="color: #ffffff;">${record.email}</span></div>
-          <div><strong style="color: #E4F953;">Reference ID:</strong> <span style="color: #ffffff;">${record.referenceId}</span></div>
-        </div>
-        <div style="text-align: center; margin-top: 24px;">
-          <a href="${reviewUrl}" style="display: inline-block; background: #0FA975; color: #ffffff; text-decoration: none; padding: 12px 28px; font-weight: 700; border-radius: 12px; font-size: 14px;">
-            Open Student Verifications Panel →
-          </a>
-        </div>
-      </div>
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>New Student Scholar Pass Application</title>
+      </head>
+      <body style="margin: 0; padding: 0; background-color: #F8FAFC; font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; -webkit-font-smoothing: antialiased;">
+        <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #F8FAFC; padding: 36px 16px;">
+          <tr>
+            <td align="center">
+              <table width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 600px; background-color: #FFFFFF; border-radius: 24px; overflow: hidden; border: 1px solid #E2E8F0; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);">
+                
+                <!-- Navbar Logo Header -->
+                <tr>
+                  <td style="background-color: #FFFFFF; padding: 22px 28px; text-align: left; border-bottom: 3px solid #21B573;">
+                    <table width="100%" border="0" cellspacing="0" cellpadding="0">
+                      <tr>
+                        <td>
+                          <a href="${frontendUrl}" target="_blank" style="text-decoration: none; display: inline-block;">
+                            <img src="${logoUrl}" alt="AKAM Digital" style="height: 44px; width: auto; max-width: 220px; display: block; border: 0;" />
+                          </a>
+                        </td>
+                        <td align="right">
+                          <span style="background-color: #F0FDF4; color: #166534; border: 1px solid #BBF7D0; font-size: 10px; font-weight: 800; padding: 6px 14px; border-radius: 9999px; letter-spacing: 1px; text-transform: uppercase;">
+                            EDITORIAL DESK
+                          </span>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+
+                <!-- Gradient Ribbon -->
+                <tr>
+                  <td height="4" style="background: linear-gradient(90deg, #21B573 0%, #E4F953 50%, #21B573 100%);"></td>
+                </tr>
+
+                <!-- Content Area -->
+                <tr>
+                  <td style="padding: 32px;">
+                    <h2 style="color: #040706; margin: 0 0 10px; font-size: 20px; font-weight: 800; letter-spacing: -0.3px;">
+                      New Student Scholar Pass Application
+                    </h2>
+                    <p style="color: #475569; font-size: 14px; line-height: 1.6; margin: 0 0 22px 0;">
+                      A student has submitted their credentials for a 100% Free Scholar Pass. Please review their submitted identity card in the editorial management panel.
+                    </p>
+
+                    <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 14px; padding: 20px; margin-bottom: 24px; font-size: 13px;">
+                      <table width="100%" border="0" cellspacing="0" cellpadding="0">
+                        <tr>
+                          <td style="padding: 8px 0; color: #64748B; font-weight: 700; width: 35%;">Applicant:</td>
+                          <td style="padding: 8px 0; color: #040706; font-weight: 600;">${record.fullName}</td>
+                        </tr>
+                        <tr>
+                          <td style="padding: 8px 0; color: #64748B; font-weight: 700;">Institution:</td>
+                          <td style="padding: 8px 0; color: #334155;">${record.institution}</td>
+                        </tr>
+                        <tr>
+                          <td style="padding: 8px 0; color: #64748B; font-weight: 700;">Email:</td>
+                          <td style="padding: 8px 0; color: #334155;">${record.email}</td>
+                        </tr>
+                        <tr>
+                          <td style="padding: 8px 0; color: #64748B; font-weight: 700;">Reference ID:</td>
+                          <td style="padding: 8px 0; color: #21B573; font-family: monospace; font-weight: 700;">${record.referenceId}</td>
+                        </tr>
+                      </table>
+                    </div>
+
+                    <div style="text-align: center; margin-top: 24px;">
+                      <a href="${reviewUrl}" style="display: inline-block; background-color: #21B573; color: #FFFFFF; text-decoration: none; padding: 14px 34px; font-weight: 800; border-radius: 9999px; font-size: 13px; letter-spacing: 0.5px; text-transform: uppercase; box-shadow: 0 4px 12px rgba(33, 181, 115, 0.25);">
+                        Open Student Verifications Panel →
+                      </a>
+                    </div>
+                  </td>
+                </tr>
+
+                <!-- Footer -->
+                <tr>
+                  <td style="background-color: #F8FAFC; border-top: 1px solid #E2E8F0; padding: 22px 32px; text-align: center;">
+                    <p style="color: #64748B; font-size: 11px; margin: 0 0 8px 0;">
+                      <em>This is an automated email. Please do not reply directly to this message.</em>
+                    </p>
+                    <p style="color: #64748B; font-size: 11px; margin: 0 0 10px 0;">
+                      <a href="${frontendUrl}/privacy-policy" style="color: #21B573; text-decoration: none; font-weight: 600;">Privacy Policy</a>
+                      &nbsp;•&nbsp;
+                      <a href="${frontendUrl}/terms" style="color: #21B573; text-decoration: none; font-weight: 600;">Terms of Service</a>
+                      &nbsp;•&nbsp;
+                      <a href="${frontendUrl}" style="color: #64748B; text-decoration: none;">akamdigital.in</a>
+                    </p>
+                    <p style="color: #94A3B8; font-size: 10px; margin: 0;">
+                      AKAM Digital Scholar Verification System • Internal Editorial Notice
+                    </p>
+                  </td>
+                </tr>
+
+              </table>
+            </td>
+          </tr>
+        </table>
+      </body>
+      </html>
     `;
 
     await this.mailService.sendMail({

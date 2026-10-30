@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service.js';
 import { UploadsService } from '../uploads/uploads.service.js';
+import { RevalidateService } from '../common/revalidate/revalidate.service.js';
 import { UpdateProfileDto } from './dto/update-profile.dto.js';
 import { UpdateUserDto } from './dto/update-user.dto.js';
 
@@ -24,6 +25,7 @@ export class UsersService {
   constructor(
     private prisma: PrismaService,
     private uploadsService: UploadsService,
+    private revalidateService: RevalidateService,
   ) {}
 
   async findAll(
@@ -285,6 +287,7 @@ export class UsersService {
       [newStatus, id],
     );
     if (!user) throw new NotFoundException('User not found');
+    this.revalidateService.revalidate('authors', '/about');
     return user;
   }
 
@@ -346,6 +349,7 @@ export class UsersService {
       [safeSortOrder, id],
     );
     if (!user) throw new NotFoundException('User not found');
+    this.revalidateService.revalidate('authors', '/about');
     return user;
   }
 
@@ -466,6 +470,7 @@ export class UsersService {
          RETURNING id, email, name, bio, "avatarUrl", role, "isFeatured", "sortOrder", "isShadowBanned", "createdAt"`,
         [dto.name || null, dto.bio || null, dto.avatarUrl || null, dto.isFeatured ?? null, safeSort, existing.id],
       );
+      this.revalidateService.revalidate('authors', '/about');
       return updated!;
     }
 
@@ -489,6 +494,7 @@ export class UsersService {
       [emailVal, nameVal, phoneVal, privacyVal, bioVal, avatarVal, isFeaturedVal, sortOrderVal],
     );
 
+    this.revalidateService.revalidate('authors', '/about');
     return user!;
   }
 
@@ -590,6 +596,7 @@ export class UsersService {
       throw new NotFoundException('User not found');
     }
 
+    this.revalidateService.revalidate('authors', '/about');
     return user;
   }
 
@@ -626,6 +633,7 @@ export class UsersService {
     } catch {}
 
     await this.prisma.execute(`DELETE FROM "user" WHERE id = $1`, [id]);
+    this.revalidateService.revalidate('authors', '/about');
     return { success: true, message: 'User deleted successfully' };
   }
 }

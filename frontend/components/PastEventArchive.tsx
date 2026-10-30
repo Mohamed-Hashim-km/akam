@@ -65,9 +65,19 @@ export const PastEventArchive: React.FC<PastEventArchiveProps> = ({
   const [activeVideoUrl, setActiveVideoUrl] = useState<string | null>(null);
 
   // ── state ─────────────────────────────────────────────────────────────────
-  const [eventList, setEventList] = useState<PastEventItem[]>([]);
+  const [eventList, setEventList] = useState<PastEventItem[]>(() => {
+    if (initialEvents) {
+      const filtered = initialEvents.filter((e: any) => !e.type || e.type === "PAST_ARCHIVE");
+      return filtered.length > LIMIT ? filtered.slice(0, LIMIT) : filtered;
+    }
+    return [];
+  });
   const [page, setPage] = useState<number>(1);
-  const [hasMore, setHasMore] = useState<boolean>(false);
+  const [hasMore, setHasMore] = useState<boolean>(() => {
+    if (initialHasMore !== undefined) return initialHasMore;
+    if (initialEvents) return initialEvents.length > LIMIT;
+    return false;
+  });
   const [isInitialLoading, setIsInitialLoading] = useState<boolean>(
     initialEvents === undefined && !initialLoading
   );

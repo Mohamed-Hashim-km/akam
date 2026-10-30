@@ -1014,6 +1014,7 @@ function EditorialDashboardContent() {
       });
       if (res.ok) {
         setFeedbackMessage(editingEditionId ? "Edition updated successfully!" : "Edition created successfully!");
+        triggerRevalidation("editions");
         setShowAddEditionModal(false);
         resetEditionForm();
         fetchDashboardData("editions", currentPage, searchQuery);
@@ -1034,6 +1035,7 @@ function EditorialDashboardContent() {
       const res = await apiFetch(`${API_BASE_URL}/editorial/editions/${id}/toggle-publish`, { method: "PATCH" });
       if (res.ok) {
         setFeedbackMessage("Edition publication status updated.");
+        triggerRevalidation("editions");
         fetchDashboardData("editions", currentPage, searchQuery);
         setTimeout(() => setFeedbackMessage(null), 3000);
       }
@@ -1048,6 +1050,7 @@ function EditorialDashboardContent() {
       const res = await apiFetch(`${API_BASE_URL}/editorial/editions/${id}`, { method: "DELETE" });
       if (res.ok) {
         setFeedbackMessage("Edition deleted successfully.");
+        triggerRevalidation("editions");
         fetchDashboardData("editions", currentPage, searchQuery);
         setTimeout(() => setFeedbackMessage(null), 3000);
       }
@@ -2980,6 +2983,7 @@ function EditorialDashboardContent() {
 
       if (res.ok) {
         setFeedbackMessage(`Author '${authorFormName}' registered successfully!`);
+        triggerRevalidation("authors");
         setRegisterAuthorModalOpen(false);
         setAuthorFormName("");
         setAuthorFormEmail("");
@@ -3066,6 +3070,7 @@ function EditorialDashboardContent() {
 
       if (res.ok) {
         setFeedbackMessage(`Author '${authorEditName}' updated successfully!`);
+        triggerRevalidation("authors");
         setEditAuthorModalOpen(false);
         setEditingAuthorTarget(null);
         fetchDashboardData("authors", currentPage, searchQuery);
@@ -3097,6 +3102,7 @@ function EditorialDashboardContent() {
 
       if (res.ok) {
         setFeedbackMessage(`User '${deletingAuthorTarget.name || deletingAuthorTarget.email}' deleted successfully.`);
+        triggerRevalidation("authors");
         setDeleteAuthorModalOpen(false);
         setDeletingAuthorTarget(null);
         fetchDashboardData("authors", currentPage, searchQuery);

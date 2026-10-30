@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, Optional, Logger } from '@nestjs/common'
 import { PrismaService } from '../common/prisma/prisma.service.js';
 import { UploadsService } from '../uploads/uploads.service.js';
 import { SubscriptionService } from '../subscription/subscription.service.js';
+import { RevalidateService } from '../common/revalidate/revalidate.service.js';
 import { CreateEditionDto } from './dto/create-edition.dto.js';
 import { UpdateEditionDto } from './dto/update-edition.dto.js';
 import { randomUUID } from 'crypto';
@@ -17,6 +18,7 @@ export class EditionsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly uploadsService: UploadsService,
+    private readonly revalidateService: RevalidateService,
     @Optional() private readonly subscriptionService?: SubscriptionService,
   ) {}
 
@@ -250,7 +252,7 @@ export class EditionsService {
       VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
       RETURNING *
     `;
-    return this.prisma.queryOne<any>(sql, [
+    const result = await this.prisma.queryOne<any>(sql, [
       id,
       dto.title,
       dto.pdfUrl,
@@ -258,6 +260,8 @@ export class EditionsService {
       isPublished,
       sortOrder,
     ]);
+    this.revalidateService.revalidate('editions', '/emagazine');
+    return result;
   }
 
   async update(id: string, dto: UpdateEditionDto) {
@@ -282,7 +286,9 @@ export class EditionsService {
       WHERE "id" = $1
       RETURNING *
     `;
-    return this.prisma.queryOne<any>(sql, [id, title, pdfUrl, coverImage, isPublished, sortOrder]);
+    const result = await this.prisma.queryOne<any>(sql, [id, title, pdfUrl, coverImage, isPublished, sortOrder]);
+    this.revalidateService.revalidate('editions', '/emagazine');
+    return result;
   }
 
   async togglePublish(id: string) {
@@ -293,7 +299,9 @@ export class EditionsService {
       WHERE "id" = $1
       RETURNING *
     `;
-    return this.prisma.queryOne<any>(sql, [id, !existing.isPublished]);
+    const result = await this.prisma.queryOne<any>(sql, [id, !existing.isPublished]);
+    this.revalidateService.revalidate('editions', '/emagazine');
+    return result;
   }
 
   async remove(id: string) {
@@ -305,6 +313,7 @@ export class EditionsService {
       this.uploadsService.deleteFileByUrl(existing.coverImage);
     }
     await this.prisma.execute(`DELETE FROM "edition" WHERE "id" = $1`, [id]);
+    this.revalidateService.revalidate('editions', '/emagazine');
     return { message: 'Edition deleted successfully', id };
   }
 }

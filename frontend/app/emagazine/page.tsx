@@ -1,100 +1,99 @@
-"use client";
+import React from "react";
+import type { Metadata } from "next";
+import MasikaClient from "@/components/MasikaClient";
+import type { EditionItem } from "@/components/PreviousEditions";
+import type { ArtistItem } from "@/components/FeaturedArtist";
+import { API_BASE_URL } from "@/lib/config";
 
-import React, { useState, useEffect, useCallback } from "react";
-import dynamic from "next/dynamic";
-import MasikaHero from "@/components/MasikaHero";
-import FeaturedArtist from "@/components/FeaturedArtist";
-import PreviousEditions, { EditionItem } from "@/components/PreviousEditions";
-import AboutDigitalEdition from "@/components/AboutDigitalEdition";
-import SubscriptionGateModal from "@/components/SubscriptionGateModal";
-import { API_BASE_URL, apiFetch, formatAssetUrl } from "@/lib/config";
-import { useSubscription } from "@/lib/useSubscription";
+// ISR: revalidate every 60 seconds
+export const revalidate = 60;
 
-const EditionFlipbook = dynamic(() => import("@/components/EditionFlipbook"), { ssr: false });
+export const metadata: Metadata = {
+  title: "Akam Masika — Monthly Malayalam Literary E-Magazine",
+  description:
+    "Read the latest digital edition of Akam Masika, featuring essays, poetry, original Malayalam literature, author interviews, and full 3D flipbook archives.",
+  alternates: {
+    canonical: "https://akamdigital.in/emagazine",
+  },
+  openGraph: {
+    title: "Akam Masika — Monthly Malayalam Literary E-Magazine",
+    description:
+      "Read the latest digital edition of Akam Masika, featuring essays, poetry, original Malayalam literature, author interviews, and full 3D flipbook archives.",
+    url: "https://akamdigital.in/emagazine",
+    type: "website",
+  },
+};
 
-export default function MasikaPage() {
-  const [latestEdition, setLatestEdition] = useState<EditionItem | null>(null);
-  const [flipbookOpen, setFlipbookOpen] = useState(false);
-  const [gateOpen, setGateOpen] = useState(false);
+const FETCH_OPTS = (tags: string[]) => ({
+  next: { tags: ["emagazine", ...tags], revalidate: 60 },
+  signal: AbortSignal.timeout(8000),
+});
 
-  const { isSubscribed, refreshSubscription } = useSubscription();
+async function getMasikaPageData() {
+  const [latestRes, editionsRes, artistsRes] = await Promise.allSettled([
+    fetch(`${API_BASE_URL}/editions?page=1&limit=1`, FETCH_OPTS(["editions"])),
+    fetch(`${API_BASE_URL}/editions?page=1&limit=10`, FETCH_OPTS(["editions"])),
+    fetch(`${API_BASE_URL}/users/public-authors?page=1&limit=4&featured=true`, FETCH_OPTS(["authors"])),
+  ]);
 
-  const fetchLatest = useCallback(async () => {
+  let latestEdition: EditionItem | null = null;
+  if (latestRes.status === "fulfilled" && latestRes.value.ok) {
     try {
-      const res = await apiFetch(`${API_BASE_URL}/editions?page=1&limit=1`);
-      if (!res.ok) return null;
-      const json = await res.json();
+      const json = await latestRes.value.json();
       if (json?.data?.[0]) {
-        setLatestEdition(json.data[0]);
-        return json.data[0] as EditionItem;
+        latestEdition = json.data[0] as EditionItem;
       }
-    } catch (err) {
-      console.error("[MasikaPage] Failed to fetch latest edition:", err);
+    } catch (e) {
+      console.error("[MasikaPage] Failed to parse latest edition:", e);
     }
-    return null;
-  }, []);
+  }
 
-  useEffect(() => {
-    fetchLatest();
-  }, [fetchLatest]);
-
-  // When user becomes subscribed or logs in, reload the edition to obtain real pdfUrl
-  useEffect(() => {
-    if (isSubscribed) {
-      fetchLatest();
+  let previousEditions: EditionItem[] = [];
+  let editionsHasMore = false;
+  if (editionsRes.status === "fulfilled" && editionsRes.value.ok) {
+    try {
+      const json = await editionsRes.value.json();
+      if (json && json.data && Array.isArray(json.data)) {
+        previousEditions = json.data;
+        editionsHasMore = json.meta?.hasMore ?? (json.meta?.page < json.meta?.totalPages);
+      } else if (Array.isArray(json)) {
+        previousEditions = json;
+        editionsHasMore = false;
+      }
+    } catch (e) {
+      console.error("[MasikaPage] Failed to parse previous editions:", e);
     }
-  }, [isSubscribed, fetchLatest]);
+  }
 
-  const handleReadLatest = () => {
-    if (!isSubscribed || !latestEdition?.pdfUrl) {
-      setGateOpen(true);
-      return;
+  let featuredArtists: ArtistItem[] = [];
+  if (artistsRes.status === "fulfilled" && artistsRes.value.ok) {
+    try {
+      const json = await artistsRes.value.json();
+      const raw = json.data ? json.data : (Array.isArray(json) ? json : []);
+      featuredArtists = raw.map((u: any, idx: number) => ({
+        id: u.id || `author-${idx}`,
+        name: u.name || u.email?.split("@")[0] || "Featured Author",
+        bio: u.bio || `${u.role || "Author"} at Akam Journal`,
+        imageSrc: u.avatarUrl || null,
+        imageAlt: u.name || "Featured Author Avatar",
+      }));
+    } catch (e) {
+      console.error("[MasikaPage] Failed to parse featured artists:", e);
     }
-    setFlipbookOpen(true);
-  };
+  }
 
-  const handleSubscribed = async () => {
-    await refreshSubscription();
-    const updated = await fetchLatest();
-    if (updated?.pdfUrl) {
-      setFlipbookOpen(true);
-    }
-  };
+  return { latestEdition, previousEditions, editionsHasMore, featuredArtists };
+}
+
+export default async function MasikaPage() {
+  const { latestEdition, previousEditions, editionsHasMore, featuredArtists } = await getMasikaPageData();
 
   return (
-    <div className="flex flex-col font-poppins bg-white">
-      {/* Masika Hero Section */}
-      <MasikaHero
-        onReadLatest={handleReadLatest}
-        latestEditionTitle={latestEdition?.title}
-        imageSrc={latestEdition?.coverImage ? formatAssetUrl(latestEdition.coverImage) : undefined}
-      />
-
-      {/* Previous Editions — passes isSubscribed so cards can show lock icons */}
-      <PreviousEditions isSubscribed={isSubscribed} />
-
-      {/* Featured Artist Section */}
-      <FeaturedArtist />
-
-      {/* About Digital Edition & Pricing Section */}
-      <AboutDigitalEdition />
-
-      {/* Subscription Gate Modal (non-subscribers) */}
-      <SubscriptionGateModal
-        isOpen={gateOpen}
-        onClose={() => setGateOpen(false)}
-        onSubscribed={handleSubscribed}
-        context="emagazine"
-      />
-
-      {/* Latest Edition Flipbook Modal (subscribers only) */}
-      {flipbookOpen && latestEdition && latestEdition.pdfUrl && (
-        <EditionFlipbook
-          pdfUrl={latestEdition.pdfUrl}
-          title={latestEdition.title}
-          onClose={() => setFlipbookOpen(false)}
-        />
-      )}
-    </div>
+    <MasikaClient
+      initialLatestEdition={latestEdition}
+      initialPreviousEditions={previousEditions.length > 0 ? previousEditions : undefined}
+      initialEditionsHasMore={editionsHasMore}
+      initialFeaturedArtists={featuredArtists.length > 0 ? featuredArtists : undefined}
+    />
   );
 }

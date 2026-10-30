@@ -4,6 +4,7 @@ import { PrismaService } from '../common/prisma/prisma.service.js';
 import { UploadsService } from '../uploads/uploads.service.js';
 import { PayUService } from '../subscription/payu.service.js';
 import { MailService } from '../mail/mail.service.js';
+import { RevalidateService } from '../common/revalidate/revalidate.service.js';
 import { CreateEventDto } from './dto/create-event.dto.js';
 import { UpdateEventDto } from './dto/update-event.dto.js';
 import { RegisterEventDto } from './dto/register-event.dto.js';
@@ -56,7 +57,8 @@ export class EventsService {
     private readonly payUService: PayUService,
     private readonly configService: ConfigService,
     private readonly mailService: MailService,
-  ) {}
+    private readonly revalidateService: RevalidateService,
+  ) { }
 
   // ── Public Endpoints ─────────────────────────────────────────────────────
   async findAllPublished(type?: EventType): Promise<EventItem[]> {
@@ -312,13 +314,13 @@ export class EventsService {
       event.day && event.monthYear
         ? `${event.day} ${event.monthYear}`
         : event.eventDate
-        ? new Date(event.eventDate).toLocaleDateString('en-IN', {
+          ? new Date(event.eventDate).toLocaleDateString('en-IN', {
             weekday: 'long',
             year: 'numeric',
             month: 'long',
             day: 'numeric',
           })
-        : 'Date to be announced';
+          : 'Date to be announced';
 
     const eventTime = event.time || 'Schedule will be announced';
     const eventLocation = event.location || 'Online / Venue to be announced';
@@ -349,16 +351,15 @@ export class EventsService {
           <td style="padding: 10px 14px; font-size: 12px; color: #64748b; font-weight: 600; text-transform: uppercase; border-bottom: 1px solid #f1f5f9;">Payment Status</td>
           <td style="padding: 10px 14px; font-size: 13px; color: #10b981; font-weight: 700; border-bottom: 1px solid #f1f5f9; text-align: right;">COMPLETED (PayU Verified)</td>
         </tr>
-        ${
-          txnId
-            ? `
+        ${txnId
+        ? `
         <tr>
           <td style="padding: 10px 14px; font-size: 12px; color: #64748b; font-weight: 600; text-transform: uppercase; border-bottom: 1px solid #f1f5f9;">Transaction ID</td>
           <td style="padding: 10px 14px; font-size: 12px; font-family: monospace; color: #334155; font-weight: 600; border-bottom: 1px solid #f1f5f9; text-align: right;">${txnId}</td>
         </tr>
         `
-            : ''
-        }
+        : ''
+      }
       `
       : `
         <tr>
@@ -383,33 +384,35 @@ export class EventsService {
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>${subject}</title>
       </head>
-      <body style="margin: 0; padding: 0; background-color: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; color: #0f172a;">
+      <body style="margin: 0; padding: 0; background-color: #f1f5f9; font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; -webkit-font-smoothing: antialiased; color: #0f172a;">
         <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #f1f5f9; padding: 32px 16px;">
           <tr>
             <td align="center">
               <table role="presentation" width="100%" style="max-width: 580px; background-color: #ffffff; border-radius: 20px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05);">
                 
-                <!-- Brand Header -->
+                <!-- Brand Header with Navbar Logo -->
                 <tr>
-                  <td style="background-color: #040706; padding: 24px 32px; text-align: left;">
+                  <td style="background-color: #ffffff; padding: 22px 28px; text-align: left; border-bottom: 3px solid #21B573;">
                     <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
                       <tr>
                         <td>
-                          <div style="font-size: 18px; font-weight: 900; letter-spacing: 2px; color: #ffffff; text-transform: uppercase;">
-                            AKAM <span style="color: #E4F953;">DIGITAL</span>
-                          </div>
-                          <div style="font-size: 11px; color: #94a3b8; font-weight: 500; margin-top: 2px; letter-spacing: 0.5px;">
-                            EVENTS & SESSIONS DESK
-                          </div>
+                          <a href="${frontendUrl}" target="_blank" style="text-decoration: none; display: inline-block;">
+                            <img src="https://akamdigital.in/images/akamdigital.png" alt="AKAM Digital" style="height: 44px; width: auto; max-width: 200px; display: block; border: 0;" />
+                          </a>
                         </td>
                         <td align="right">
-                          <span style="background-color: #1e293b; color: #E4F953; font-size: 10px; font-weight: 700; padding: 5px 12px; border-radius: 8px; letter-spacing: 1px; text-transform: uppercase;">
+                          <span style="background-color: #040706; color: #E4F953; border: 1px solid rgba(228, 249, 83, 0.4); font-size: 10px; font-weight: 800; padding: 6px 14px; border-radius: 9999px; letter-spacing: 1px; text-transform: uppercase;">
                             ${event.type || 'EVENT'}
                           </span>
                         </td>
                       </tr>
                     </table>
                   </td>
+                </tr>
+
+                <!-- Gradient Ribbon -->
+                <tr>
+                  <td height="4" style="background: linear-gradient(90deg, #21B573 0%, #E4F953 50%, #21B573 100%);"></td>
                 </tr>
 
                 <!-- Content Body -->
@@ -501,30 +504,28 @@ export class EventsService {
                         <td style="padding: 10px 14px; font-size: 12px; color: #64748b; font-weight: 600; text-transform: uppercase; border-bottom: 1px solid #f1f5f9;">Email</td>
                         <td style="padding: 10px 14px; font-size: 13px; color: #0f172a; font-weight: 500; border-bottom: 1px solid #f1f5f9; text-align: right;">${registration.email}</td>
                       </tr>
-                      ${
-                        registration.phone
-                          ? `
+                      ${registration.phone
+        ? `
                       <tr>
                         <td style="padding: 10px 14px; font-size: 12px; color: #64748b; font-weight: 600; text-transform: uppercase; border-bottom: 1px solid #f1f5f9;">Phone</td>
                         <td style="padding: 10px 14px; font-size: 13px; color: #0f172a; font-weight: 500; border-bottom: 1px solid #f1f5f9; text-align: right;">${registration.phone}</td>
                       </tr>
                       `
-                          : ''
-                      }
+        : ''
+      }
                       ${paymentDetailsHtml}
                     </table>
 
-                    ${
-                      event.description
-                        ? `
+                    ${event.description
+        ? `
                     <!-- Event Description Snippet -->
                     <div style="margin-bottom: 24px; padding: 16px; background-color: #f8fafc; border-radius: 12px; border-left: 4px solid #040706;">
                       <div style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">About This Session</div>
                       <div style="font-size: 13px; color: #334155; line-height: 1.5;">${event.description}</div>
                     </div>
                     `
-                        : ''
-                    }
+        : ''
+      }
 
                     <!-- CTA Button -->
                     <div style="text-align: center; margin: 32px 0 24px 0;">
@@ -546,13 +547,23 @@ export class EventsService {
                   </td>
                 </tr>
 
-                <!-- Footer -->
+                <!-- Footer with Privacy Policy, Terms & Automation Notice -->
                 <tr>
-                  <td style="background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 24px 32px; text-align: center;">
-                    <p style="font-size: 12px; color: #64748b; margin: 0 0 6px 0; font-weight: 500;">
-                      AKAM Digital • The Modern Storytelling Platform
+                  <td style="background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 26px 32px; text-align: center; font-size: 11px; color: #64748b; line-height: 1.6;">
+                    <p style="margin: 0 0 8px 0; font-size: 11px; color: #94a3b8;">
+                      <em>This is an automated email. Please do not reply directly to this message.</em>
                     </p>
-                    <p style="font-size: 11px; color: #94a3b8; margin: 0;">
+                    <p style="margin: 0 0 10px 0; font-weight: 600; color: #334155;">
+                      AKAM Digital Events Desk • Kairali Books
+                    </p>
+                    <p style="margin: 0 0 10px 0;">
+                      <a href="${frontendUrl}/privacy-policy" style="color: #21B573; text-decoration: underline; margin: 0 8px;">Privacy Policy</a>
+                      •
+                      <a href="${frontendUrl}/terms" style="color: #21B573; text-decoration: underline; margin: 0 8px;">Terms of Service</a>
+                      •
+                      <a href="${frontendUrl}" style="color: #64748b; text-decoration: none; margin: 0 8px;">akamdigital.in</a>
+                    </p>
+                    <p style="margin: 0; font-size: 10px; color: #94a3b8;">
                       © ${new Date().getFullYear()} AKAM Digital. All rights reserved.
                     </p>
                   </td>
@@ -916,6 +927,7 @@ export class EventsService {
       ]
     );
 
+    this.revalidateService.revalidate('events', '/events');
     return row!;
   }
 
@@ -986,6 +998,7 @@ export class EventsService {
       [type, title, description, location, time, day, monthYear, eventDate, imageSrc, imagesList, videoUrl, registerHref, isPublished, isPaid, price, id]
     );
 
+    this.revalidateService.revalidate('events', '/events');
     return row!;
   }
 
@@ -995,6 +1008,7 @@ export class EventsService {
       this.uploadsService.deleteFileByUrl(existing.imageSrc);
     }
     await this.prisma.execute(`DELETE FROM "event" WHERE id = $1`, [id]);
+    this.revalidateService.revalidate('events', '/events');
     return { success: true, message: 'Event deleted successfully' };
   }
 
@@ -1010,6 +1024,7 @@ export class EventsService {
       [updatedStatus, id]
     );
 
+    this.revalidateService.revalidate('events', '/events');
     return row!;
   }
 

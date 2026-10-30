@@ -19,6 +19,8 @@ export interface MediaCardItem {
 export interface MediaSectionProps {
   title?: string;
   initialCategory?: string;
+  initialMedia?: MediaCardItem[];
+  initialMeta?: { total: number; page: number; limit: number; totalPages: number };
 }
 
 const mediaCategories = [
@@ -31,19 +33,29 @@ const mediaCategories = [
 export const MediaSection: React.FC<MediaSectionProps> = ({
   title = "Media",
   initialCategory = "interviews",
+  initialMedia,
+  initialMeta,
 }) => {
   const [activeTab, setActiveTab] = useState(initialCategory);
-  const [mediaList, setMediaList] = useState<MediaCardItem[]>([]);
+  const [mediaList, setMediaList] = useState<MediaCardItem[]>(initialMedia || []);
   const [page, setPage] = useState(1);
-  const [meta, setMeta] = useState({ total: 0, page: 1, limit: 6, totalPages: 1 });
-  const [loadingInitial, setLoadingInitial] = useState(true);
+  const [meta, setMeta] = useState(initialMeta || { total: 0, page: 1, limit: 6, totalPages: 1 });
+  const [loadingInitial, setLoadingInitial] = useState(!initialMedia || initialMedia.length === 0);
   const [loadingMore, setLoadingMore] = useState(false);
   const [selectedVideo, setSelectedVideo] = useState<MediaCardItem | null>(null);
 
   const observerTarget = useRef<HTMLDivElement | null>(null);
+  const isFirstMountRef = useRef(true);
 
   // Fetch initial page 1 whenever active category tab changes
   useEffect(() => {
+    if (isFirstMountRef.current) {
+      isFirstMountRef.current = false;
+      if (initialMedia && initialMedia.length > 0 && activeTab === initialCategory) {
+        return;
+      }
+    }
+
     let isMounted = true;
     setLoadingInitial(true);
     setPage(1);

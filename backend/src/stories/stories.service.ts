@@ -12,6 +12,7 @@ import { NotificationsService } from '../notifications/notifications.service.js'
 import { UploadsService } from '../uploads/uploads.service.js';
 import { SubscriptionService } from '../subscription/subscription.service.js';
 import { MailService } from '../mail/mail.service.js';
+import { RevalidateService } from '../common/revalidate/revalidate.service.js';
 import { CreateStoryDto } from './dto/create-story.dto.js';
 import { UpdateStoryDto } from './dto/update-story.dto.js';
 import { ReviewStoryDto } from './dto/review-story.dto.js';
@@ -58,8 +59,9 @@ export class StoriesService {
     private uploadsService: UploadsService,
     private configService: ConfigService,
     private mailService: MailService,
+    private revalidateService: RevalidateService,
     @Optional() private subscriptionService?: SubscriptionService,
-  ) {}
+  ) { }
 
   private async sendStoryPublishedEmail(story: StoryRow, type: 'EMAGAZINE' | 'WEB'): Promise<boolean> {
     const email = story.authorEmail;
@@ -82,49 +84,87 @@ export class StoriesService {
       ? `We are delighted to inform you that your curated submission <strong>"${story.title}"</strong> has been officially published in the AKAM Digital Magazine edition.`
       : `We are pleased to inform you that your story <strong>"${story.title}"</strong> has been approved and published to the live public works catalog on AKAM Digital.`;
 
+    const logoUrl = 'https://akamdigital.in/images/akamdigital.png';
+    const frontendUrl = 'https://akamdigital.in';
     const html = `
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${messageHeading}</title>
   <style>
-    body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: #f7f7f7; margin: 0; padding: 30px 10px; }
-    .container { max-width: 580px; margin: 0 auto; background: #ffffff; border-radius: 20px; overflow: hidden; border: 1px solid #e5e5e5; box-shadow: 0 4px 20px rgba(0,0,0,0.05); }
-    .header { background: #040706; padding: 30px; text-align: center; }
-    .badge { display: inline-block; background: #E4F953; color: #040706; font-size: 11px; font-weight: bold; letter-spacing: 1.5px; padding: 6px 14px; border-radius: 12px; text-transform: uppercase; margin-bottom: 12px; }
-    .header h1 { color: #ffffff; font-size: 22px; margin: 0; font-weight: 700; }
-    .content { padding: 36px 30px; color: #333333; line-height: 1.6; }
-    .content p { margin: 0 0 16px; font-size: 15px; }
-    .highlight-card { background: #fbfbfb; border: 1px solid #eee; border-left: 4px solid #E4F953; border-radius: 12px; padding: 18px 20px; margin: 24px 0; }
-    .highlight-title { font-size: 17px; font-weight: bold; color: #111; margin-bottom: 6px; }
-    .highlight-meta { font-size: 13px; color: #777; }
-    .btn { display: inline-block; background: #040706; color: #ffffff !important; font-size: 14px; font-weight: 600; text-decoration: none; padding: 12px 28px; border-radius: 12px; margin-top: 10px; }
-    .footer { padding: 20px 30px 30px; text-align: center; font-size: 12px; color: #888; border-top: 1px solid #f0f0f0; }
+    body { font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #F8FAFC; margin: 0; padding: 40px 16px; -webkit-font-smoothing: antialiased; color: #040706; }
+    .container { max-width: 580px; margin: 0 auto; background: #FFFFFF; border-radius: 20px; overflow: hidden; border: 1px solid #E2E8F0; box-shadow: 0 10px 30px rgba(0,0,0,0.05); }
+    .brand-header { background-color: #FFFFFF; padding: 24px 32px; text-align: center; border-bottom: 1px solid #F1F5F9; }
+    .gradient-ribbon { height: 4px; background: linear-gradient(90deg, #21B573 0%, #E4F953 50%, #21B573 100%); }
+    .hero-section { padding: 36px 32px 18px 32px; text-align: center; }
+    .badge { display: inline-block; background-color: #ECFDF5; border: 1px solid #A7F3D0; color: #065F46; font-size: 11px; font-weight: 700; letter-spacing: 1px; padding: 4px 14px; border-radius: 9999px; text-transform: uppercase; margin-bottom: 12px; }
+    .hero-h1 { color: #040706; font-size: 22px; margin: 0 0 10px 0; font-weight: 800; letter-spacing: -0.5px; }
+    .content { padding: 0 32px 32px 32px; color: #475569; line-height: 1.6; }
+    .content p { margin: 0 0 16px; font-size: 14px; }
+    .highlight-card { background: #F8FAFC; border: 1px solid #E2E8F0; border-left: 4px solid #21B573; border-radius: 14px; padding: 18px 20px; margin: 20px 0; }
+    .highlight-title { font-size: 16px; font-weight: 700; color: #040706; margin-bottom: 6px; }
+    .highlight-meta { font-size: 12px; color: #059669; font-weight: 600; }
+    .btn { display: inline-block; background: linear-gradient(135deg, #21B573 0%, #0FA975 100%); color: #ffffff !important; font-size: 13px; font-weight: 800; text-decoration: none; padding: 14px 36px; border-radius: 9999px; letter-spacing: 0.5px; text-transform: uppercase; box-shadow: 0 10px 25px rgba(33, 181, 115, 0.25); }
+    .footer { padding: 26px 32px; text-align: center; font-size: 11px; color: #64748B; border-top: 1px solid #E2E8F0; background-color: #F8FAFC; line-height: 1.6; }
   </style>
 </head>
 <body>
   <div class="container">
-    <div class="header">
-      <div class="badge">${isEmagazine ? 'Magazine Edition' : 'Live Publication'}</div>
-      <h1>${messageHeading}</h1>
+    <!-- Navbar Logo Header -->
+    <div class="brand-header">
+      <a href="${frontendUrl}" target="_blank" style="text-decoration: none; display: inline-block;">
+        <img src="${logoUrl}" alt="AKAM Digital" style="height: 46px; width: auto; max-width: 220px; display: block; border: 0;" />
+      </a>
     </div>
+    
+    <!-- Gradient Ribbon -->
+    <div class="gradient-ribbon"></div>
+
+    <div class="hero-section">
+      <div style="display: inline-block; width: 60px; height: 60px; line-height: 60px; border-radius: 50%; background-color: #ECFDF5; border: 2px solid #21B573; font-size: 28px; text-align: center; margin-bottom: 14px;">
+        🎉
+      </div>
+      <div>
+        <span class="badge">${isEmagazine ? 'AKAM Magazine Edition' : 'AKAM Live Works Catalog'}</span>
+      </div>
+      <h1 class="hero-h1">${messageHeading}</h1>
+    </div>
+
     <div class="content">
-      <p>Dear <strong>${authorName}</strong>,</p>
-      <p>${messageBody}</p>
+      <p>Dear <strong style="color: #040706;">${authorName}</strong>,</p>
+      <p style="color: #475569;">${messageBody}</p>
       
       <div class="highlight-card">
         <div class="highlight-title">${story.title}</div>
-        <div class="highlight-meta">${story.submissionType !== 'PAINTING' && story.submissionType !== 'VIDEO' && story.category ? `Category: ${story.category} • ` : ''}Format: ${story.submissionType || 'Story'}</div>
       </div>
 
-      <p>Thank you for contributing to AKAM Digital and sharing your creative voice with our reader community.</p>
+      <p>Thank you for contributing to AKAM Digital and sharing your creative voice with our reader community across India and worldwide.</p>
       
-      <div style="text-align: center; margin-top: 25px;">
-        <a href="https://akamdigital.in/profile" class="btn">View on Your Profile</a>
+      <div style="text-align: center; margin-top: 28px; margin-bottom: 8px;">
+        <a href="${frontendUrl}/profile" class="btn">View on Your Profile →</a>
       </div>
     </div>
+
+    <!-- Footer with Privacy Policy, Terms & Automation Notice -->
     <div class="footer">
-      <p>&copy; ${new Date().getFullYear()} AKAM Digital • Editorial Desk</p>
+      <p style="margin: 0 0 8px 0; font-size: 11px; color: #94A3B8;">
+        <em>This is an automated email. Please do not reply directly to this message.</em>
+      </p>
+      <p style="margin: 0 0 10px 0; font-weight: 600; color: #334155;">
+        AKAM Digital Editorial Desk • Kairali Books
+      </p>
+      <p style="margin: 0 0 10px 0;">
+        <a href="${frontendUrl}/privacy-policy" style="color: #21B573; text-decoration: underline; margin: 0 8px;">Privacy Policy</a>
+        •
+        <a href="${frontendUrl}/terms" style="color: #21B573; text-decoration: underline; margin: 0 8px;">Terms of Service</a>
+        •
+        <a href="${frontendUrl}" style="color: #64748B; text-decoration: none; margin: 0 8px;">akamdigital.in</a>
+      </p>
+      <p style="margin: 0; font-size: 10px; color: #94A3B8;">
+        © ${new Date().getFullYear()} AKAM Digital. All rights reserved.
+      </p>
     </div>
   </div>
 </body>
@@ -667,6 +707,7 @@ export class StoriesService {
       } catch (err) {
         this.logger.error('Failed to send published email to author', err);
       }
+      this.revalidateService.revalidate('stories', '/');
       return { id, status: 'APPROVED' };
     } else if (dto.decision === 'UNPUBLISHED') {
       await this.prisma.execute(
@@ -680,6 +721,7 @@ export class StoriesService {
         id,
         dto.rejectionNote || 'unpublish',
       );
+      this.revalidateService.revalidate('stories', '/');
       return { id, status: 'UNPUBLISHED' };
     } else if (dto.decision === 'APPROVED_EMAGAZINE') {
       await this.prisma.execute(
@@ -692,6 +734,7 @@ export class StoriesService {
         story.title,
         id,
       );
+      this.revalidateService.revalidate('stories', '/');
       return { id, status: 'APPROVED_EMAGAZINE' };
     } else if (dto.decision === 'PUBLISHED_EMAGAZINE') {
       await this.prisma.execute(
@@ -709,6 +752,7 @@ export class StoriesService {
       } catch (err) {
         this.logger.error('Failed to send emagazine published email to author', err);
       }
+      this.revalidateService.revalidate('stories', '/');
       return { id, status: 'PUBLISHED_EMAGAZINE' };
     } else if (dto.decision === 'PENDING') {
       await this.prisma.execute(
@@ -716,6 +760,7 @@ export class StoriesService {
          WHERE id = $1`,
         [id],
       );
+      this.revalidateService.revalidate('stories', '/');
       return { id, status: 'PENDING' };
     } else {
       await this.prisma.execute(
@@ -729,6 +774,7 @@ export class StoriesService {
         id,
         dto.rejectionNote,
       );
+      this.revalidateService.revalidate('stories', '/');
       return { id, status: 'REJECTED', rejectionNote: dto.rejectionNote };
     }
   }
@@ -759,6 +805,7 @@ export class StoriesService {
     await this.prisma.execute(`DELETE FROM story_bookmark WHERE "storyId" = $1`, [id]).catch(() => null);
     await this.prisma.execute(`DELETE FROM story_like WHERE "storyId" = $1`, [id]).catch(() => null);
     await this.prisma.execute(`DELETE FROM story WHERE id = $1`, [id]);
+    this.revalidateService.revalidate('stories', '/');
     return { success: true };
   }
 
@@ -769,9 +816,11 @@ export class StoriesService {
     );
     if (!story) throw new NotFoundException('Story not found');
     const newStatus = !story.isFeatured;
-    return this.prisma.queryOne(
+    const updated = await this.prisma.queryOne(
       `UPDATE story SET "isFeatured" = $1, "updatedAt" = now() WHERE id = $2 RETURNING *`,
       [newStatus, id],
     );
+    this.revalidateService.revalidate('stories', '/');
+    return updated;
   }
 }

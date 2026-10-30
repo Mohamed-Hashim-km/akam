@@ -193,6 +193,7 @@ export default function RootLayout({
     <html
       lang="ml"
       className={`${poppins.variable} ${openSans.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
       <head>
         <link rel="alternate" type="text/plain" href="/llms.txt" title="LLMs Context" />
@@ -201,9 +202,22 @@ export default function RootLayout({
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLdWebsite) }}
         />
+        {/* Anti-FOUC instant auth detector for static/cached pages */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              try {
+                if (localStorage.getItem("akam_user") || /(^|; )akam_logged_in=true/.test(document.cookie)) {
+                  document.documentElement.classList.add("akam-logged-in");
+                }
+              } catch (e) {}
+            `,
+          }}
+        />
       </head>
       <body className="flex flex-col min-h-screen text-dark-bg font-poppins">
         <LayoutShell>{children}</LayoutShell>
+        <Script src="/smoothScroll.js" />
         <Script
           src={
             process.env.NEXT_PUBLIC_PAYU_ENV === "PRODUCTION"

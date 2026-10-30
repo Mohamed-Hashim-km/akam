@@ -21,7 +21,7 @@ export class AuthService {
     private jwtService: JwtService,
     private configService: ConfigService,
     private mailService: MailService,
-  ) {}
+  ) { }
 
   private generateOtp(): string {
     return Math.floor(100000 + Math.random() * 900000).toString();
@@ -78,35 +78,96 @@ export class AuthService {
    * Dispatches the verification email asynchronously in the background.
    */
   private async sendOtpEmail(email: string, code: string): Promise<void> {
+    const logoUrl = 'https://akamdigital.in/images/akamdigital.png';
+    const frontendUrl = 'https://akamdigital.in';
     const htmlTemplate = `
-      <div style="font-family: Arial, Helvetica, sans-serif; max-width: 480px; margin: 0 auto; padding: 24px 16px; background-color: #f9fafb;">
-        <div style="background-color: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 32px; text-align: left;">
-          <div style="margin-bottom: 20px;">
-            <span style="background-color: #21B573; color: #ffffff; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; padding: 4px 10px; border-radius: 4px; display: inline-block;">
-              AKAM DIGITAL
-            </span>
-          </div>
-          <h2 style="font-size: 20px; font-weight: 700; color: #040706; margin: 0 0 10px 0; line-height: 1.3;">
-            Verify Your Email Address
-          </h2>
-          <p style="font-size: 14px; color: #4B5563; margin: 0 0 24px 0; line-height: 1.5;">
-            Use the verification code below to sign in to your AKAM Digital account. This code is valid for <strong>10 minutes</strong>.
-          </p>
-          <div style="background-color: #040706; border-radius: 8px; padding: 20px; text-align: center; margin-bottom: 24px;">
-            <span style="font-size: 32px; font-weight: 700; color: #E4F953; letter-spacing: 8px; font-family: 'Courier New', Courier, monospace;">
-              ${code}
-            </span>
-          </div>
-          <p style="font-size: 12px; color: #6B7280; margin: 0 0 20px 0; line-height: 1.4;">
-            If you did not request this verification code, you can safely ignore this email.
-          </p>
-          <div style="border-top: 1px solid #e5e7eb; padding-top: 16px; text-align: center;">
-            <p style="font-size: 11px; color: #9CA3AF; margin: 0;">
-              © ${new Date().getFullYear()} AKAM Digital. All rights reserved.
-            </p>
-          </div>
-        </div>
-      </div>
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>AKAM Digital Verification</title>
+      </head>
+      <body style="margin: 0; padding: 0; background-color: #F8FAFC; font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; -webkit-font-smoothing: antialiased; color: #040706;">
+        <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #F8FAFC; padding: 40px 16px;">
+          <tr>
+            <td align="center">
+              <table width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 500px; background-color: #FFFFFF; border-radius: 20px; overflow: hidden; border: 1px solid #E2E8F0; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);">
+                
+                <!-- Brand Header with Navbar Logo -->
+                <tr>
+                  <td style="background-color: #FFFFFF; padding: 24px 32px; text-align: center; border-bottom: 1px solid #F1F5F9;">
+                    <a href="${frontendUrl}" target="_blank" style="text-decoration: none; display: inline-block;">
+                      <img src="${logoUrl}" alt="AKAM Digital" style="height: 44px; width: auto; max-width: 220px; display: block; border: 0;" />
+                    </a>
+                  </td>
+                </tr>
+
+                <!-- Gradient Ribbon -->
+                <tr>
+                  <td height="4" style="background: linear-gradient(90deg, #21B573 0%, #E4F953 50%, #21B573 100%);"></td>
+                </tr>
+
+                <!-- Content Area -->
+                <tr>
+                  <td style="padding: 36px 32px 28px 32px; text-align: left;">
+                    <div style="margin-bottom: 14px;">
+                      <span style="display: inline-block; background-color: #ECFDF5; color: #065F46; border: 1px solid #A7F3D0; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; padding: 4px 12px; border-radius: 9999px;">
+                        Security Verification
+                      </span>
+                    </div>
+
+                    <h2 style="font-size: 22px; font-weight: 800; color: #040706; margin: 0 0 10px 0; line-height: 1.3; letter-spacing: -0.3px;">
+                      Verify Your Email Address
+                    </h2>
+                    <p style="font-size: 14px; color: #475569; margin: 0 0 24px 0; line-height: 1.6;">
+                      Use the single-use verification code below to access your AKAM Digital account. This code is valid for <strong style="color: #040706;">10 minutes</strong>.
+                    </p>
+
+                    <!-- OTP Code Box -->
+                    <div style="background-color: #F8FAFC; border: 1.5px dashed #CBD5E1; border-radius: 16px; padding: 24px; text-align: center; margin-bottom: 24px;">
+                      <div style="font-size: 11px; font-weight: 700; color: #21B573; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 8px;">
+                        ONE-TIME VERIFICATION CODE
+                      </div>
+                      <span style="font-size: 34px; font-weight: 800; color: #040706; letter-spacing: 10px; font-family: 'Courier New', Courier, monospace; display: inline-block;">
+                        ${code}
+                      </span>
+                    </div>
+
+                    <p style="font-size: 12px; color: #64748B; margin: 0; line-height: 1.5;">
+                      If you did not request this verification code, please safely ignore this email. Never share this code with anyone.
+                    </p>
+                  </td>
+                </tr>
+
+                <!-- Footer with Privacy Policy, Terms & Automation Notice -->
+                <tr>
+                  <td style="background-color: #F8FAFC; border-top: 1px solid #E2E8F0; padding: 24px 32px; text-align: center; font-size: 11px; color: #64748B; line-height: 1.6;">
+                    <p style="margin: 0 0 8px 0; font-size: 11px; color: #94A3B8;">
+                      <em>This is an automated email. Please do not reply directly to this message.</em>
+                    </p>
+                    <p style="margin: 0 0 10px 0; font-weight: 600; color: #334155;">
+                      AKAM Digital • India's First Digital Literary Platform
+                    </p>
+                    <p style="margin: 0 0 10px 0;">
+                      <a href="${frontendUrl}/privacy-policy" style="color: #21B573; text-decoration: underline; margin: 0 8px;">Privacy Policy</a>
+                      •
+                      <a href="${frontendUrl}/terms" style="color: #21B573; text-decoration: underline; margin: 0 8px;">Terms of Service</a>
+                      •
+                      <a href="${frontendUrl}" style="color: #64748B; text-decoration: none; margin: 0 8px;">akamdigital.in</a>
+                    </p>
+                    <p style="margin: 0; font-size: 10px; color: #94A3B8;">
+                      © ${new Date().getFullYear()} AKAM Digital. All rights reserved.
+                    </p>
+                  </td>
+                </tr>
+
+              </table>
+            </td>
+          </tr>
+        </table>
+      </body>
+      </html>
     `;
 
     await this.mailService.sendMail({

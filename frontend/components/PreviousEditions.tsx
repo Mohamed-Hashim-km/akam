@@ -29,22 +29,28 @@ export interface EditionItem {
 export interface PreviousEditionsProps {
   title?: string;
   isSubscribed?: boolean;
+  initialEditions?: EditionItem[];
+  initialHasMore?: boolean;
 }
 
 export const PreviousEditions: React.FC<PreviousEditionsProps> = ({
   title = "Previous Editions",
   isSubscribed = false,
+  initialEditions,
+  initialHasMore,
 }) => {
-  const [editions, setEditions] = useState<EditionItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [editions, setEditions] = useState<EditionItem[]>(initialEditions || []);
+  const [loading, setLoading] = useState(!initialEditions || initialEditions.length === 0);
   const [loadingMore, setLoadingMore] = useState(false);
   const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(true);
+  const [hasMore, setHasMore] = useState(initialHasMore !== undefined ? initialHasMore : true);
   const [swiperInstance, setSwiperInstance] = useState<SwiperClass | null>(null);
   const [openEdition, setOpenEdition] = useState<EditionItem | null>(null);
   const [imgErrors, setImgErrors] = useState<Record<string, boolean>>({});
   const [gateOpen, setGateOpen] = useState(false);
   const [pendingEdition, setPendingEdition] = useState<EditionItem | null>(null);
+
+  const isFirstMountRef = React.useRef(true);
 
   const fetchEditionsPage = async (pageNum: number) => {
     try {
@@ -84,6 +90,12 @@ export const PreviousEditions: React.FC<PreviousEditionsProps> = ({
   };
 
   useEffect(() => {
+    if (isFirstMountRef.current) {
+      isFirstMountRef.current = false;
+      if (initialEditions && initialEditions.length > 0 && !isSubscribed) {
+        return;
+      }
+    }
     fetchInitial();
   }, [isSubscribed]);
 

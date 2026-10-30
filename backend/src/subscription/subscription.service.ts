@@ -26,7 +26,7 @@ export class SubscriptionService {
     private configService: ConfigService,
     private notificationsService: NotificationsService,
     private mailService: MailService,
-  ) {}
+  ) { }
 
   async getByUserId(userId: string): Promise<SubscriptionRow | null> {
     const sub = await this.prisma.queryOne<SubscriptionRow>(
@@ -589,29 +589,21 @@ export class SubscriptionService {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${isStudent ? 'Scholar Pass Active' : 'Subscription Active'}</title>
 </head>
-<body style="margin: 0; padding: 0; background-color: #040706; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; -webkit-font-smoothing: antialiased;">
-  <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #080D0B; padding: 36px 16px;">
+<body style="margin: 0; padding: 0; background-color: #F8FAFC; font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; -webkit-font-smoothing: antialiased; color: #040706;">
+  <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #F8FAFC; padding: 40px 16px;">
     <tr>
       <td align="center">
-        <table width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 600px; background-color: #0E1613; border-radius: 28px; overflow: hidden; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5); border: 1px solid #1E2D27;">
+        <table width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 600px; background-color: #FFFFFF; border-radius: 20px; overflow: hidden; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05); border: 1px solid #E2E8F0;">
           
-          <!-- Top Brand Header -->
+          <!-- Top Brand Header with Navbar Logo -->
           <tr>
-            <td style="background: linear-gradient(135deg, #040706 0%, #0A261C 65%, #040706 100%); padding: 36px 32px 30px 32px; text-align: center;">
+            <td style="background-color: #FFFFFF; padding: 24px 32px; text-align: center; border-bottom: 1px solid #F1F5F9;">
               <table width="100%" border="0" cellspacing="0" cellpadding="0">
                 <tr>
                   <td align="center">
-                    <div style="display: inline-block; background: rgba(228, 249, 83, 0.12); border: 1px solid rgba(228, 249, 83, 0.35); border-radius: 9999px; padding: 5px 16px; margin-bottom: 14px;">
-                      <span style="color: #E4F953; font-size: 10px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase;">
-                        ${isStudent ? 'AKAM DIGITAL • SCHOLAR ACCESS' : 'AKAM DIGITAL • ALL-ACCESS MEMBERSHIP'}
-                      </span>
-                    </div>
-                    <h1 style="color: #FFFFFF; font-size: 28px; font-weight: 900; margin: 0; letter-spacing: -0.5px;">
-                      അകം <span style="font-weight: 300; color: #E4F953; font-size: 20px;">| AKAM</span>
-                    </h1>
-                    <p style="color: #9CA3AF; font-size: 11px; margin: 6px 0 0 0; letter-spacing: 0.8px; text-transform: uppercase;">
-                      Malayalam Literary Journal & Digital Archive
-                    </p>
+                    <a href="${frontendUrl}" target="_blank" style="text-decoration: none; display: inline-block;">
+                      <img src="https://akamdigital.in/images/akamdigital.png" alt="AKAM Digital Logo" style="height: 48px; width: auto; max-width: 230px; display: block; border: 0;" />
+                    </a>
                   </td>
                 </tr>
               </table>
@@ -620,76 +612,80 @@ export class SubscriptionService {
 
           <!-- Gradient Ribbon -->
           <tr>
-            <td height="4" style="background: linear-gradient(90deg, #0FA975 0%, #E4F953 50%, #2DB76E 100%);"></td>
+            <td height="4" style="background: linear-gradient(90deg, #21B573 0%, #E4F953 50%, #21B573 100%);"></td>
           </tr>
 
           <!-- Hero Section -->
           <tr>
-            <td style="padding: 36px 32px 24px 32px; text-align: center;">
-              <div style="display: inline-block; width: 68px; height: 68px; line-height: 68px; border-radius: 50%; background: linear-gradient(135deg, #0FA975 0%, #064E3B 100%); border: 2px solid #E4F953; font-size: 32px; text-align: center; margin-bottom: 18px; box-shadow: 0 8px 24px rgba(15, 169, 117, 0.35);">
+            <td style="padding: 36px 32px 20px 32px; text-align: center;">
+              <div style="display: inline-block; width: 64px; height: 64px; line-height: 64px; border-radius: 50%; background-color: #ECFDF5; border: 2px solid #21B573; font-size: 30px; text-align: center; margin-bottom: 16px;">
                 ${isStudent ? '🎓' : '🌟'}
               </div>
-              <h2 style="color: #FFFFFF; font-size: 24px; font-weight: 800; margin: 0 0 10px 0; letter-spacing: -0.5px;">
+              <div style="margin-bottom: 10px;">
+                <span style="display: inline-block; background-color: #ECFDF5; color: #065F46; border: 1px solid #A7F3D0; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; padding: 4px 14px; border-radius: 9999px;">
+                  ${isStudent ? 'Scholar Access Active' : 'All-Access Active'}
+                </span>
+              </div>
+              <h2 style="color: #040706; font-size: 24px; font-weight: 800; margin: 0 0 10px 0; letter-spacing: -0.5px;">
                 ${isStudent ? 'Scholar Pass Granted!' : 'Subscription Granted!'}
               </h2>
-              <p style="color: #9CA3AF; font-size: 14px; margin: 0 auto; max-width: 480px; line-height: 1.6;">
-                Dear <strong style="color: #FFFFFF;">${recipientName}</strong>, your digital reading pass has been granted by the AKAM Digital editorial desk. You have full, unlimited access to our complete literary catalog.
+              <p style="color: #475569; font-size: 14px; margin: 0 auto; max-width: 480px; line-height: 1.6;">
+                Dear <strong style="color: #040706;">${recipientName}</strong>, your digital reading pass has been granted by the AKAM Digital editorial desk. You have full, unlimited access to our complete literary catalog.
               </p>
             </td>
           </tr>
 
-          ${
-            params.note
-              ? `<!-- Editorial Note Card -->
+          ${params.note
+        ? `<!-- Editorial Note Card -->
           <tr>
             <td style="padding: 0 32px 24px 32px;">
-              <div style="background-color: rgba(15, 169, 117, 0.08); border: 1px solid rgba(15, 169, 117, 0.3); border-radius: 18px; padding: 18px 20px;">
-                <div style="font-size: 10px; font-weight: 800; color: #E4F953; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 6px;">
+              <div style="background-color: #F0FDF4; border: 1px solid #BBF7D0; border-left: 4px solid #21B573; border-radius: 14px; padding: 18px 20px;">
+                <div style="font-size: 11px; font-weight: 700; color: #15803D; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px;">
                   MESSAGE FROM EDITORIAL DESK
                 </div>
-                <p style="font-size: 13px; color: #D1FAE5; margin: 0; line-height: 1.6; font-style: italic;">
+                <p style="font-size: 13px; color: #166534; margin: 0; line-height: 1.6; font-style: italic;">
                   &ldquo;${params.note}&rdquo;
                 </p>
               </div>
             </td>
           </tr>`
-              : ''
-          }
+        : ''
+      }
 
           <!-- Details Table -->
           <tr>
             <td style="padding: 0 32px 28px 32px;">
-              <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #121C18; border: 1px solid #1E2D27; border-radius: 18px; overflow: hidden;">
+              <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 14px; overflow: hidden;">
                 <tr>
-                  <td style="padding: 13px 18px; border-bottom: 1px solid #1E2D27; font-size: 12px; color: #6B7280; width: 40%;">
+                  <td style="padding: 13px 18px; border-bottom: 1px solid #E2E8F0; font-size: 12px; color: #64748B; width: 40%;">
                     Recipient Account
                   </td>
-                  <td style="padding: 13px 18px; border-bottom: 1px solid #1E2D27; font-size: 12px; font-weight: 700; color: #FFFFFF;">
+                  <td style="padding: 13px 18px; border-bottom: 1px solid #E2E8F0; font-size: 13px; font-weight: 700; color: #040706;">
                     ${params.email}
                   </td>
                 </tr>
                 <tr>
-                  <td style="padding: 13px 18px; border-bottom: 1px solid #1E2D27; font-size: 12px; color: #6B7280;">
+                  <td style="padding: 13px 18px; border-bottom: 1px solid #E2E8F0; font-size: 12px; color: #64748B;">
                     Membership Pass
                   </td>
-                  <td style="padding: 13px 18px; border-bottom: 1px solid #1E2D27; font-size: 12px; font-weight: 600; color: #E5E7EB;">
+                  <td style="padding: 13px 18px; border-bottom: 1px solid #E2E8F0; font-size: 13px; font-weight: 600; color: #1E293B;">
                     ${planTitle}
                   </td>
                 </tr>
                 <tr>
-                  <td style="padding: 13px 18px; border-bottom: 1px solid #1E2D27; font-size: 12px; color: #6B7280;">
+                  <td style="padding: 13px 18px; border-bottom: 1px solid #E2E8F0; font-size: 12px; color: #64748B;">
                     Valid Until
                   </td>
-                  <td style="padding: 13px 18px; border-bottom: 1px solid #1E2D27; font-size: 12px; font-weight: 700; color: #E4F953;">
+                  <td style="padding: 13px 18px; border-bottom: 1px solid #E2E8F0; font-size: 13px; font-weight: 700; color: #21B573;">
                     ${formattedDate}
                   </td>
                 </tr>
                 <tr>
-                  <td style="padding: 13px 18px; font-size: 12px; color: #6B7280;">
+                  <td style="padding: 13px 18px; font-size: 12px; color: #64748B;">
                     Access Status
                   </td>
                   <td style="padding: 13px 18px; font-size: 12px; font-weight: 700;">
-                    <span style="display: inline-block; padding: 4px 12px; border-radius: 9999px; font-size: 10px; font-weight: 800; letter-spacing: 0.5px; background-color: rgba(15, 169, 117, 0.2); color: #34D399; border: 1px solid #0FA975;">
+                    <span style="display: inline-block; padding: 4px 12px; border-radius: 9999px; font-size: 10px; font-weight: 800; letter-spacing: 0.5px; background-color: #ECFDF5; color: #065F46; border: 1px solid #A7F3D0;">
                       ✓ ACTIVE • UNLIMITED ACCESS
                     </span>
                   </td>
@@ -698,28 +694,14 @@ export class SubscriptionService {
             </td>
           </tr>
 
-          <!-- Seamless Access Note (No Logout Needed) -->
-          <tr>
-            <td style="padding: 0 32px 24px 32px;">
-              <div style="background-color: rgba(228, 249, 83, 0.05); border: 1px dashed rgba(228, 249, 83, 0.25); border-radius: 14px; padding: 14px 18px; text-align: center;">
-                <p style="margin: 0; font-size: 12px; color: #E4F953; font-weight: 600;">
-                  ✨ Instant Access: No logout needed!
-                </p>
-                <p style="margin: 4px 0 0 0; font-size: 11px; color: #9CA3AF; line-height: 1.5;">
-                  Your active pass is automatically synced with your logged-in browser session. Simply open any issue or story to enjoy uninterrupted reading.
-                </p>
-              </div>
-            </td>
-          </tr>
-
           <!-- CTA Button -->
           <tr>
-            <td style="padding: 0 32px 32px 32px; text-align: center;">
+            <td style="padding: 0 32px 36px 32px; text-align: center;">
               <table width="100%" border="0" cellspacing="0" cellpadding="0">
                 <tr>
                   <td align="center">
                     <a href="${frontendUrl}/library"
-                       style="display: inline-block; background: linear-gradient(135deg, #0FA975 0%, #064E3B 100%); color: #FFFFFF; font-size: 13px; font-weight: 800; text-decoration: none; padding: 15px 36px; border-radius: 9999px; letter-spacing: 0.5px; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4); text-transform: uppercase;">
+                       style="display: inline-block; background: linear-gradient(135deg, #21B573 0%, #0FA975 100%); color: #FFFFFF; font-size: 13px; font-weight: 800; text-decoration: none; padding: 15px 36px; border-radius: 9999px; letter-spacing: 0.5px; box-shadow: 0 10px 25px rgba(33, 181, 115, 0.25); text-transform: uppercase;">
                       Access Digital Library & Read Now →
                     </a>
                   </td>
@@ -728,18 +710,23 @@ export class SubscriptionService {
             </td>
           </tr>
 
-          <!-- Footer -->
+          <!-- Footer with Privacy Policy, Terms & Automation Notice -->
           <tr>
-            <td style="background-color: #040706; padding: 26px 32px; text-align: center; border-top: 1px solid #1E2D27;">
-              <p style="color: #9CA3AF; font-size: 11px; font-weight: 700; margin: 0 0 6px 0; letter-spacing: 0.5px;">
+            <td style="background-color: #F8FAFC; border-top: 1px solid #E2E8F0; padding: 26px 32px; text-align: center; font-size: 11px; color: #64748B; line-height: 1.6;">
+              <p style="margin: 0 0 8px 0; font-size: 11px; color: #94A3B8;">
+                <em>This is an automated email. Please do not reply directly to this message.</em>
+              </p>
+              <p style="margin: 0 0 10px 0; font-weight: 600; color: #334155;">
                 AKAM Digital Editorial Desk • Kairali Books
               </p>
-              <p style="color: #6B7280; font-size: 11px; margin: 0 0 14px 0;">
-                <a href="mailto:editorial@akamdigital.com" style="color: #0FA975; text-decoration: none;">editorial@akamdigital.com</a>
-                &nbsp;•&nbsp;
-                <a href="${frontendUrl}" style="color: #9CA3AF; text-decoration: none;">akamdigital.com</a>
+              <p style="margin: 0 0 10px 0;">
+                <a href="${frontendUrl}/privacy-policy" style="color: #21B573; text-decoration: underline; margin: 0 8px;">Privacy Policy</a>
+                •
+                <a href="${frontendUrl}/terms" style="color: #21B573; text-decoration: underline; margin: 0 8px;">Terms of Service</a>
+                •
+                <a href="${frontendUrl}" style="color: #64748B; text-decoration: none; margin: 0 8px;">akamdigital.in</a>
               </p>
-              <p style="color: #4B5563; font-size: 10px; margin: 0;">
+              <p style="margin: 0; font-size: 10px; color: #94A3B8;">
                 © ${new Date().getFullYear()} AKAM Digital. All rights reserved.
               </p>
             </td>
