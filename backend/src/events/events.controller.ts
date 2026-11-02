@@ -45,6 +45,12 @@ export class EventsController {
     return this.eventsService.findPastArchivesPaginated(pageNum, limitNum);
   }
 
+  @Get('categories')
+  @ApiOperation({ summary: 'List categories that currently have upcoming published events' })
+  getUpcomingCategories() {
+    return this.eventsService.getUpcomingCategories();
+  }
+
   /**
    * POST /api/events/payu/callback — browser callback from PayU gateway for event tickets
    */

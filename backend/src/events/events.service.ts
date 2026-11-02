@@ -177,6 +177,22 @@ export class EventsService {
     };
   }
 
+  async getUpcomingCategories(): Promise<{ type: EventType; count: number }[]> {
+    const rows = await this.prisma.query<{ type: EventType; count: string }>(
+      `SELECT type, COUNT(*)::int as count
+       FROM "event"
+       WHERE "isPublished" = true
+         AND type::text != 'PAST_ARCHIVE'
+         AND ("eventDate" IS NULL OR "eventDate" >= CURRENT_DATE)
+       GROUP BY type
+       HAVING COUNT(*) > 0`
+    );
+    return rows.map((r) => ({
+      type: r.type,
+      count: parseInt(r.count, 10),
+    }));
+  }
+
   async findOne(id: string): Promise<EventItem> {
     const row = await this.prisma.queryOne<EventItem>(
       `SELECT ${SELECT_FIELDS}

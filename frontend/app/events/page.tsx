@@ -138,9 +138,10 @@ function mapRawToPastEvent(e: any): PastEventItem {
 }
 
 async function getEventsPageData() {
-  const [upcomingRes, pastRes] = await Promise.allSettled([
+  const [upcomingRes, pastRes, categoriesRes] = await Promise.allSettled([
     fetch(`${API_BASE_URL}/events?page=1&limit=6&upcoming=true`, FETCH_OPTS(["events"])),
     fetch(`${API_BASE_URL}/events/past-archives?page=1&limit=6`, FETCH_OPTS(["events"])),
+    fetch(`${API_BASE_URL}/events/categories?upcoming=true`, FETCH_OPTS(["events"])),
   ]);
 
   let upcomingSessions: SessionItem[] = [];
@@ -159,6 +160,28 @@ async function getEventsPageData() {
     }
   }
 
+  let availableCategories: string[] = [];
+  if (categoriesRes.status === "fulfilled" && categoriesRes.value.ok) {
+    try {
+      const json = await categoriesRes.value.json();
+      if (Array.isArray(json)) {
+        availableCategories = json
+          .filter((item: any) => Number(item.count) > 0)
+          .map((item: any) => API_TYPE_TO_CATEGORY[item.type] || item.category || item.type?.toLowerCase())
+          .filter(Boolean);
+      }
+    } catch (e) {
+      console.error("[EventsPage] Failed to parse categories:", e);
+    }
+  }
+
+  // Fallback: derive categories from upcomingSessions if categories endpoint returned nothing
+  if (availableCategories.length === 0 && upcomingSessions.length > 0) {
+    availableCategories = Array.from(
+      new Set(upcomingSessions.map((s) => s.category).filter((c) => c && c !== "all"))
+    );
+  }
+
   let pastEvents: PastEventItem[] = [];
   let pastHasMore = false;
   if (pastRes.status === "fulfilled" && pastRes.value.ok) {
@@ -172,22 +195,25 @@ async function getEventsPageData() {
     }
   }
 
-  return { upcomingSessions, upcomingHasMore, pastEvents, pastHasMore };
+  return { upcomingSessions, upcomingHasMore, pastEvents, pastHasMore, availableCategories };
 }
 
 export default async function EventsPage() {
-  const { upcomingSessions, upcomingHasMore, pastEvents, pastHasMore } = await getEventsPageData();
+  const { upcomingSessions, upcomingHasMore, pastEvents, pastHasMore, availableCategories } = await getEventsPageData();
 
   return (
     <div className="flex flex-col font-poppins bg-white">
       {/* Events Hero Section */}
       <EventsHero />
 
-      {/* Unified Event Sessions Section - pre-rendered with ISR */}
-      <EventSessions
-        sessions={upcomingSessions.length > 0 ? upcomingSessions : undefined}
-        initialHasMore={upcomingHasMore}
-      />
+      {/* Unified Event Sessions Section - only render if upcoming events exist */}
+      {upcomingSessions.length > 0 && (
+        <EventSessions
+          sessions={upcomingSessions}
+          initialHasMore={upcomingHasMore}
+          initialCategories={availableCategories}
+        />
+      )}
 
       {/* Past Event Archive Section - pre-rendered with ISR */}
       <PastEventArchive

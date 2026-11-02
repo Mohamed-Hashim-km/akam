@@ -32,6 +32,7 @@ export interface EventSessionsProps {
   sessions?: SessionItem[];
   isLoading?: boolean;
   initialHasMore?: boolean;
+  initialCategories?: string[];
 }
 
 // Tab → backend EventType mapping
@@ -148,12 +149,53 @@ export const EventSessions: React.FC<EventSessionsProps> = ({
   sessions: initialSessions,
   isLoading: initialLoading = false,
   initialHasMore,
+  initialCategories,
 }) => {
   const [swiperInstance, setSwiperInstance] = useState<SwiperClass | null>(null);
   const [isBeginning, setIsBeginning] = useState<boolean>(true);
   const [isEnd, setIsEnd] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<SessionItem["category"]>("all");
   const [selectedEventForReg, setSelectedEventForReg] = useState<SessionItem | null>(null);
+
+  // Available categories that actually have upcoming events
+  const [availableCategories, setAvailableCategories] = useState<string[]>(() => {
+    if (initialCategories && initialCategories.length > 0) return initialCategories;
+    if (initialSessions && initialSessions.length > 0) {
+      const set = new Set<string>();
+      initialSessions.forEach((s) => {
+        if (s.category && s.category !== "all") set.add(s.category);
+      });
+      return Array.from(set);
+    }
+    return [];
+  });
+
+  // Client-side fetch categories with active upcoming events
+  useEffect(() => {
+    let isMounted = true;
+    async function loadCategories() {
+      try {
+        const res = await fetch(`${API_BASE_URL}/events/categories?upcoming=true`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (Array.isArray(data) && isMounted) {
+          const cats = data
+            .filter((item: any) => Number(item.count) > 0)
+            .map((item: any) => API_TYPE_TO_CATEGORY[item.type] || item.category || item.type?.toLowerCase())
+            .filter(Boolean);
+          if (cats.length > 0) {
+            setAvailableCategories(cats);
+          }
+        }
+      } catch {
+        // Fallback already in place
+      }
+    }
+    loadCategories();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // Per-tab cache & pagination state
   const [tabCache, setTabCache] = useState<Partial<Record<SessionItem["category"], SessionItem[]>>>(() => {
@@ -375,6 +417,36 @@ export const EventSessions: React.FC<EventSessionsProps> = ({
     fetchTab(activeTab);
   }, [activeTab, fetchTab]);
 
+  // Set of category IDs that have upcoming events
+  const activeCategorySet = React.useMemo(() => {
+    const set = new Set<string>(availableCategories);
+    (initialSessions || []).forEach((s) => {
+      if (s.category && s.category !== "all") set.add(s.category);
+    });
+    displaySessions.forEach((s) => {
+      if (s.category && s.category !== "all") set.add(s.category);
+    });
+    return set;
+  }, [availableCategories, initialSessions, displaySessions]);
+
+  // Only list category tabs that actually have events under them
+  const visibleTabs = React.useMemo(() => {
+    if (activeCategorySet.size === 0) {
+      return CATEGORY_TABS;
+    }
+    return CATEGORY_TABS.filter((tab) => {
+      if (tab.id === "all") return true;
+      return activeCategorySet.has(tab.id);
+    });
+  }, [activeCategorySet]);
+
+  // If the active tab is no longer available among visible tabs, revert to 'all'
+  useEffect(() => {
+    if (activeTab !== "all" && activeCategorySet.size > 0 && !activeCategorySet.has(activeTab)) {
+      setActiveTab("all");
+    }
+  }, [activeCategorySet, activeTab]);
+
   const handleTabChange = (tab: SessionItem["category"]) => {
     if (tab === activeTab) return;
     pendingNewSessionsRef.current = null;
@@ -389,33 +461,46 @@ export const EventSessions: React.FC<EventSessionsProps> = ({
     }
   };
 
+  const hasAnyEvents =
+    (initialSessions && initialSessions.length > 0) ||
+    displaySessions.length > 0 ||
+    activeCategorySet.size > 0 ||
+    Object.values(tabCache).some((arr) => arr && arr.length > 0);
+
+  // If there are no upcoming events at all and not currently loading, do not render this component
+  if (!initialLoading && !tabLoading && !hasAnyEvents) {
+    return null;
+  }
+
   return (
     <section className="relative w-full bg-[#E6F4FB] py-10 sm:py-16 font-poppins overflow-hidden">
       <div className="container px-4 mx-auto relative z-10">
 
 
 
-        {/* Centered Category Pill Filter Tabs */}
-        <div className="flex justify-center mb-8 sm:mb-12">
-          <div className="bg-white/90 backdrop-blur-xs p-1.5 rounded-full border border-gray-200/60 inline-flex items-center gap-1 sm:gap-1.5 shadow-sm flex-wrap justify-center">
-            {CATEGORY_TABS.map((tab) => {
-              const isActive = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => handleTabChange(tab.id)}
-                  className={`px-5 sm:px-6 py-2 sm:py-2.5 rounded-full text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
-                    isActive
-                      ? "bg-[#4EB2E4] text-white shadow-xs"
-                      : "text-gray-700 hover:text-gray-950 hover:bg-gray-100/60"
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              );
-            })}
+        {/* Centered Category Pill Filter Tabs - only shown if more than 1 category tab exists */}
+        {visibleTabs.length > 1 && (
+          <div className="flex justify-center mb-8 sm:mb-12">
+            <div className="bg-white/90 backdrop-blur-xs p-1.5 rounded-full border border-gray-200/60 inline-flex items-center gap-1 sm:gap-1.5 shadow-sm flex-wrap justify-center">
+              {visibleTabs.map((tab) => {
+                const isActive = activeTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => handleTabChange(tab.id)}
+                    className={`px-5 sm:px-6 py-2 sm:py-2.5 rounded-full text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
+                      isActive
+                        ? "bg-[#4EB2E4] text-white shadow-xs"
+                        : "text-gray-700 hover:text-gray-950 hover:bg-gray-100/60"
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Per-tab loading skeleton cards */}
         {tabLoading ? (
