@@ -39,6 +39,44 @@ jobs:
           mkdir -p /var/www/akam-digital/backend/uploads/inline-images
           mkdir -p /var/www/akam-digital/backend/uploads/pdfs
 
+      - name: Update Environment Configuration
+        run: |
+          echo "⚙️ Ensuring Hostinger VPS has current MAIL and PAYU environment variables..."
+
+          upsert_env() {
+            local file="$1"
+            local key="$2"
+            local val="$3"
+            if [ -f "$file" ]; then
+              if grep -q "^${key}=" "$file"; then
+                sed -i "s|^${key}=.*|${key}=${val}|" "$file"
+              else
+                echo "${key}=${val}" >> "$file"
+              fi
+            fi
+          }
+
+          # Update backend environment files
+          for ENV_PATH in /var/www/akam-digital/backend/.env /var/www/akam-digital/.env; do
+            if [ -f "$ENV_PATH" ]; then
+              upsert_env "$ENV_PATH" "MAIL_SERVICE" "accelr_live_sk_4e6cc4aba3c04c337ddbb995632cfaa4c35a718ad77e482807d72d662d19d84c"
+              upsert_env "$ENV_PATH" "MAIL_FROM_EMAIL" "no-replay@akamdigital.in"
+              upsert_env "$ENV_PATH" "MAIL_FROM_NAME" '"AKAM Digital"'
+              upsert_env "$ENV_PATH" "PAYU_ENV" "PRODUCTION"
+              upsert_env "$ENV_PATH" "PAYU_MERCHANT_KEY" "RACLzehB"
+              upsert_env "$ENV_PATH" "PAYU_SALT" "FDbFV0SnXW"
+              upsert_env "$ENV_PATH" "PAYU_PAYMENT_URL" "https://secure.payu.in/_payment"
+            fi
+          done
+
+          # Update frontend environment files
+          for ENV_PATH in /var/www/akam-digital/frontend/.env.production /var/www/akam-digital/frontend/.env.local /var/www/akam-digital/frontend/.env; do
+            if [ -f "$ENV_PATH" ]; then
+              upsert_env "$ENV_PATH" "NEXT_PUBLIC_PAYU_ENV" "PRODUCTION"
+              upsert_env "$ENV_PATH" "PAYU_ENV" "PRODUCTION"
+            fi
+          done
+
       - name: Build & Prepare Backend
         run: |
           echo "⚙️ Installing backend dependencies..."
