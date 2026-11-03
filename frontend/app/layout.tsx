@@ -216,6 +216,19 @@ export default function RootLayout({
         />
       </head>
       <body className="flex flex-col min-h-screen text-dark-bg font-poppins">
+        {/* Google Tag Manager */}
+        <Script
+          src="https://www.googletagmanager.com/gtm.js?id=GTM-T2J669ZP"
+          strategy="afterInteractive"
+        />
+        <Script id="gtm-init" strategy="afterInteractive">
+          {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+          `}
+        </Script>
+
         <LayoutShell>{children}</LayoutShell>
         <Script src="/smoothScroll.js" />
         <Script
