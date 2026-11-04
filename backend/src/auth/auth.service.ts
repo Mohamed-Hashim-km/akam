@@ -52,6 +52,16 @@ export class AuthService {
     const hasConsent = Boolean(user?.privacyPolicyAccepted);
     const requiresDetails = !user || !hasPhone || !hasConsent;
 
+    // Immediately store the email in the user table as soon as user enters email and clicks Continue
+    if (!user) {
+      await this.prisma.execute(
+        `INSERT INTO "user" (id, email, role, "createdAt", "updatedAt")
+         VALUES (gen_random_uuid()::text, $1, 'READER', now(), now())
+         ON CONFLICT (email) DO NOTHING`,
+        [email],
+      );
+    }
+
     let otpSent = false;
     let message: string | undefined;
 
@@ -185,8 +195,25 @@ export class AuthService {
 
     this.logger.log(`🔑 [OTP] Generated OTP for ${email}: ${code}`);
 
-    // Invalidate previous unused OTPs and insert the new OTP in parallel
+    const name = dto.name?.trim() || null;
+    const phone = dto.phone?.trim() || null;
+    const privacyPolicyAccepted = dto.privacyPolicyAccepted === true;
+
+    // Immediately store/update email, name, phone, and privacy consent when user clicks Continue
+    const upsertUserPromise = this.prisma.execute(
+      `INSERT INTO "user" (id, email, name, phone, "privacyPolicyAccepted", role, "createdAt", "updatedAt")
+       VALUES (gen_random_uuid()::text, $1, $2, $3, $4, 'READER', now(), now())
+       ON CONFLICT (email) DO UPDATE SET
+         name = COALESCE(EXCLUDED.name, "user".name),
+         phone = COALESCE(EXCLUDED.phone, "user".phone),
+         "privacyPolicyAccepted" = CASE WHEN EXCLUDED."privacyPolicyAccepted" = true THEN true ELSE "user"."privacyPolicyAccepted" END,
+         "updatedAt" = now()`,
+      [email, name, phone, privacyPolicyAccepted],
+    );
+
+    // Invalidate previous unused OTPs, insert the new OTP, and upsert user in parallel
     await Promise.all([
+      upsertUserPromise,
       this.prisma.execute(
         `UPDATE otp_code SET used = true WHERE email = $1 AND used = false`,
         [email],

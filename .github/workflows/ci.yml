@@ -25,9 +25,9 @@ jobs:
         working-directory: backend
         run: npm ci || npm install
 
-      - name: Generate Prisma Client
+      - name: Emit Prisma Contract & Types
         working-directory: backend
-        run: npx prisma generate
+        run: npm run contract:emit
 
       - name: Lint
         working-directory: backend

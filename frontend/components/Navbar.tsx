@@ -251,6 +251,14 @@ export const Navbar: React.FC<NavbarProps> = ({
     window.addEventListener("storage", loadUserData);
     window.addEventListener("focus", handleImmediateRefresh);
 
+    const handleOpenAuth = (e: any) => {
+      if (e?.detail?.redirectTo) {
+        setTargetRedirect(e.detail.redirectTo);
+      }
+      setAuthModalOpen(true);
+    };
+    window.addEventListener("open_auth_modal", handleOpenAuth);
+
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
         handleImmediateRefresh();
@@ -334,6 +342,7 @@ export const Navbar: React.FC<NavbarProps> = ({
       window.removeEventListener("akam_notification_updated", handleImmediateRefresh);
       window.removeEventListener("storage", loadUserData);
       window.removeEventListener("focus", handleImmediateRefresh);
+      window.removeEventListener("open_auth_modal", handleOpenAuth);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       document.removeEventListener("mousedown", handleClickOutside);
       clearInterval(tickInterval);
@@ -343,6 +352,27 @@ export const Navbar: React.FC<NavbarProps> = ({
         broadcastChannelRef.current = null;
       }
     };
+  }, []);
+
+  // Initial automatic open timer for unauthenticated visitors
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    // Do not trigger if already logged in
+    const savedUser = localStorage.getItem("akam_user");
+    const token = localStorage.getItem("akam_token");
+    if (savedUser || token) return;
+
+    // Initial delay: 1 second after page load
+    const initialTimer = setTimeout(() => {
+      const liveUser = localStorage.getItem("akam_user");
+      const liveToken = localStorage.getItem("akam_token");
+      if (!liveUser && !liveToken) {
+        setAuthModalOpen(true);
+      }
+    }, 1000);
+
+    return () => clearTimeout(initialTimer);
   }, []);
 
   // ── Dedicated Live Server-Sent Events (SSE) Stream ──────────────────────────
