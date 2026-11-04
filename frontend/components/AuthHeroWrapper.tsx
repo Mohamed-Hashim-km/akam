@@ -42,9 +42,14 @@ export default function AuthHeroWrapper({ initialIsLoggedIn = false }: AuthHeroW
     initialIsLoggedIn ? true : null
   );
 
+  // Sync verifiedState & DOM class whenever client login state changes (e.g. login or logout)
   useEffect(() => {
     if (isClientLoggedIn) {
+      setVerifiedState(true);
       document.documentElement.classList.add("akam-logged-in");
+    } else {
+      setVerifiedState(false);
+      document.documentElement.classList.remove("akam-logged-in");
     }
 
     const checkAuth = async () => {
@@ -74,9 +79,9 @@ export default function AuthHeroWrapper({ initialIsLoggedIn = false }: AuthHeroW
     };
 
     checkAuth();
-  }, []);
+  }, [isClientLoggedIn]);
 
-  const isLoggedIn = verifiedState !== null ? verifiedState : isClientLoggedIn;
+  const isLoggedIn = isClientLoggedIn || verifiedState === true;
 
   if (isLoggedIn) return null;
 
