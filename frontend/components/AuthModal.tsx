@@ -93,7 +93,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         const otpRes = await apiFetch(`${API_BASE_URL}/auth/request-otp`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: cleanEmail }),
+          body: JSON.stringify({
+          email: cleanEmail,
+          name: name.trim() || undefined,
+          phone: phone.trim() || undefined,
+          privacyPolicyAccepted: acceptedPrivacy || undefined,
+        }),
         });
 
         const otpData = await otpRes.json();
@@ -237,7 +242,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       const res = await apiFetch(`${API_BASE_URL}/auth/request-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: cleanEmail }),
+        body: JSON.stringify({
+          email: cleanEmail,
+          name: name.trim() || undefined,
+          phone: phone.trim() || undefined,
+          privacyPolicyAccepted: acceptedPrivacy || undefined,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Failed to resend code");
