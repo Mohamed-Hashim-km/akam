@@ -15,16 +15,42 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Check if email exists and if profile details are required' })
   @ApiResponse({ status: 200, description: 'Email status checked' })
-  async checkEmail(@Body() dto: CheckEmailDto) {
-    return this.authService.checkEmail(dto);
+  async checkEmail(
+    @Body() dto: CheckEmailDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.authService.checkEmail(dto);
+    if ((result as any).token) {
+      res.cookie('akam_token', (result as any).token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+        path: '/',
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+      });
+    }
+    return result;
   }
 
   @Post('request-otp')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Request an OTP code to be sent to email' })
   @ApiResponse({ status: 200, description: 'OTP sent successfully' })
-  async requestOtp(@Body() dto: RequestOtpDto) {
-    return this.authService.requestOtp(dto);
+  async requestOtp(
+    @Body() dto: RequestOtpDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.authService.requestOtp(dto);
+    if ((result as any).token) {
+      res.cookie('akam_token', (result as any).token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+        path: '/',
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+      });
+    }
+    return result;
   }
 
   @Post('verify-otp')

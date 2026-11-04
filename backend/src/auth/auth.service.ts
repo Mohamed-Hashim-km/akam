@@ -27,6 +27,101 @@ export class AuthService {
     return Math.floor(100000 + Math.random() * 900000).toString();
   }
 
+  private isEditorialRole(role?: string | null): boolean {
+    if (!role) return false;
+    const r = role.toUpperCase();
+    return ['ADMIN', 'EDITOR', 'MODERATOR'].includes(r);
+  }
+
+  private async sendOtpToEmail(email: string): Promise<void> {
+    const code = this.generateOtp();
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+    this.logger.log(`🔑 [OTP] Generated OTP for ${email}: ${code}`);
+
+    await Promise.all([
+      this.prisma.execute(
+        `UPDATE otp_code SET used = true WHERE email = $1 AND used = false`,
+        [email],
+      ),
+      this.prisma.execute(
+        `INSERT INTO otp_code (id, email, code, "expiresAt", used, "createdAt")
+         VALUES (gen_random_uuid()::text, $1, $2, $3, false, now())`,
+        [email, code, expiresAt.toISOString()],
+      ),
+    ]);
+
+    this.sendOtpEmail(email, code).catch((err) => {
+      this.logger.error(`Background OTP email error for ${email}: ${err?.message}`);
+    });
+  }
+
+  private async buildUserSession(user: {
+    id: string;
+    email: string;
+    name: string | null;
+    phone: string | null;
+    privacyPolicyAccepted: boolean;
+    role: string;
+    bio: string | null;
+    avatarUrl: string | null;
+  }): Promise<{ token: string; user: object }> {
+    let sub = await this.prisma.queryOne<{
+      status: string;
+      endDate: Date;
+      isStudent: boolean;
+    }>(
+      `SELECT status, "endDate", "isStudent" FROM subscription WHERE "userId" = $1`,
+      [user.id],
+    );
+
+    if (!sub && user.email) {
+      const applicationsRow = await this.prisma.queryOne<{ value: any }>(
+        `SELECT value FROM site_setting WHERE key = 'student_applications' LIMIT 1`,
+      );
+      if (applicationsRow?.value && Array.isArray(applicationsRow.value)) {
+        const hasApproved = applicationsRow.value.some(
+          (app: any) =>
+            app.status === 'APPROVED' &&
+            app.email &&
+            app.email.trim().toLowerCase() === user.email.trim().toLowerCase(),
+        );
+        if (hasApproved) {
+          sub = await this.prisma.queryOne<{
+            status: string;
+            endDate: Date;
+            isStudent: boolean;
+          }>(
+            `INSERT INTO subscription (id, "userId", "planType", status, "startDate", "endDate", "isStudent", "createdAt", "updatedAt")
+             VALUES (gen_random_uuid()::text, $1, 'SIX_MONTH', 'ACTIVE', now(), now() + interval '6 months', true, now(), now())
+             ON CONFLICT ("userId") DO UPDATE
+               SET status      = 'ACTIVE',
+                   "startDate" = now(),
+                   "endDate"   = now() + interval '6 months',
+                   "isStudent" = true,
+                   "updatedAt" = now()
+             RETURNING status, "endDate", "isStudent"`,
+            [user.id],
+          );
+        }
+      }
+    }
+
+    const subIsActive = sub && sub.status === 'ACTIVE' && new Date(sub.endDate) > new Date();
+    const payload = { sub: user.id, email: user.email, role: user.role };
+    const token = this.jwtService.sign(payload);
+
+    return {
+      token,
+      user: {
+        ...user,
+        subscriptionStatus: subIsActive ? 'ACTIVE' : (sub ? 'EXPIRED' : null),
+        subscriptionEndDate: subIsActive && sub ? new Date(sub.endDate).toISOString() : null,
+        isStudent: Boolean(subIsActive && sub?.isStudent),
+      },
+    };
+  }
+
   async checkEmail(dto: CheckEmailDto): Promise<{
     exists: boolean;
     name: string | null;
@@ -34,17 +129,25 @@ export class AuthService {
     requiresDetails: boolean;
     hasPhone: boolean;
     hasConsent: boolean;
+    isEditorial?: boolean;
+    requiresOtp?: boolean;
     otpSent?: boolean;
     message?: string;
+    token?: string;
+    user?: object;
   }> {
     const email = dto.email.toLowerCase().trim();
-    const user = await this.prisma.queryOne<{
+    let user = await this.prisma.queryOne<{
       id: string;
+      email: string;
       name: string | null;
       phone: string | null;
       privacyPolicyAccepted: boolean | null;
+      role: string;
+      bio: string | null;
+      avatarUrl: string | null;
     }>(
-      `SELECT id, name, phone, "privacyPolicyAccepted" FROM "user" WHERE LOWER(email) = $1`,
+      `SELECT id, email, name, phone, "privacyPolicyAccepted", role, bio, "avatarUrl" FROM "user" WHERE LOWER(email) = $1`,
       [email],
     );
 
@@ -62,14 +165,47 @@ export class AuthService {
       );
     }
 
-    let otpSent = false;
-    let message: string | undefined;
+    const isEditorial = this.isEditorialRole(user?.role);
 
-    // Fast-path: If autoSendOtp is enabled and user doesn't require details, generate & dispatch OTP in same request!
-    if (dto.autoSendOtp && !requiresDetails) {
-      await this.requestOtp({ email });
-      otpSent = true;
-      message = 'Verification code sent to your email!';
+    // If returning user with details already on file:
+    if (!requiresDetails && user) {
+      if (isEditorial) {
+        // Editorial team member: require OTP verification
+        if (dto.autoSendOtp) {
+          await this.sendOtpToEmail(email);
+        }
+        return {
+          exists: true,
+          name: user.name,
+          phone: user.phone,
+          requiresDetails: false,
+          hasPhone,
+          hasConsent,
+          isEditorial: true,
+          requiresOtp: true,
+          otpSent: Boolean(dto.autoSendOtp),
+          message: 'Editorial verification code sent to your email!',
+        };
+      } else {
+        // Regular user: NO OTP NEEDED! Direct instant login!
+        const session = await this.buildUserSession({
+          ...user,
+          privacyPolicyAccepted: Boolean(user.privacyPolicyAccepted),
+        });
+        return {
+          exists: true,
+          name: user.name,
+          phone: user.phone,
+          requiresDetails: false,
+          hasPhone,
+          hasConsent,
+          isEditorial: false,
+          requiresOtp: false,
+          otpSent: false,
+          token: session.token,
+          user: session.user,
+        };
+      }
     }
 
     return {
@@ -79,8 +215,8 @@ export class AuthService {
       requiresDetails,
       hasPhone,
       hasConsent,
-      otpSent,
-      message,
+      isEditorial,
+      requiresOtp: isEditorial,
     };
   }
 
@@ -188,49 +324,65 @@ export class AuthService {
     });
   }
 
-  async requestOtp(dto: RequestOtpDto): Promise<{ message: string }> {
+  async requestOtp(dto: RequestOtpDto): Promise<{
+    message: string;
+    isEditorial?: boolean;
+    requiresOtp?: boolean;
+    token?: string;
+    user?: object;
+  }> {
     const email = dto.email.toLowerCase().trim();
-    const code = this.generateOtp();
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
-
-    this.logger.log(`🔑 [OTP] Generated OTP for ${email}: ${code}`);
-
     const name = dto.name?.trim() || null;
     const phone = dto.phone?.trim() || null;
     const privacyPolicyAccepted = dto.privacyPolicyAccepted === true;
 
     // Immediately store/update email, name, phone, and privacy consent when user clicks Continue
-    const upsertUserPromise = this.prisma.execute(
+    const user = await this.prisma.queryOne<{
+      id: string;
+      email: string;
+      name: string | null;
+      phone: string | null;
+      privacyPolicyAccepted: boolean;
+      role: string;
+      bio: string | null;
+      avatarUrl: string | null;
+    }>(
       `INSERT INTO "user" (id, email, name, phone, "privacyPolicyAccepted", role, "createdAt", "updatedAt")
        VALUES (gen_random_uuid()::text, $1, $2, $3, $4, 'READER', now(), now())
        ON CONFLICT (email) DO UPDATE SET
          name = COALESCE(EXCLUDED.name, "user".name),
          phone = COALESCE(EXCLUDED.phone, "user".phone),
          "privacyPolicyAccepted" = CASE WHEN EXCLUDED."privacyPolicyAccepted" = true THEN true ELSE "user"."privacyPolicyAccepted" END,
-         "updatedAt" = now()`,
+         "updatedAt" = now()
+       RETURNING id, email, name, phone, "privacyPolicyAccepted", role, bio, "avatarUrl"`,
       [email, name, phone, privacyPolicyAccepted],
     );
 
-    // Invalidate previous unused OTPs, insert the new OTP, and upsert user in parallel
-    await Promise.all([
-      upsertUserPromise,
-      this.prisma.execute(
-        `UPDATE otp_code SET used = true WHERE email = $1 AND used = false`,
-        [email],
-      ),
-      this.prisma.execute(
-        `INSERT INTO otp_code (id, email, code, "expiresAt", used, "createdAt")
-         VALUES (gen_random_uuid()::text, $1, $2, $3, false, now())`,
-        [email, code, expiresAt.toISOString()],
-      ),
-    ]);
+    if (!user) {
+      throw new BadRequestException('Failed to process user registration');
+    }
 
-    // Send email asynchronously in background — returns immediately to client in ~25ms!
-    this.sendOtpEmail(email, code).catch((err) => {
-      this.logger.error(`Background OTP email error for ${email}: ${err?.message}`);
-    });
+    const isEditorial = this.isEditorialRole(user.role);
 
-    return { message: 'Verification code sent to your email address' };
+    if (isEditorial) {
+      // Editorial team requires OTP verification
+      await this.sendOtpToEmail(email);
+      return {
+        message: 'Editorial verification code sent to your email address',
+        isEditorial: true,
+        requiresOtp: true,
+      };
+    }
+
+    // Regular reader / non-editorial: DIRECT LOGIN WITHOUT OTP!
+    const session = await this.buildUserSession(user);
+    return {
+      message: 'Logged in successfully',
+      isEditorial: false,
+      requiresOtp: false,
+      token: session.token,
+      user: session.user,
+    };
   }
 
   async verifyOtp(dto: VerifyOtpDto): Promise<{ token: string; user: object }> {
@@ -286,62 +438,6 @@ export class AuthService {
       throw new BadRequestException('Failed to create or find user');
     }
 
-    // Fetch subscription status to include in login response
-    let sub = await this.prisma.queryOne<{
-      status: string;
-      endDate: Date;
-      isStudent: boolean;
-    }>(
-      `SELECT status, "endDate", "isStudent" FROM subscription WHERE "userId" = $1`,
-      [user.id],
-    );
-
-    // Auto-activate only if no subscription record exists and user has an approved student application
-    if (!sub && user.email) {
-      const applicationsRow = await this.prisma.queryOne<{ value: any }>(
-        `SELECT value FROM site_setting WHERE key = 'student_applications' LIMIT 1`,
-      );
-      if (applicationsRow?.value && Array.isArray(applicationsRow.value)) {
-        const hasApproved = applicationsRow.value.some(
-          (app: any) =>
-            app.status === 'APPROVED' &&
-            app.email &&
-            app.email.trim().toLowerCase() === user.email.trim().toLowerCase(),
-        );
-        if (hasApproved) {
-          sub = await this.prisma.queryOne<{
-            status: string;
-            endDate: Date;
-            isStudent: boolean;
-          }>(
-            `INSERT INTO subscription (id, "userId", "planType", status, "startDate", "endDate", "isStudent", "createdAt", "updatedAt")
-             VALUES (gen_random_uuid()::text, $1, 'SIX_MONTH', 'ACTIVE', now(), now() + interval '6 months', true, now(), now())
-             ON CONFLICT ("userId") DO UPDATE
-               SET status      = 'ACTIVE',
-                   "startDate" = now(),
-                   "endDate"   = now() + interval '6 months',
-                   "isStudent" = true,
-                   "updatedAt" = now()
-             RETURNING status, "endDate", "isStudent"`,
-            [user.id],
-          );
-        }
-      }
-    }
-
-    const subIsActive = sub && sub.status === 'ACTIVE' && new Date(sub.endDate) > new Date();
-
-    const payload = { sub: user.id, email: user.email, role: user.role };
-    const token = this.jwtService.sign(payload);
-
-    return {
-      token,
-      user: {
-        ...user,
-        subscriptionStatus: subIsActive ? 'ACTIVE' : (sub ? 'EXPIRED' : null),
-        subscriptionEndDate: subIsActive && sub ? new Date(sub.endDate).toISOString() : null,
-        isStudent: Boolean(subIsActive && sub?.isStudent),
-      },
-    };
+    return this.buildUserSession(user);
   }
 }

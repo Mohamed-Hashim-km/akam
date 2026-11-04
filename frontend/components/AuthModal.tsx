@@ -21,11 +21,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   redirectTo,
 }) => {
   const router = useRouter();
-  const [step, setStep] = useState<"email" | "details" | "otp" | "success">("email");
+  const [step, setStep] = useState<"form" | "otp" | "success">("form");
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
-  const [acceptedPrivacy, setAcceptedPrivacy] = useState(false);
+  const [acceptedPrivacy, setAcceptedPrivacy] = useState(true);
   const [otp, setOtp] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -35,13 +35,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   // Reset modal state when opened or closed
   useEffect(() => {
     if (!isOpen) {
-      setStep("email");
+      setStep("form");
       setError(null);
       setMessage(null);
       setOtp("");
       setName("");
       setPhone("");
-      setAcceptedPrivacy(false);
+      setAcceptedPrivacy(true);
       setResendCooldown(0);
     }
   }, [isOpen]);
@@ -55,87 +55,80 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     return () => clearInterval(timer);
   }, [resendCooldown]);
 
-  if (!isOpen) return null;
-
-  // Step 1: User enters email only
-  const handleEmailSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const cleanEmail = email.trim().toLowerCase();
-    if (!cleanEmail || !cleanEmail.includes("@")) {
-      setError("Please enter a valid email address");
-      return;
+  const handleAuthSuccess = (userData: any, token?: string) => {
+    if (userData) {
+      localStorage.setItem("akam_user", JSON.stringify(userData));
     }
+    if (token) {
+      localStorage.setItem("akam_token", token);
+    }
+    document.cookie = "akam_logged_in=true; path=/; max-age=604800; SameSite=Lax";
+    window.dispatchEvent(new Event("akam_user_updated"));
 
-    setLoading(true);
-    setError(null);
+    setStep("success");
+    if (onSuccess) onSuccess(userData, token || "");
+
+    setTimeout(() => {
+      onClose();
+      setStep("form");
+      if (redirectTo) {
+        router.push(redirectTo);
+      }
+    }, 350);
+  };
+
+  // Auto-fill returning user's saved name/phone when a valid email is entered
+  const fetchAndAutofillDetails = async (targetEmail: string) => {
+    const cleanEmail = targetEmail.trim().toLowerCase();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+    if (!cleanEmail || !emailRegex.test(cleanEmail)) return;
 
     try {
-      // Check user and automatically dispatch OTP in a single roundtrip if details are on file
       const checkRes = await apiFetch(`${API_BASE_URL}/auth/check-email`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: cleanEmail, autoSendOtp: true }),
+        body: JSON.stringify({ email: cleanEmail, autoSendOtp: false }),
       });
-
-      const checkData = await checkRes.json();
-
-      if (checkRes.ok && checkData.requiresDetails === false) {
-        // Returning user with phone & consent already on file:
-        // If backend auto-dispatched the OTP in the check-email request:
-        if (checkData.otpSent) {
-          setMessage(checkData.message || "Verification code sent to your email!");
-          setStep("otp");
-          setResendCooldown(30);
-          return;
-        }
-
-        // Fallback: send request-otp if not autoSent
-        const otpRes = await apiFetch(`${API_BASE_URL}/auth/request-otp`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-          email: cleanEmail,
-          name: name.trim() || undefined,
-          phone: phone.trim() || undefined,
-          privacyPolicyAccepted: acceptedPrivacy || undefined,
-        }),
-        });
-
-        const otpData = await otpRes.json();
-        if (!otpRes.ok) throw new Error(otpData.message || "Failed to send verification code");
-
-        setMessage(otpData.message || "Verification code sent to your email!");
-        setStep("otp");
-        setResendCooldown(30);
-        return;
-      } else {
-        // New user or missing phone/consent: advance to details step
-        if (checkData?.name && !name) {
+      if (checkRes.ok) {
+        const checkData = await checkRes.json();
+        if (checkData?.name) {
           setName(checkData.name);
         }
-        if (checkData?.phone && !phone) {
+        if (checkData?.phone) {
           setPhone(checkData.phone);
         }
         if (checkData?.hasConsent) {
           setAcceptedPrivacy(true);
         }
-        setStep("details");
       }
     } catch {
-      // Fallback to details step if check endpoint fails
-      setStep("details");
-    } finally {
-      setLoading(false);
+      // Ignore background autofill lookup errors
     }
   };
 
-  // Step 2: User enters Name, Phone Number, and accepts Privacy Policy
-  const handleDetailsSubmit = async (e: React.FormEvent) => {
+  // Real-time debounced auto-fill as the user types or pastes their email
+  useEffect(() => {
+    const cleanEmail = email.trim().toLowerCase();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+    if (!emailRegex.test(cleanEmail)) return;
+
+    const timer = setTimeout(() => {
+      fetchAndAutofillDetails(cleanEmail);
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [email]);
+
+  const handleEmailBlur = () => {
+    fetchAndAutofillDetails(email);
+  };
+
+  // Single-step Form: Submit Email, Name, Phone & Consent together
+  const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanEmail = email.trim().toLowerCase();
     if (!cleanEmail || !cleanEmail.includes("@")) {
       setError("Please enter a valid email address");
-      setStep("email");
       return;
     }
     if (!name || name.trim().length < 2) {
@@ -158,6 +151,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       const res = await apiFetch(`${API_BASE_URL}/auth/request-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
           email: cleanEmail,
           name: name.trim(),
@@ -165,10 +159,18 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           privacyPolicyAccepted: acceptedPrivacy,
         }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Failed to send verification code");
 
-      setMessage(data.message || "Verification code sent to your email!");
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Failed to join community");
+
+      // For regular readers: Instant login without OTP!
+      if (data?.token && data?.user) {
+        handleAuthSuccess(data.user, data.token);
+        return;
+      }
+
+      // Editorial users: OTP required
+      setMessage(data.message || "Editorial verification code sent to your email!");
       setStep("otp");
       setResendCooldown(30);
     } catch (err: any) {
@@ -178,7 +180,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
   };
 
-  // Step 3: User verifies the 6-digit OTP code
+  // User verifies the 6-digit OTP code (Editorial Team Only)
   const handleVerifyOtp = async (e?: React.FormEvent, codeOverride?: string) => {
     if (e) e.preventDefault();
     const codeToVerify = (codeOverride ?? otp).trim();
@@ -207,24 +209,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Verification failed");
 
-      // Save user info in localStorage
-      localStorage.setItem("akam_user", JSON.stringify(data.user));
-      if (data.token) {
-        localStorage.setItem("akam_token", data.token);
-      }
-      document.cookie = "akam_logged_in=true; path=/; max-age=604800; SameSite=Lax";
-      window.dispatchEvent(new Event("akam_user_updated"));
-
-      setStep("success");
-      if (onSuccess) onSuccess(data.user, data.token);
-
-      setTimeout(() => {
-        onClose();
-        setStep("email");
-        if (redirectTo) {
-          router.push(redirectTo);
-        }
-      }, 350);
+      handleAuthSuccess(data.user, data.token);
     } catch (err: any) {
       setError(err.message || "Invalid or expired OTP");
     } finally {
@@ -232,7 +217,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
   };
 
-  // Resend OTP handler
+  // Resend OTP handler for Editorial team
   const handleResendOtp = async () => {
     if (resendCooldown > 0 || loading) return;
     setLoading(true);
@@ -260,18 +245,20 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
   };
 
+  if (!isOpen) return null;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs font-poppins animate-in fade-in duration-200">
       <div className="relative w-full max-w-md bg-white rounded-[28px] p-6 sm:p-8 shadow-2xl border border-gray-100 overflow-hidden">
         {/* Top Navigation Row: Back Button, Badge, and Close Button */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            {(step === "details" || step === "otp") && (
+            {step === "otp" && (
               <button
                 type="button"
                 onClick={() => {
                   setError(null);
-                  setStep(step === "otp" && (name || phone || acceptedPrivacy) ? "details" : "email");
+                  setStep("form");
                 }}
                 className="p-1.5 -ml-1 text-gray-500 hover:text-gray-900 rounded-full hover:bg-gray-100 transition-colors cursor-pointer"
                 title="Go back"
@@ -280,7 +267,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               </button>
             )}
             <span className="bg-[#E4F953] text-[#040706] font-bold text-xs tracking-wider uppercase px-3 py-1 rounded-lg inline-block">
-              AKAM Digital Pass
+              {step === "otp" ? "Editorial Access" : "Join Our Community"}
             </span>
           </div>
 
@@ -297,16 +284,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         {/* Modal Header Titles */}
         <div className="mb-6">
           <h3 className="text-2xl sm:text-3xl font-semibold text-dark-text tracking-tight">
-            {step === "email" && "Welcome to AKAM"}
-            {step === "details" && "Complete Your Profile"}
-            {step === "otp" && "Verify your Email"}
-            {step === "success" && "Authenticated!"}
+            {step === "form" && "Join AKAM Digital"}
+            {step === "otp" && "Editorial Team Verification"}
+            {step === "success" && "Welcome to AKAM!"}
           </h3>
           <p className="text-sm text-[#646464] mt-1 font-normal">
-            {step === "email" && "Enter your email address to sign in or get started."}
-            {step === "details" && "Please provide your details & accept terms to continue."}
-            {step === "otp" && `We sent a 6-digit code to ${email}`}
-            {step === "success" && (redirectTo ? `Redirecting to ${redirectTo}...` : "Redirecting...")}
+            {step === "form" && "Enter your details to become part of our storytelling community."}
+            {step === "otp" && (message || `Enter the 6-digit verification code sent to ${email}`)}
+            {step === "success" && (redirectTo ? `Redirecting to ${redirectTo}...` : "Welcome aboard!")}
           </p>
         </div>
 
@@ -324,9 +309,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           </div>
         )}
 
-        {/* STEP 1: Email Only */}
-        {step === "email" && (
-          <form onSubmit={handleEmailSubmit} className="space-y-4">
+        {/* SINGLE STEP: Email Address, Full Name & Phone Number */}
+        {step === "form" && (
+          <form onSubmit={handleFormSubmit} className="space-y-4">
+            {/* Email Address */}
             <div>
               <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">
                 Email Address
@@ -338,6 +324,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   placeholder="author@akamdigital.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
+                  onBlur={handleEmailBlur}
                   className="w-full pl-11 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium text-gray-900 outline-none focus:border-black focus:bg-white transition-all"
                   required
                   autoFocus
@@ -345,42 +332,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               </div>
             </div>
 
-            <Button
-              variant="primary"
-              size="lg"
-              fullWidth
-              disabled={loading}
-              icon={<ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />}
-              iconPosition="right"
-              className="group py-3 text-sm font-medium shadow-xs cursor-pointer"
-            >
-              {loading ? "Checking..." : "Continue"}
-            </Button>
-          </form>
-        )}
-
-        {/* STEP 2: Name, Phone Number & Privacy Consent */}
-        {step === "details" && (
-          <form onSubmit={handleDetailsSubmit} className="space-y-4">
-            {/* Email chip with quick change option */}
-            <div className="flex items-center justify-between px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl">
-              <div className="flex items-center gap-2 min-w-0">
-                <Mail className="w-4 h-4 text-gray-400 shrink-0" />
-                <span className="text-xs font-medium text-gray-700 truncate">{email}</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setError(null);
-                  setStep("email");
-                }}
-                className="text-xs text-black font-semibold hover:underline cursor-pointer ml-2 shrink-0"
-              >
-                Change
-              </button>
-            </div>
-
-            {/* Full Name Input (Above Phone Number) */}
+            {/* Full Name Input (under Email Address) */}
             <div>
               <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">
                 Full Name
@@ -394,12 +346,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   onChange={(e) => setName(e.target.value)}
                   className="w-full pl-11 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium text-gray-900 outline-none focus:border-black focus:bg-white transition-all"
                   required
-                  autoFocus
                 />
               </div>
             </div>
 
-            {/* Phone Number Input */}
+            {/* Phone Number Input (under Full Name) */}
             <div>
               <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">
                 Phone Number
@@ -417,7 +368,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               </div>
             </div>
 
-            {/* Custom Themed Privacy Policy Consent Checkbox */}
+            {/* Privacy Policy Consent Checkbox */}
             <label
               htmlFor="privacy-checkbox"
               className="flex items-center gap-3 pt-1 cursor-pointer select-none group"
@@ -465,6 +416,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               </span>
             </label>
 
+            {/* Main Action Button */}
             <Button
               variant="primary"
               size="lg"
@@ -472,9 +424,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               disabled={loading}
               icon={<ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />}
               iconPosition="right"
-              className="group py-3 text-sm font-medium shadow-xs cursor-pointer"
+              className="group py-3 text-sm font-semibold shadow-xs cursor-pointer"
             >
-              {loading ? "Sending OTP..." : "Send Verification Code"}
+              {loading ? "Joining..." : "Join Our Community"}
             </Button>
           </form>
         )}
@@ -524,11 +476,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 type="button"
                 onClick={() => {
                   setError(null);
-                  setStep("email");
+                  setStep("form");
                 }}
                 className="text-xs text-gray-500 hover:text-black font-medium transition-colors cursor-pointer"
               >
-                Change email
+                Change details
               </button>
 
               <button
