@@ -39,17 +39,18 @@ export class AuthService {
 
     this.logger.log(`🔑 [OTP] Generated OTP for ${email}: ${code}`);
 
-    await Promise.all([
-      this.prisma.execute(
-        `UPDATE otp_code SET used = true WHERE email = $1 AND used = false`,
-        [email],
-      ),
-      this.prisma.execute(
-        `INSERT INTO otp_code (id, email, code, "expiresAt", used, "createdAt")
-         VALUES (gen_random_uuid()::text, $1, $2, $3, false, now())`,
-        [email, code, expiresAt.toISOString()],
-      ),
-    ]);
+    // Invalidate existing unused OTPs sequentially before creating a new one
+    await this.prisma.execute(
+      `UPDATE otp_code SET used = true WHERE LOWER(email) = LOWER($1) AND used = false`,
+      [email],
+    );
+
+    // Insert the newly generated OTP
+    await this.prisma.execute(
+      `INSERT INTO otp_code (id, email, code, "expiresAt", used, "createdAt")
+       VALUES (gen_random_uuid()::text, $1, $2, $3, false, now())`,
+      [email, code, expiresAt.toISOString()],
+    );
 
     this.sendOtpEmail(email, code).catch((err) => {
       this.logger.error(`Background OTP email error for ${email}: ${err?.message}`);
@@ -151,20 +152,31 @@ export class AuthService {
       [email],
     );
 
-    const hasPhone = Boolean(user?.phone && user.phone.trim().length >= 8);
-    const hasConsent = Boolean(user?.privacyPolicyAccepted);
-    const requiresDetails = !user || !hasPhone || !hasConsent;
+    const userExisted = Boolean(user);
 
-    // Immediately store the email in the user table as soon as user enters email and clicks Continue
+    // If the user does not exist in the database, instantly store their email
     if (!user) {
-      await this.prisma.execute(
+      user = await this.prisma.queryOne<{
+        id: string;
+        email: string;
+        name: string | null;
+        phone: string | null;
+        privacyPolicyAccepted: boolean | null;
+        role: string;
+        bio: string | null;
+        avatarUrl: string | null;
+      }>(
         `INSERT INTO "user" (id, email, role, "createdAt", "updatedAt")
          VALUES (gen_random_uuid()::text, $1, 'READER', now(), now())
-         ON CONFLICT (email) DO NOTHING`,
+         ON CONFLICT (email) DO UPDATE SET "updatedAt" = now()
+         RETURNING id, email, name, phone, "privacyPolicyAccepted", role, bio, "avatarUrl"`,
         [email],
       );
     }
 
+    const hasPhone = Boolean(user?.phone && user.phone.trim().length >= 8);
+    const hasConsent = Boolean(user?.privacyPolicyAccepted);
+    const requiresDetails = !userExisted || !hasPhone || !hasConsent;
     const isEditorial = this.isEditorialRole(user?.role);
 
     // If returning user with details already on file:
@@ -209,7 +221,7 @@ export class AuthService {
     }
 
     return {
-      exists: !!user,
+      exists: userExisted,
       name: user?.name || null,
       phone: user?.phone || null,
       requiresDetails,
@@ -387,18 +399,19 @@ export class AuthService {
 
   async verifyOtp(dto: VerifyOtpDto): Promise<{ token: string; user: object }> {
     const email = dto.email.toLowerCase().trim();
+    const cleanCode = dto.code.trim();
 
     const otp = await this.prisma.queryOne<{
       id: string;
       code: string;
     }>(
       `SELECT id, code FROM otp_code
-       WHERE email = $1 AND used = false AND "expiresAt" > now()
+       WHERE LOWER(email) = $1 AND used = false AND "expiresAt" > now()
        ORDER BY "createdAt" DESC LIMIT 1`,
       [email],
     );
 
-    if (!otp || otp.code !== dto.code) {
+    if (!otp || otp.code.trim() !== cleanCode) {
       throw new UnauthorizedException('Invalid or expired OTP code');
     }
 
