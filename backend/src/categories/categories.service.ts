@@ -1,5 +1,6 @@
 import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 import { CreateCategoryDto } from './dto/create-category.dto.js';
 
 export type CategoryRow = {
@@ -12,7 +13,10 @@ export type CategoryRow = {
 
 @Injectable()
 export class CategoriesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notificationsService: NotificationsService,
+  ) {}
 
   async findAll(pageVal?: number, limitVal?: number, search?: string) {
     const trimmedSearch = search?.trim();
@@ -85,17 +89,44 @@ export class CategoriesService {
        RETURNING id, name, description, "createdAt"`,
       [dto.name.trim(), dto.description?.trim() ?? null],
     );
+
+    if (cat) {
+      await this.notificationsService.recordEditorialAuditLog({
+        type: 'CATEGORY_CREATED',
+        category: 'EDITORIAL',
+        message: `Created taxonomy category: "${cat.name}"`,
+        entityId: cat.id,
+        entityType: 'CATEGORY',
+      });
+    }
+
     return cat!;
   }
 
   async remove(id: string): Promise<{ success: boolean }> {
+    const existing = await this.prisma.queryOne<{ id: string; name: string }>(
+      `SELECT id, name FROM category WHERE id = $1`,
+      [id],
+    );
+    if (!existing) {
+      throw new NotFoundException('Category not found');
+    }
+
     const count = await this.prisma.execute(
       `DELETE FROM category WHERE id = $1`,
       [id],
     );
-    if (count === 0) {
-      throw new NotFoundException('Category not found');
+
+    if (count > 0) {
+      await this.notificationsService.recordEditorialAuditLog({
+        type: 'CATEGORY_DELETED',
+        category: 'EDITORIAL',
+        message: `Deleted taxonomy category: "${existing.name}"`,
+        entityId: id,
+        entityType: 'CATEGORY',
+      });
     }
+
     return { success: true };
   }
 }

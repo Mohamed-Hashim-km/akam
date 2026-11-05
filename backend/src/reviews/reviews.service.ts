@@ -1,6 +1,7 @@
 import { Injectable, OnModuleInit, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service.js';
 import { UploadsService } from '../uploads/uploads.service.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 import { CreateReviewDto } from './dto/create-review.dto.js';
 import { UpdateReviewDto } from './dto/update-review.dto.js';
 
@@ -21,6 +22,7 @@ export class ReviewsService implements OnModuleInit {
   constructor(
     private readonly prisma: PrismaService,
     private readonly uploadsService: UploadsService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async onModuleInit() {
@@ -148,6 +150,16 @@ export class ReviewsService implements OnModuleInit {
       ]
     );
 
+    if (row) {
+      await this.notificationsService.recordEditorialAuditLog({
+        type: 'REVIEW_CREATED',
+        category: 'EDITORIAL',
+        message: `Created reader review from "${row.name}"`,
+        entityId: row.id,
+        entityType: 'REVIEW',
+      });
+    }
+
     return row!;
   }
 
@@ -173,6 +185,16 @@ export class ReviewsService implements OnModuleInit {
       [name, role, quote, image, isPublished, sortOrder, id]
     );
 
+    if (row) {
+      await this.notificationsService.recordEditorialAuditLog({
+        type: 'REVIEW_UPDATED',
+        category: 'EDITORIAL',
+        message: `Updated reader review from "${row.name}"`,
+        entityId: row.id,
+        entityType: 'REVIEW',
+      });
+    }
+
     return row!;
   }
 
@@ -188,6 +210,16 @@ export class ReviewsService implements OnModuleInit {
       [updatedStatus, id]
     );
 
+    if (row) {
+      await this.notificationsService.recordEditorialAuditLog({
+        type: 'REVIEW_TOGGLE_PUBLISH',
+        category: 'EDITORIAL',
+        message: `${row.isPublished ? 'Published' : 'Unpublished'} reader review from "${row.name}"`,
+        entityId: row.id,
+        entityType: 'REVIEW',
+      });
+    }
+
     return row!;
   }
 
@@ -198,6 +230,15 @@ export class ReviewsService implements OnModuleInit {
     }
 
     await this.prisma.execute(`DELETE FROM "review" WHERE id = $1`, [id]);
+
+    await this.notificationsService.recordEditorialAuditLog({
+      type: 'REVIEW_DELETED',
+      category: 'EDITORIAL',
+      message: `Deleted reader review from "${existing.name}"`,
+      entityId: id,
+      entityType: 'REVIEW',
+    });
+
     return { success: true, message: 'Review deleted successfully' };
   }
 }

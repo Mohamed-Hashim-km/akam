@@ -94,7 +94,55 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
         );
       `);
       await client.query(`CREATE INDEX IF NOT EXISTS idx_free_read_user_story ON story_free_read("userId", "storyId");`);
+
+      // Audit Log table for all editorial and administrative actions
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS audit_log (
+          id              TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+          "userId"        TEXT REFERENCES "user"(id) ON DELETE SET NULL,
+          "targetUserId"  TEXT REFERENCES "user"(id) ON DELETE SET NULL,
+          type            TEXT NOT NULL,
+          category        TEXT NOT NULL DEFAULT 'EDITORIAL',
+          message         TEXT NOT NULL,
+          read            BOOLEAN NOT NULL DEFAULT false,
+          "relatedStoryId" TEXT REFERENCES story(id) ON DELETE SET NULL,
+          "entityId"      TEXT,
+          "entityType"    TEXT,
+          details         JSONB,
+          "createdAt"     TIMESTAMP NOT NULL DEFAULT now()
+        );
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_audit_log_created_at ON audit_log("createdAt" DESC);`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_audit_log_type ON audit_log(type);`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_audit_log_category ON audit_log(category);`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_audit_log_user ON audit_log("userId");`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_audit_log_target_user ON audit_log("targetUserId");`);
+
+      // Safe idempotent sync from notification into audit_log so no historical activity is lost
+      await client.query(`
+        INSERT INTO audit_log (id, "userId", "targetUserId", type, category, message, read, "relatedStoryId", "createdAt")
+        SELECT 
+          n.id,
+          n."userId",
+          n."userId",
+          n.type::text,
+          CASE
+            WHEN n.type::text IN ('STORY_SUBMITTED', 'STORY_APPROVED', 'STORY_REJECTED', 'STORY_APPROVED_EMAGAZINE', 'STORY_PUBLISHED_EMAGAZINE') THEN 'SUBMISSIONS'
+            WHEN n.type::text IN ('CONTENT_REPORTED', 'REPORT_RESOLVED', 'REPORT_DISMISSED', 'CONTENT_REMOVED', 'CONTENT_DISPUTED') THEN 'MODERATION'
+            WHEN n.type::text IN ('STUDENT_APPLICATION_SUBMITTED', 'STUDENT_APPLICATION_APPROVED', 'STUDENT_APPLICATION_REJECTED') THEN 'STUDENT_PASS'
+            WHEN n.type::text IN ('SUBSCRIPTION_GRANTED', 'SUBSCRIPTION_CANCELLED') THEN 'SUBSCRIPTIONS'
+            ELSE 'EDITORIAL'
+          END,
+          n.message,
+          n.read,
+          n."relatedStoryId",
+          n."createdAt"
+        FROM notification n
+        ON CONFLICT (id) DO NOTHING;
+      `);
+
       await client.query(`UPDATE notification SET message = REPLACE(message, 'AKAM E-Magazine', 'AKAM Magazine') WHERE message LIKE '%AKAM E-Magazine%';`);
+      await client.query(`UPDATE audit_log SET message = REPLACE(message, 'AKAM E-Magazine', 'AKAM Magazine') WHERE message LIKE '%AKAM E-Magazine%';`);
       client.release();
       this.logger.log('✅ Database connection established and schema verified');
     } catch (error) {

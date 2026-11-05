@@ -691,6 +691,17 @@ export class StoriesService {
       throw new ForbiddenException('Only EDITOR or ADMIN can review stories');
     }
 
+    await this.notificationsService.recordEditorialAuditLog({
+      userId: reviewerId,
+      targetUserId: story.authorId,
+      relatedStoryId: id,
+      type: `STORY_${dto.decision}`,
+      category: dto.decision.includes('REJECT') || dto.decision === 'UNPUBLISHED' ? 'REJECTIONS' : 'APPROVALS',
+      message: `Story "${story.title}" was ${dto.decision.toLowerCase().replace(/_/g, ' ')} by editorial${dto.rejectionNote ? `: "${dto.rejectionNote}"` : ''}`,
+      entityId: id,
+      entityType: 'STORY',
+    });
+
     if (dto.decision === 'APPROVED') {
       await this.prisma.execute(
         `UPDATE story SET status = 'APPROVED'::"StoryStatus", "rejectionNote" = null, "updatedAt" = now()
@@ -806,21 +817,45 @@ export class StoriesService {
     await this.prisma.execute(`DELETE FROM story_like WHERE "storyId" = $1`, [id]).catch(() => null);
     await this.prisma.execute(`DELETE FROM story WHERE id = $1`, [id]);
     this.revalidateService.revalidate('stories', '/');
+
+    await this.notificationsService.recordEditorialAuditLog({
+      userId,
+      targetUserId: story.authorId,
+      type: 'STORY_DELETED',
+      category: 'EDITORIAL',
+      message: `Deleted story "${story.title}"`,
+      relatedStoryId: id,
+      entityId: id,
+      entityType: 'STORY',
+    });
+
     return { success: true };
   }
 
   async toggleFeatured(id: string) {
-    const story = await this.prisma.queryOne<{ id: string; isFeatured: boolean | null }>(
-      `SELECT id, "isFeatured" FROM story WHERE id = $1`,
+    const story = await this.prisma.queryOne<{ id: string; title: string; isFeatured: boolean | null }>(
+      `SELECT id, title, "isFeatured" FROM story WHERE id = $1`,
       [id],
     );
     if (!story) throw new NotFoundException('Story not found');
     const newStatus = !story.isFeatured;
-    const updated = await this.prisma.queryOne(
+    const updated = await this.prisma.queryOne<any>(
       `UPDATE story SET "isFeatured" = $1, "updatedAt" = now() WHERE id = $2 RETURNING *`,
       [newStatus, id],
     );
     this.revalidateService.revalidate('stories', '/');
+
+    if (updated) {
+      await this.notificationsService.recordEditorialAuditLog({
+        type: 'STORY_FEATURED_TOGGLED',
+        category: 'EDITORIAL',
+        message: `${newStatus ? 'Featured' : 'Unfeatured'} story: "${updated.title || id}" in catalog`,
+        relatedStoryId: id,
+        entityId: id,
+        entityType: 'STORY',
+      });
+    }
+
     return updated;
   }
 }

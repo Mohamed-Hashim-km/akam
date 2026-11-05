@@ -23,10 +23,17 @@ export type NotificationType =
 export interface EditorialAuditLogRow {
   id: string;
   type: string;
+  category?: string;
   message: string;
-  read: boolean;
   relatedStoryId: string | null;
+  entityId?: string | null;
+  entityType?: string | null;
+  details?: any;
   createdAt: string;
+  actorId?: string | null;
+  actorName?: string | null;
+  actorEmail?: string | null;
+  actorRole?: string | null;
   targetUserId?: string | null;
   targetUserName?: string | null;
   targetUserEmail?: string | null;
@@ -53,6 +60,7 @@ export interface EditorialAuditLogsResult {
     moderationCount: number;
     studentPassCount: number;
     subscriptionsCount: number;
+    editorialCount: number;
   };
 }
 
@@ -134,6 +142,58 @@ export class NotificationsService {
   }
 
 
+  async recordEditorialAuditLog(params: {
+    userId?: string | null;
+    targetUserId?: string | null;
+    type: string;
+    category?: string;
+    message: string;
+    relatedStoryId?: string | null;
+    entityId?: string | null;
+    entityType?: string | null;
+    details?: any;
+  }): Promise<string> {
+    const id = crypto.randomUUID();
+    const createdAt = new Date().toISOString();
+    const category = params.category || 'EDITORIAL';
+
+    try {
+      await this.prisma.execute(
+        `INSERT INTO audit_log (id, "userId", "targetUserId", type, category, message, read, "relatedStoryId", "entityId", "entityType", details, "createdAt")
+         VALUES ($1, $2, $3, $4, $5, $6, false, $7, $8, $9, $10, $11::timestamp)`,
+        [
+          id,
+          params.userId ?? null,
+          params.targetUserId ?? null,
+          params.type,
+          category,
+          params.message,
+          params.relatedStoryId ?? null,
+          params.entityId ?? null,
+          params.entityType ?? null,
+          params.details ? JSON.stringify(params.details) : null,
+          createdAt,
+        ],
+      );
+
+      // Push real-time event to connected editors via SSE (<10ms)
+      this.notificationEvents$.next({
+        id,
+        userId: params.userId || 'EDITORS',
+        targetRole: 'EDITOR',
+        type: params.type,
+        message: params.message,
+        read: false,
+        relatedStoryId: params.relatedStoryId ?? null,
+        createdAt,
+      });
+    } catch (err) {
+      this.logger.error(`Failed to record editorial audit log for ${params.type}`, err);
+    }
+
+    return id;
+  }
+
   async getEditorialAuditLogs(params: {
     page?: number;
     limit?: number;
@@ -151,17 +211,19 @@ export class NotificationsService {
     if (params.category && params.category !== 'ALL') {
       const cat = params.category.toUpperCase();
       if (cat === 'SUBMISSIONS') {
-        conditions.push(`n.type IN ('STORY_SUBMITTED', 'STORY_APPROVED', 'STORY_REJECTED', 'STORY_APPROVED_EMAGAZINE', 'STORY_PUBLISHED_EMAGAZINE')`);
+        conditions.push(`(a.category = 'SUBMISSIONS' OR a.type IN ('STORY_SUBMITTED', 'STORY_APPROVED', 'STORY_REJECTED', 'STORY_APPROVED_EMAGAZINE', 'STORY_PUBLISHED_EMAGAZINE'))`);
       } else if (cat === 'APPROVALS') {
-        conditions.push(`n.type IN ('STORY_APPROVED', 'STORY_APPROVED_EMAGAZINE', 'STORY_PUBLISHED_EMAGAZINE')`);
+        conditions.push(`(a.category = 'APPROVALS' OR a.type IN ('STORY_APPROVED', 'STORY_APPROVED_EMAGAZINE', 'STORY_PUBLISHED_EMAGAZINE', 'EDITION_CREATED', 'EDITION_TOGGLE_PUBLISH'))`);
       } else if (cat === 'REJECTIONS') {
-        conditions.push(`n.type IN ('STORY_REJECTED', 'CONTENT_REMOVED')`);
+        conditions.push(`(a.category = 'REJECTIONS' OR a.type IN ('STORY_REJECTED', 'CONTENT_REMOVED'))`);
       } else if (cat === 'MODERATION') {
-        conditions.push(`n.type IN ('CONTENT_REPORTED', 'CONTENT_DISPUTED', 'REPORT_RESOLVED', 'REPORT_DISMISSED', 'CONTENT_REMOVED')`);
+        conditions.push(`(a.category = 'MODERATION' OR a.type IN ('CONTENT_REPORTED', 'CONTENT_DISPUTED', 'REPORT_RESOLVED', 'REPORT_DISMISSED', 'CONTENT_REMOVED', 'COMMUNITY_REPORT_ACTIONED', 'COMMUNITY_POST_LOCKED', 'COMMUNITY_POST_REMOVED', 'COMMUNITY_COMMENT_REMOVED'))`);
       } else if (cat === 'STUDENT_PASS') {
-        conditions.push(`(n.type IN ('STUDENT_APPLICATION_SUBMITTED', 'STUDENT_APPLICATION_APPROVED', 'STUDENT_APPLICATION_REJECTED') OR n.message ILIKE '%Student Scholar Pass%')`);
+        conditions.push(`(a.category = 'STUDENT_PASS' OR a.type IN ('STUDENT_APPLICATION_SUBMITTED', 'STUDENT_APPLICATION_APPROVED', 'STUDENT_APPLICATION_REJECTED', 'STUDENT_PASS_GRANTED') OR a.message ILIKE '%Student Scholar Pass%')`);
       } else if (cat === 'SUBSCRIPTIONS') {
-        conditions.push(`n.type IN ('SUBSCRIPTION_GRANTED', 'SUBSCRIPTION_CANCELLED')`);
+        conditions.push(`(a.category = 'SUBSCRIPTIONS' OR a.type IN ('SUBSCRIPTION_GRANTED', 'SUBSCRIPTION_CANCELLED'))`);
+      } else if (cat === 'EDITORIAL') {
+        conditions.push(`(a.category = 'EDITORIAL' OR a.type LIKE 'BOOK_%' OR a.type LIKE 'EDITION_%' OR a.type LIKE 'MEDIA_%' OR a.type LIKE 'EVENT_%' OR a.type LIKE 'CATEGORY_%' OR a.type LIKE 'REVIEW_%' OR a.type LIKE 'COMMUNITY_%' OR a.type LIKE 'USER_%' OR a.type LIKE 'AUTHOR_%' OR a.type LIKE 'SETTING_%' OR a.type LIKE 'EDITORS_NOTE_%' OR a.type LIKE 'INQUIRY_%')`);
       }
     }
 
@@ -169,9 +231,12 @@ export class NotificationsService {
       const searchPattern = `%${params.search.trim()}%`;
       values.push(searchPattern);
       conditions.push(`(
-        n.message ILIKE $${paramIndex} OR
+        a.message ILIKE $${paramIndex} OR
+        a.type ILIKE $${paramIndex} OR
         u.name ILIKE $${paramIndex} OR
         u.email ILIKE $${paramIndex} OR
+        actor.name ILIKE $${paramIndex} OR
+        actor.email ILIKE $${paramIndex} OR
         s.title ILIKE $${paramIndex}
       )`);
       paramIndex++;
@@ -180,21 +245,29 @@ export class NotificationsService {
     const whereSql = conditions.join(' AND ');
 
     const countQuery = `
-      SELECT COUNT(DISTINCT n.id) AS count
-      FROM notification n
-      LEFT JOIN "user" u ON n."userId" = u.id
-      LEFT JOIN story s ON n."relatedStoryId" = s.id
+      SELECT COUNT(DISTINCT a.id) AS count
+      FROM audit_log a
+      LEFT JOIN "user" u ON a."targetUserId" = u.id
+      LEFT JOIN "user" actor ON a."userId" = actor.id
+      LEFT JOIN story s ON a."relatedStoryId" = s.id
       WHERE ${whereSql}
     `;
 
     const dataQuery = `
       SELECT 
-        n.id,
-        n.type,
-        n.message,
-        n.read,
-        n."relatedStoryId",
-        n."createdAt",
+        a.id,
+        a.type,
+        a.category,
+        a.message,
+        a."relatedStoryId",
+        a."entityId",
+        a."entityType",
+        a.details,
+        a."createdAt",
+        actor.id AS "actorId",
+        actor.name AS "actorName",
+        actor.email AS "actorEmail",
+        actor.role AS "actorRole",
         u.id AS "targetUserId",
         u.name AS "targetUserName",
         u.email AS "targetUserEmail",
@@ -203,11 +276,12 @@ export class NotificationsService {
         s.slug AS "storySlug",
         s.status AS "storyStatus",
         s."submissionType" AS "submissionType"
-      FROM notification n
-      LEFT JOIN "user" u ON n."userId" = u.id
-      LEFT JOIN story s ON n."relatedStoryId" = s.id
+      FROM audit_log a
+      LEFT JOIN "user" u ON a."targetUserId" = u.id
+      LEFT JOIN "user" actor ON a."userId" = actor.id
+      LEFT JOIN story s ON a."relatedStoryId" = s.id
       WHERE ${whereSql}
-      ORDER BY n."createdAt" DESC
+      ORDER BY a."createdAt" DESC
       LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
     `;
 
@@ -217,12 +291,13 @@ export class NotificationsService {
       this.prisma.queryOne<{ count: string }>(countQuery, values),
       this.prisma.query<EditorialAuditLogRow>(dataQuery, dataValues),
       this.prisma.query<{
+        category: string;
         type: string;
         count: string;
       }>(`
-        SELECT type, COUNT(*) AS count
-        FROM notification
-        GROUP BY type
+        SELECT category, type, COUNT(*) AS count
+        FROM audit_log
+        GROUP BY category, type
       `),
     ]);
 
@@ -231,40 +306,49 @@ export class NotificationsService {
     const hasMore = offset + dataRows.length < total;
 
     const statsMap: Record<string, number> = {};
+    const catMap: Record<string, number> = {};
     let totalEvents = 0;
     for (const row of statsRows) {
       const c = parseInt(row.count, 10);
-      statsMap[row.type] = c;
+      statsMap[row.type] = (statsMap[row.type] || 0) + c;
+      catMap[row.category] = (catMap[row.category] || 0) + c;
       totalEvents += c;
     }
 
     const submissionsCount =
-      (statsMap['STORY_SUBMITTED'] || 0) +
+      (catMap['SUBMISSIONS'] || 0) ||
+      ((statsMap['STORY_SUBMITTED'] || 0) +
       (statsMap['STORY_APPROVED'] || 0) +
       (statsMap['STORY_REJECTED'] || 0) +
       (statsMap['STORY_APPROVED_EMAGAZINE'] || 0) +
-      (statsMap['STORY_PUBLISHED_EMAGAZINE'] || 0);
+      (statsMap['STORY_PUBLISHED_EMAGAZINE'] || 0));
 
     const approvalsCount =
-      (statsMap['STORY_APPROVED'] || 0) +
+      (catMap['APPROVALS'] || 0) ||
+      ((statsMap['STORY_APPROVED'] || 0) +
       (statsMap['STORY_APPROVED_EMAGAZINE'] || 0) +
-      (statsMap['STORY_PUBLISHED_EMAGAZINE'] || 0);
+      (statsMap['STORY_PUBLISHED_EMAGAZINE'] || 0));
 
     const moderationCount =
-      (statsMap['CONTENT_REPORTED'] || 0) +
+      (catMap['MODERATION'] || 0) ||
+      ((statsMap['CONTENT_REPORTED'] || 0) +
       (statsMap['CONTENT_DISPUTED'] || 0) +
       (statsMap['REPORT_RESOLVED'] || 0) +
       (statsMap['REPORT_DISMISSED'] || 0) +
-      (statsMap['CONTENT_REMOVED'] || 0);
+      (statsMap['CONTENT_REMOVED'] || 0));
 
     const studentPassCount =
-      (statsMap['STUDENT_APPLICATION_SUBMITTED'] || 0) +
+      (catMap['STUDENT_PASS'] || 0) ||
+      ((statsMap['STUDENT_APPLICATION_SUBMITTED'] || 0) +
       (statsMap['STUDENT_APPLICATION_APPROVED'] || 0) +
-      (statsMap['STUDENT_APPLICATION_REJECTED'] || 0);
+      (statsMap['STUDENT_APPLICATION_REJECTED'] || 0));
 
     const subscriptionsCount =
-      (statsMap['SUBSCRIPTION_GRANTED'] || 0) +
-      (statsMap['SUBSCRIPTION_CANCELLED'] || 0);
+      (catMap['SUBSCRIPTIONS'] || 0) ||
+      ((statsMap['SUBSCRIPTION_GRANTED'] || 0) +
+      (statsMap['SUBSCRIPTION_CANCELLED'] || 0));
+
+    const editorialCount = catMap['EDITORIAL'] || 0;
 
     return {
       data: dataRows.map((r) => ({
@@ -285,6 +369,7 @@ export class NotificationsService {
         moderationCount,
         studentPassCount,
         subscriptionsCount,
+        editorialCount,
       },
     };
   }
@@ -336,17 +421,15 @@ export class NotificationsService {
       `UPDATE notification SET read = true WHERE id = $1 AND "userId" = $2`,
       [id, userId],
     );
-    if (count > 0) {
-      this.notificationEvents$.next({
-        id,
-        userId,
-        type: 'READ_UPDATE',
-        message: 'Notification marked as read',
-        read: true,
-        createdAt: new Date().toISOString(),
-      });
-    }
-    return { success: count > 0 };
+    this.notificationEvents$.next({
+      id,
+      userId,
+      type: 'READ_UPDATE',
+      message: 'Notification marked as read',
+      read: true,
+      createdAt: new Date().toISOString(),
+    });
+    return { success: true };
   }
 
   async markAllAsRead(userId: string): Promise<{ success: boolean }> {
@@ -387,6 +470,29 @@ export class NotificationsService {
        VALUES ($1, $2, $3::"NotificationType", $4, false, $5, $6::timestamp)`,
       [id, userId, type, message, relatedStoryId ?? null, createdAt],
     );
+
+    // Derive category for audit log
+    let category = 'EDITORIAL';
+    if (['STORY_SUBMITTED', 'STORY_APPROVED', 'STORY_REJECTED', 'STORY_APPROVED_EMAGAZINE', 'STORY_PUBLISHED_EMAGAZINE'].includes(type)) {
+      category = 'SUBMISSIONS';
+    } else if (['CONTENT_REPORTED', 'REPORT_RESOLVED', 'REPORT_DISMISSED', 'CONTENT_REMOVED', 'CONTENT_DISPUTED'].includes(type)) {
+      category = 'MODERATION';
+    } else if (['STUDENT_APPLICATION_SUBMITTED', 'STUDENT_APPLICATION_APPROVED', 'STUDENT_APPLICATION_REJECTED'].includes(type)) {
+      category = 'STUDENT_PASS';
+    } else if (['SUBSCRIPTION_GRANTED', 'SUBSCRIPTION_CANCELLED'].includes(type)) {
+      category = 'SUBSCRIPTIONS';
+    }
+
+    try {
+      await this.prisma.execute(
+        `INSERT INTO audit_log (id, "userId", "targetUserId", type, category, message, read, "relatedStoryId", "createdAt")
+         VALUES ($1, $2, $3, $4, $5, $6, false, $7, $8::timestamp)
+         ON CONFLICT (id) DO NOTHING`,
+        [id, userId, userId, type, category, message, relatedStoryId ?? null, createdAt],
+      );
+    } catch (e) {
+      this.logger.error('Failed to sync notification to audit_log', e);
+    }
 
     // Push realtime event immediately (< 10ms)
     this.notificationEvents$.next({

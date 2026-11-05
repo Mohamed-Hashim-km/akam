@@ -189,6 +189,7 @@ type TabType =
   | "authors"
   | "categories"
   | "notifications"
+  | "logs"
   | "settings"
   | "editors-note"
   | "communities"
@@ -554,6 +555,7 @@ function EditorialDashboardContent() {
     moderationCount: number;
     studentPassCount: number;
     subscriptionsCount: number;
+    editorialCount?: number;
   }>({
     totalEvents: 0,
     submissionsCount: 0,
@@ -561,6 +563,7 @@ function EditorialDashboardContent() {
     moderationCount: 0,
     studentPassCount: 0,
     subscriptionsCount: 0,
+    editorialCount: 0,
   });
   const [auditCategoryFilter, setAuditCategoryFilter] = useState<string>("ALL");
   const [auditSearchQuery, setAuditSearchQuery] = useState<string>("");
@@ -568,17 +571,19 @@ function EditorialDashboardContent() {
 
   const handleExportAuditLogs = () => {
     if (!notificationsList || notificationsList.length === 0) return;
-    const headers = ["ID", "Timestamp", "Event Type", "Message", "Target User", "Target Email", "Target Role", "Related Story", "Read Status"];
+    const headers = ["ID", "Timestamp", "Category", "Event Type", "Message", "Actor", "Actor Email", "Actor Role", "Target User", "Target Email", "Related Story"];
     const rows = notificationsList.map((item) => [
       item.id,
       new Date(item.createdAt).toISOString(),
+      item.category || "EDITORIAL",
       item.type,
       `"${(item.message || "").replace(/"/g, '""')}"`,
+      `"${(item.actorName || "").replace(/"/g, '""')}"`,
+      item.actorEmail || "",
+      item.actorRole || "",
       `"${(item.targetUserName || "").replace(/"/g, '""')}"`,
       item.targetUserEmail || "",
-      item.targetUserRole || "",
       `"${(item.storyTitle || "").replace(/"/g, '""')}"`,
-      item.read ? "Read" : "Unread",
     ]);
     const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map((e) => e.join(","))].join("\n");
     const encodedUri = encodeURI(csvContent);
@@ -1409,7 +1414,7 @@ function EditorialDashboardContent() {
             setCategoriesList(json);
           }
         }
-      } else if (tab === "notifications") {
+      } else if (tab === "notifications" || tab === "logs") {
         const auditCategoryQuery = auditCategoryFilter && auditCategoryFilter !== "ALL" ? `&category=${auditCategoryFilter}` : "";
         const queryText = query || auditSearchQuery;
         const auditSearchQueryParam = queryText ? `&search=${encodeURIComponent(queryText)}` : "";
@@ -1427,11 +1432,6 @@ function EditorialDashboardContent() {
             setNotificationsList(list);
             if (json.meta) setAuditLogsMeta(json.meta);
           }
-        }
-        const uRes = await apiFetch(`${API_BASE_URL}/notifications/unread-count`);
-        if (uRes.ok) {
-          const uJson = await uRes.json();
-          setUnreadNotificationCount(uJson.count || 0);
         }
       } else if (tab === "settings" || tab === "editors-note") {
         const noteRes = await apiFetch(`${API_BASE_URL}/settings/editors-note`);
@@ -2654,8 +2654,8 @@ function EditorialDashboardContent() {
           setUnreadNotificationCount(d.count || 0);
         }
       });
-      if (activeTabRef.current === "notifications") {
-        fetchDashboardData("notifications", currentPageRef.current);
+      if (activeTabRef.current === "notifications" || activeTabRef.current === "logs") {
+        fetchDashboardData(activeTabRef.current as TabType, currentPageRef.current);
       }
     };
 
@@ -3611,23 +3611,6 @@ function EditorialDashboardContent() {
                   <span>Home Page Editor's Note</span>
                 </button>
 
-                {/* <button
-                  onClick={() => handleTabChange("notifications")}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
-                    activeTab === "notifications" ? "bg-[#040706] text-white shadow-xs" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
-                  }`}
-                >
-                  <ScrollText className={`w-4 h-4 shrink-0 ${activeTab === "notifications" ? "text-emerald-400" : "text-gray-400"}`} />
-                  <span className="flex items-center justify-between w-full">
-                    <span>Editorial Audit Logs</span>
-                    {unreadNotificationCount > 0 && (
-                      <span className="bg-emerald-500 text-white text-[10px] font-bold px-1.5 py-0.2 rounded-full">
-                        {unreadNotificationCount}
-                      </span>
-                    )}
-                  </span>
-                </button> */}
-
                 <button
                   onClick={() => handleTabChange("reports")}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
@@ -3707,6 +3690,16 @@ function EditorialDashboardContent() {
                   <MessageSquare className={`w-4 h-4 shrink-0 ${activeTab === "reviews" ? "text-emerald-400" : "text-gray-400"}`} />
                   <span>Reader Reviews (Homepage)</span>
                 </button>
+
+                <button
+                  onClick={() => handleTabChange("notifications")}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
+                    activeTab === "notifications" || activeTab === "logs" ? "bg-[#040706] text-white shadow-xs" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                  }`}
+                >
+                  <ScrollText className={`w-4 h-4 shrink-0 ${activeTab === "notifications" || activeTab === "logs" ? "text-emerald-400" : "text-gray-400"}`} />
+                  <span>Activity Audit Logs</span>
+                </button>
               </>
             )}
           </nav>
@@ -3776,7 +3769,7 @@ function EditorialDashboardContent() {
                 {activeTab === "catalog" && "Published Content Catalog"}
                 {activeTab === "authors" && "User Roster"}
                 {activeTab === "categories" && "Categories & Taxonomy"}
-                {activeTab === "notifications" && "Editorial Audit Logs & Activity Stream"}
+                {(activeTab === "notifications" || activeTab === "logs") && "Editorial Audit Logs & Activity Stream"}
                 {activeTab === "settings" && "Home Page Editor's Note"}
                 {activeTab === "communities" && "Community Moderation & Management"}
                 {activeTab === "events" && "Events & Workshops Management"}
@@ -3811,7 +3804,7 @@ function EditorialDashboardContent() {
               {activeTab === "catalog" && "Browse all active works (articles, Visual Art, videos) currently published on AKAM Digital."}
               {activeTab === "authors" && "Manage all registered platform users, writers, and role permissions."}
               {activeTab === "categories" && "Manage platform category taxonomy and genre classifications."}
-              {activeTab === "notifications" && "Immutable audit trail and real-time event stream tracking submissions, approvals, rejections, content disputes, student scholarship reviews, and user subscriptions."}
+              {(activeTab === "notifications" || activeTab === "logs") && "Immutable audit trail and real-time event stream tracking submissions, approvals, rejections, content disputes, student scholarship reviews, and user subscriptions."}
               {activeTab === "settings" && "Update the featured Editor's Note title and message displayed on the main homepage."}
               {activeTab === "communities" && "Moderate community posts and comments, lock threads, pin posts, and inspect community rosters."}
               {activeTab === "events" && "Manage upcoming reading sessions, discussions, workshops, and past archives."}
@@ -5687,12 +5680,11 @@ function EditorialDashboardContent() {
             </div>
           )}
 
-          {/* TAB 5: EDITORIAL AUDIT LOGS (COMMENTED OUT) */}
-          {/* @ts-ignore */}
-          {false && activeTab === "notifications" && (
+          {/* TAB 5: EDITORIAL AUDIT LOGS */}
+          {(activeTab === "notifications" || activeTab === "logs") && (
             <div className="space-y-6 font-poppins">
               {/* Top Overview Stat Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 sm:gap-5">
                 <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs flex items-center justify-between">
                   <div>
                     <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Total Audit Events</p>
@@ -5702,6 +5694,18 @@ function EditorialDashboardContent() {
                   </div>
                   <div className="w-11 h-11 rounded-2xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600">
                     <ScrollText className="w-5 h-5" />
+                  </div>
+                </div>
+
+                <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Editorial Actions</p>
+                    <p className="text-2xl font-bold text-gray-950 mt-1">
+                      {auditLogsStats.editorialCount ?? 0}
+                    </p>
+                  </div>
+                  <div className="w-11 h-11 rounded-2xl bg-teal-50 border border-teal-100 flex items-center justify-center text-teal-600">
+                    <FileText className="w-5 h-5" />
                   </div>
                 </div>
 
@@ -5748,15 +5752,14 @@ function EditorialDashboardContent() {
                 <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 pb-5 border-b border-gray-100">
                   <div>
                     <div className="flex items-center gap-2.5">
-                      <h3 className="text-xl font-bold text-gray-950">Editorial Audit Log Stream</h3>
-                      {unreadNotificationCount > 0 && (
-                        <span className="bg-emerald-500 text-white text-[10px] font-extrabold px-2.5 py-0.5 rounded-full">
-                          {unreadNotificationCount} UNREAD ALERTS
-                        </span>
-                      )}
+                      <h3 className="text-xl font-bold text-gray-950">System & Editorial Activity Logs</h3>
+                      <span className="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200/80 text-[10px] font-bold px-2.5 py-0.5 rounded-full">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                        AUDIT TRAIL
+                      </span>
                     </div>
                     <p className="text-xs text-gray-500 mt-1">
-                      Immutable record of author submissions, editorial approvals, moderation reports, pass verifications, and user activities.
+                      Immutable record of all editorial decisions, content submissions, reviews, moderation actions, and user administration.
                     </p>
                   </div>
 
@@ -5783,20 +5786,6 @@ function EditorialDashboardContent() {
                     >
                       Refresh
                     </Button>
-                    {unreadNotificationCount > 0 && (
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        size="sm"
-                        onClick={async () => {
-                          await apiFetch(`${API_BASE_URL}/notifications/read-all`, { method: "PATCH" });
-                          fetchDashboardData("notifications", currentPage);
-                        }}
-                        className="text-xs font-semibold border border-gray-300 shadow-xs cursor-pointer"
-                      >
-                        Mark All Read
-                      </Button>
-                    )}
                   </div>
                 </div>
 
@@ -5806,6 +5795,7 @@ function EditorialDashboardContent() {
                   <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
                     {[
                       { id: "ALL", label: "All Activity" },
+                      { id: "EDITORIAL", label: "Editorial Actions" },
                       { id: "SUBMISSIONS", label: "Submissions" },
                       { id: "APPROVALS", label: "Approvals & E-Mag" },
                       { id: "REJECTIONS", label: "Rejections" },
@@ -5910,17 +5900,27 @@ function EditorialDashboardContent() {
                         item.type === "STUDENT_APPLICATION_SUBMITTED" ||
                         item.type === "STUDENT_APPLICATION_APPROVED" ||
                         item.type === "STUDENT_APPLICATION_REJECTED" ||
+                        item.type === "STUDENT_PASS_GRANTED" ||
                         item.message?.includes("Student Scholar Pass");
                       const isSubscription = item.type === "SUBSCRIPTION_GRANTED" || item.type === "SUBSCRIPTION_CANCELLED";
+                      const isEditorial =
+                        item.type?.startsWith("BOOK_") ||
+                        item.type?.startsWith("EDITION_") ||
+                        item.type?.startsWith("MEDIA_") ||
+                        item.type?.startsWith("EVENT_") ||
+                        item.type?.startsWith("CATEGORY_") ||
+                        item.type?.startsWith("REVIEW_") ||
+                        item.type?.startsWith("USER_") ||
+                        item.type?.startsWith("AUTHOR_") ||
+                        item.type?.startsWith("COMMUNITY_") ||
+                        item.type?.startsWith("EDITORS_NOTE_") ||
+                        item.type?.startsWith("INQUIRY_") ||
+                        item.category === "EDITORIAL";
 
                       return (
                         <div
                           key={item.id}
-                          className={`p-4 sm:p-5 rounded-2xl border transition-all flex flex-col sm:flex-row items-start justify-between gap-4 ${
-                            !item.read
-                              ? "bg-emerald-50/40 border-emerald-200/90 shadow-xs"
-                              : "bg-gray-50/70 border-gray-200/80 hover:bg-gray-50 hover:border-gray-300"
-                          }`}
+                          className="p-4 sm:p-5 rounded-2xl border border-gray-200/80 bg-white hover:bg-gray-50/70 hover:border-gray-300 transition-all shadow-2xs flex flex-col sm:flex-row items-start justify-between gap-4"
                         >
                           <div className="flex items-start gap-3.5 w-full">
                             {/* Icon Indicator Badge */}
@@ -5940,7 +5940,9 @@ function EditorialDashboardContent() {
                                             ? "bg-amber-100 text-amber-800 border border-amber-300/80"
                                             : isRejected
                                               ? "bg-rose-100 text-rose-700 border border-rose-200/80"
-                                              : "bg-gray-100 text-gray-700 border border-gray-200"
+                                              : isEditorial
+                                                ? "bg-teal-100 text-teal-700 border border-teal-200/80"
+                                                : "bg-gray-100 text-gray-700 border border-gray-200"
                               }`}
                             >
                               {isEmagApproved || isEmagPublished ? (
@@ -5955,6 +5957,8 @@ function EditorialDashboardContent() {
                                 <CheckCircle2 className="w-5 h-5" />
                               ) : isRejected ? (
                                 <XCircle className="w-5 h-5" />
+                              ) : isEditorial ? (
+                                <FileText className="w-5 h-5" />
                               ) : (
                                 <ScrollText className="w-5 h-5" />
                               )}
@@ -5980,17 +5984,13 @@ function EditorialDashboardContent() {
                                                 ? "bg-rose-100/80 text-rose-900"
                                                 : isRejected
                                                   ? "bg-rose-100/80 text-rose-900"
-                                                  : "bg-gray-200 text-gray-800"
+                                                  : isEditorial
+                                                    ? "bg-teal-100/80 text-teal-900"
+                                                    : "bg-gray-200 text-gray-800"
                                   }`}
                                 >
                                   {item.type.replace(/_/g, " ")}
                                 </span>
-
-                                {!item.read && (
-                                  <span className="bg-emerald-500 text-white text-[9px] font-extrabold px-1.5 py-0.2 rounded-full">
-                                    NEW
-                                  </span>
-                                )}
 
                                 <span className="text-[11px] text-gray-400 font-medium">
                                   {new Date(item.createdAt).toLocaleString(undefined, {
@@ -6005,16 +6005,30 @@ function EditorialDashboardContent() {
                                 {item.message}
                               </p>
 
-                              {/* Associated Entity Details (User / Story) */}
+                              {/* Associated Entity Details (Actor / Target User / Story) */}
                               <div className="flex items-center gap-2 flex-wrap pt-0.5 text-[11px] text-gray-600">
+                                {(item.actorName || item.actorEmail) && (
+                                  <span className="inline-flex items-center gap-1.5 bg-blue-50/80 border border-blue-200/80 rounded-md px-2 py-0.5 text-blue-900 font-medium">
+                                    <User className="w-3 h-3 text-blue-600" />
+                                    <span>Actor:</span>
+                                    <span className="font-semibold">{item.actorName || item.actorEmail}</span>
+                                    {item.actorRole && (
+                                      <span className="bg-blue-200/70 text-blue-800 text-[9px] font-bold px-1 rounded">
+                                        {item.actorRole}
+                                      </span>
+                                    )}
+                                  </span>
+                                )}
+
                                 {item.targetUserName && (
-                                  <span className="inline-flex items-center gap-1 bg-white border border-gray-200 rounded-md px-2 py-0.5 text-gray-700">
+                                  <span className="inline-flex items-center gap-1 bg-gray-50 border border-gray-200 rounded-md px-2 py-0.5 text-gray-700">
+                                    <span className="text-gray-500">Target:</span>
                                     <span className="font-semibold text-gray-900">{item.targetUserName}</span>
                                     {item.targetUserEmail && (
                                       <span className="text-gray-400">({item.targetUserEmail})</span>
                                     )}
                                     {item.targetUserRole && (
-                                      <span className="bg-gray-100 text-gray-600 text-[9px] font-bold px-1 rounded">
+                                      <span className="bg-gray-200 text-gray-700 text-[9px] font-bold px-1 rounded">
                                         {item.targetUserRole}
                                       </span>
                                     )}
@@ -6022,18 +6036,24 @@ function EditorialDashboardContent() {
                                 )}
 
                                 {item.storyTitle && (
-                                  <span className="inline-flex items-center gap-1 bg-white border border-gray-200 rounded-md px-2 py-0.5 text-gray-700">
-                                    <span>Work:</span>
-                                    <span className="font-semibold text-gray-900">"{item.storyTitle}"</span>
+                                  <span className="inline-flex items-center gap-1 bg-purple-50/70 border border-purple-200/80 rounded-md px-2 py-0.5 text-purple-900">
+                                    <span className="text-purple-600 font-medium">Work:</span>
+                                    <span className="font-semibold">"{item.storyTitle}"</span>
                                     {item.submissionType && (
-                                      <span className="text-[9px] font-medium text-gray-400">[{item.submissionType}]</span>
+                                      <span className="text-[9px] font-medium text-purple-600">[{item.submissionType}]</span>
                                     )}
+                                  </span>
+                                )}
+
+                                {item.entityType && (
+                                  <span className="inline-flex items-center gap-1 bg-gray-100 border border-gray-200/70 rounded-md px-1.5 py-0.5 text-[10px] text-gray-600 font-medium uppercase tracking-wider">
+                                    {item.entityType}
                                   </span>
                                 )}
                               </div>
 
                               {/* Action Link Shortcuts */}
-                              <div className="flex items-center gap-3 pt-1">
+                              <div className="flex items-center gap-3 pt-1 flex-wrap">
                                 {isStudentPass && (
                                   <Link
                                     href="/editorial?tab=subscriptions&subTab=verifications&page=1"
@@ -6073,23 +6093,114 @@ function EditorialDashboardContent() {
                                     View Live Work <ExternalLink className="w-3 h-3" />
                                   </Link>
                                 )}
+
+                                {item.type?.startsWith("BOOK_") && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleTabChange("books")}
+                                    className="inline-flex items-center gap-1 text-[11px] font-bold text-teal-700 hover:text-teal-900 hover:underline cursor-pointer"
+                                  >
+                                    Go to Books Showcase →
+                                  </button>
+                                )}
+
+                                {item.type?.startsWith("EDITION_") && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleTabChange("editions")}
+                                    className="inline-flex items-center gap-1 text-[11px] font-bold text-teal-700 hover:text-teal-900 hover:underline cursor-pointer"
+                                  >
+                                    Go to Editions Archive →
+                                  </button>
+                                )}
+
+                                {item.type?.startsWith("MEDIA_") && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleTabChange("media")}
+                                    className="inline-flex items-center gap-1 text-[11px] font-bold text-teal-700 hover:text-teal-900 hover:underline cursor-pointer"
+                                  >
+                                    Go to Media Showcase →
+                                  </button>
+                                )}
+
+                                {item.type?.startsWith("EVENT_") && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleTabChange("events")}
+                                    className="inline-flex items-center gap-1 text-[11px] font-bold text-teal-700 hover:text-teal-900 hover:underline cursor-pointer"
+                                  >
+                                    Go to Events & Workshops →
+                                  </button>
+                                )}
+
+                                {item.type?.startsWith("CATEGORY_") && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleTabChange("categories")}
+                                    className="inline-flex items-center gap-1 text-[11px] font-bold text-teal-700 hover:text-teal-900 hover:underline cursor-pointer"
+                                  >
+                                    Go to Categories →
+                                  </button>
+                                )}
+
+                                {item.type?.startsWith("REVIEW_") && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleTabChange("reviews")}
+                                    className="inline-flex items-center gap-1 text-[11px] font-bold text-teal-700 hover:text-teal-900 hover:underline cursor-pointer"
+                                  >
+                                    Go to Reviews →
+                                  </button>
+                                )}
+
+                                {(item.type?.startsWith("USER_") || item.type?.startsWith("AUTHOR_")) && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleTabChange("authors")}
+                                    className="inline-flex items-center gap-1 text-[11px] font-bold text-teal-700 hover:text-teal-900 hover:underline cursor-pointer"
+                                  >
+                                    Go to User Roster →
+                                  </button>
+                                )}
+
+                                {item.type?.startsWith("COMMUNITY_") && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleTabChange("communities")}
+                                    className="inline-flex items-center gap-1 text-[11px] font-bold text-teal-700 hover:text-teal-900 hover:underline cursor-pointer"
+                                  >
+                                    Go to Community Moderation →
+                                  </button>
+                                )}
+
+                                {item.type?.startsWith("INQUIRY_") && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleTabChange("inquiries")}
+                                    className="inline-flex items-center gap-1 text-[11px] font-bold text-teal-700 hover:text-teal-900 hover:underline cursor-pointer"
+                                  >
+                                    Go to Contact Inquiries →
+                                  </button>
+                                )}
+
+                                {item.type?.startsWith("EDITORS_NOTE_") && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleTabChange("editors-note")}
+                                    className="inline-flex items-center gap-1 text-[11px] font-bold text-teal-700 hover:text-teal-900 hover:underline cursor-pointer"
+                                  >
+                                    Go to Editor's Note →
+                                  </button>
+                                )}
                               </div>
                             </div>
                           </div>
 
                           {/* Item Actions */}
-                          {!item.read && (
-                            <button
-                              type="button"
-                              onClick={async () => {
-                                await apiFetch(`${API_BASE_URL}/notifications/${item.id}/read`, { method: "PATCH" });
-                                fetchDashboardData("notifications", currentPage);
-                              }}
-                              className="text-[11px] font-semibold text-emerald-700 hover:text-emerald-900 hover:underline shrink-0 cursor-pointer self-end sm:self-center px-2 py-1 bg-emerald-100/60 rounded-lg"
-                            >
-                              Mark Read
-                            </button>
-                          )}
+                          <span className="text-[10px] font-mono text-gray-400 bg-gray-100/80 px-2 py-1 rounded-lg shrink-0 self-end sm:self-center border border-gray-200/60">
+                            #{item.id.slice(0, 8)}
+                          </span>
                         </div>
                       );
                     })}

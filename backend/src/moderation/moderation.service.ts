@@ -555,10 +555,24 @@ export class ModerationService implements OnModuleInit {
 
   async updateContactInquiryStatus(id: string, status: string) {
     await this.onModuleInit();
+    const existing = await this.prisma.queryOne<{ id: string; name: string; email: string }>(
+      `SELECT id, name, email FROM contact_inquiry WHERE id = $1`,
+      [id],
+    );
+
     await this.prisma.execute(
       `UPDATE contact_inquiry SET status = $1, "updatedAt" = now() WHERE id = $2`,
       [status, id],
     );
+
+    await this.notificationsService.recordEditorialAuditLog({
+      type: 'INQUIRY_STATUS_UPDATED',
+      category: 'EDITORIAL',
+      message: `Updated contact inquiry from "${existing?.name || existing?.email || id}" to status: ${status}`,
+      entityId: id,
+      entityType: 'INQUIRY',
+    });
+
     return { id, status };
   }
 }

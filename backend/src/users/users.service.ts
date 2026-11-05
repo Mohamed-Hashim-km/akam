@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { PrismaService } from '../common/prisma/prisma.service.js';
 import { UploadsService } from '../uploads/uploads.service.js';
 import { RevalidateService } from '../common/revalidate/revalidate.service.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 import { UpdateProfileDto } from './dto/update-profile.dto.js';
 import { UpdateUserDto } from './dto/update-user.dto.js';
 
@@ -26,6 +27,7 @@ export class UsersService {
     private prisma: PrismaService,
     private uploadsService: UploadsService,
     private revalidateService: RevalidateService,
+    private notificationsService: NotificationsService,
   ) {}
 
   async findAll(
@@ -288,6 +290,16 @@ export class UsersService {
     );
     if (!user) throw new NotFoundException('User not found');
     this.revalidateService.revalidate('authors', '/about');
+
+    await this.notificationsService.recordEditorialAuditLog({
+      targetUserId: id,
+      type: 'USER_FEATURED_TOGGLED',
+      category: 'EDITORIAL',
+      message: `${newStatus ? 'Featured' : 'Unfeatured'} author "${user.name || user.email}" in platform roster`,
+      entityId: id,
+      entityType: 'USER',
+    });
+
     return user;
   }
 
@@ -350,6 +362,16 @@ export class UsersService {
     );
     if (!user) throw new NotFoundException('User not found');
     this.revalidateService.revalidate('authors', '/about');
+
+    await this.notificationsService.recordEditorialAuditLog({
+      targetUserId: id,
+      type: 'USER_SORT_ORDER_UPDATED',
+      category: 'EDITORIAL',
+      message: `Updated priority sort order for author "${user.name || user.email}" to #${safeSortOrder}`,
+      entityId: id,
+      entityType: 'USER',
+    });
+
     return user;
   }
 
@@ -436,6 +458,16 @@ export class UsersService {
       [newRole, id],
     );
     if (!user) throw new NotFoundException('User not found');
+
+    await this.notificationsService.recordEditorialAuditLog({
+      targetUserId: id,
+      type: 'USER_ROLE_UPDATED',
+      category: 'EDITORIAL',
+      message: `Updated role for "${user.name || user.email}" to ${newRole}`,
+      entityId: id,
+      entityType: 'USER',
+    });
+
     return user;
   }
 
@@ -471,6 +503,16 @@ export class UsersService {
         [dto.name || null, dto.bio || null, dto.avatarUrl || null, dto.isFeatured ?? null, safeSort, existing.id],
       );
       this.revalidateService.revalidate('authors', '/about');
+
+      await this.notificationsService.recordEditorialAuditLog({
+        targetUserId: existing.id,
+        type: 'AUTHOR_CREATED',
+        category: 'EDITORIAL',
+        message: `Registered platform author: "${updated!.name || updated!.email}"`,
+        entityId: existing.id,
+        entityType: 'USER',
+      });
+
       return updated!;
     }
 
@@ -495,6 +537,18 @@ export class UsersService {
     );
 
     this.revalidateService.revalidate('authors', '/about');
+
+    if (user) {
+      await this.notificationsService.recordEditorialAuditLog({
+        targetUserId: user.id,
+        type: 'AUTHOR_CREATED',
+        category: 'EDITORIAL',
+        message: `Registered new author: "${user.name || user.email}"`,
+        entityId: user.id,
+        entityType: 'USER',
+      });
+    }
+
     return user!;
   }
 
@@ -597,6 +651,16 @@ export class UsersService {
     }
 
     this.revalidateService.revalidate('authors', '/about');
+
+    await this.notificationsService.recordEditorialAuditLog({
+      targetUserId: id,
+      type: 'USER_PROFILE_UPDATED',
+      category: 'EDITORIAL',
+      message: `Updated profile details for "${user.name || user.email}"`,
+      entityId: id,
+      entityType: 'USER',
+    });
+
     return user;
   }
 
@@ -634,6 +698,15 @@ export class UsersService {
 
     await this.prisma.execute(`DELETE FROM "user" WHERE id = $1`, [id]);
     this.revalidateService.revalidate('authors', '/about');
+
+    await this.notificationsService.recordEditorialAuditLog({
+      type: 'USER_DELETED',
+      category: 'EDITORIAL',
+      message: `Deleted platform user account: "${user.name || user.email}"`,
+      entityId: id,
+      entityType: 'USER',
+    });
+
     return { success: true, message: 'User deleted successfully' };
   }
 }

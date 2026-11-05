@@ -5,6 +5,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 import { CreateCommunityDto } from './dto/create-community.dto.js';
 import { UpdateCommunityDto } from './dto/update-community.dto.js';
 
@@ -25,7 +26,10 @@ export interface CommunityRow {
 
 @Injectable()
 export class CommunitiesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notificationsService: NotificationsService,
+  ) {}
 
   async findAll(includeInactive = false): Promise<CommunityRow[]> {
     const whereSql = includeInactive ? '' : 'WHERE c."isActive" = true';
@@ -41,13 +45,22 @@ export class CommunitiesService {
   }
 
   async delete(slug: string): Promise<{ success: boolean }> {
-    const community = await this.prisma.queryOne<{ id: string }>(
-      `SELECT id FROM community WHERE slug = $1`,
+    const community = await this.prisma.queryOne<{ id: string; name: string }>(
+      `SELECT id, name FROM community WHERE slug = $1`,
       [slug],
     );
     if (!community) throw new NotFoundException(`Community '${slug}' not found`);
 
     await this.prisma.execute(`DELETE FROM community WHERE id = $1`, [community.id]);
+
+    await this.notificationsService.recordEditorialAuditLog({
+      type: 'COMMUNITY_DELETED',
+      category: 'EDITORIAL',
+      message: `Deleted community: "${community.name || slug}"`,
+      entityId: community.id,
+      entityType: 'COMMUNITY',
+    });
+
     return { success: true };
   }
 
@@ -148,6 +161,17 @@ export class CommunitiesService {
         dto.isActive ?? true,
       ],
     );
+
+    if (community) {
+      await this.notificationsService.recordEditorialAuditLog({
+        type: 'COMMUNITY_CREATED',
+        category: 'EDITORIAL',
+        message: `Created community: "${community.name}" (/communities/${community.slug})`,
+        entityId: community.id,
+        entityType: 'COMMUNITY',
+      });
+    }
+
     return community!;
   }
 
@@ -189,9 +213,21 @@ export class CommunitiesService {
 
     params.push(community.id);
 
-    return (await this.prisma.queryOne<CommunityRow>(
+    const updated = (await this.prisma.queryOne<CommunityRow>(
       `UPDATE community SET ${updates.join(', ')} WHERE id = $${params.length} RETURNING *`,
       params,
     ))!;
+
+    if (updated) {
+      await this.notificationsService.recordEditorialAuditLog({
+        type: 'COMMUNITY_UPDATED',
+        category: 'EDITORIAL',
+        message: `Updated community: "${updated.name}"`,
+        entityId: updated.id,
+        entityType: 'COMMUNITY',
+      });
+    }
+
+    return updated;
   }
 }

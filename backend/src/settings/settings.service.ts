@@ -78,6 +78,14 @@ export class SettingsService {
       [JSON.stringify(updated)],
     );
 
+    await this.notificationsService.recordEditorialAuditLog({
+      type: 'EDITORS_NOTE_UPDATED',
+      category: 'EDITORIAL',
+      message: `Updated Home Page Editor's Note: "${updated.title}"`,
+      entityId: 'editors_note',
+      entityType: 'SETTING',
+    });
+
     return updated;
   }
 
@@ -345,6 +353,20 @@ export class SettingsService {
       this.logger.error(`Failed to send status email to ${newRecord.email}: ${err.message}`),
     );
 
+    try {
+      await this.notificationsService.recordEditorialAuditLog({
+        userId: null,
+        type: 'STUDENT_PASS_GRANTED',
+        category: 'STUDENT_PASS',
+        message: `Editorial team granted direct Student Scholar Pass to ${newRecord.fullName} (${newRecord.email})`,
+        entityId: newRecord.referenceId,
+        entityType: 'student_application',
+        details: { fullName: newRecord.fullName, email: newRecord.email, institution: newRecord.institution, endDate: targetEndDate },
+      });
+    } catch (auditErr: any) {
+      this.logger.warn(`Failed to record audit log for createDirectStudentPass: ${auditErr.message}`);
+    }
+
     this.logger.log(`[StudentApp] ✅ Editorial direct grant issued for ${newRecord.fullName} (${newRecord.email})`);
     return newRecord;
   }
@@ -416,6 +438,20 @@ export class SettingsService {
       this.revokeStudentSubscription(updated.email, reviewNotes).catch((err) =>
         this.logger.error(`Failed to revoke student subscription: ${err.message}`),
       );
+    }
+
+    try {
+      await this.notificationsService.recordEditorialAuditLog({
+        userId: null,
+        type: status === 'APPROVED' ? 'STUDENT_APPLICATION_APPROVED' : status === 'REJECTED' ? 'STUDENT_APPLICATION_REJECTED' : 'STUDENT_APPLICATION_UPDATED',
+        category: 'STUDENT_PASS',
+        message: `Student scholar pass application for ${updated.fullName || updated.email} was marked as ${status}${reviewedBy ? ` by ${reviewedBy}` : ''}`,
+        entityId: updated.referenceId || updated.id,
+        entityType: 'student_application',
+        details: { status, reviewNotes, reviewedBy, email: updated.email },
+      });
+    } catch (auditErr: any) {
+      this.logger.warn(`Failed to record audit log for updateStudentApplicationStatus: ${auditErr.message}`);
     }
 
     return updated;
@@ -520,6 +556,15 @@ export class SettingsService {
     if (target?.email) {
       await this.revokeStudentSubscription(target.email);
     }
+
+    await this.notificationsService.recordEditorialAuditLog({
+      type: 'STUDENT_APPLICATION_DELETED',
+      category: 'STUDENT_PASS',
+      message: `Deleted student verification record for "${target?.fullName || target?.email || refId}"`,
+      entityId: refId,
+      entityType: 'STUDENT_APPLICATION',
+    });
+
     return true;
   }
 

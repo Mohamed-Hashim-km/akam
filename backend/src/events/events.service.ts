@@ -5,6 +5,7 @@ import { UploadsService } from '../uploads/uploads.service.js';
 import { PayUService } from '../subscription/payu.service.js';
 import { MailService } from '../mail/mail.service.js';
 import { RevalidateService } from '../common/revalidate/revalidate.service.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 import { CreateEventDto } from './dto/create-event.dto.js';
 import { UpdateEventDto } from './dto/update-event.dto.js';
 import { RegisterEventDto } from './dto/register-event.dto.js';
@@ -58,6 +59,7 @@ export class EventsService {
     private readonly configService: ConfigService,
     private readonly mailService: MailService,
     private readonly revalidateService: RevalidateService,
+    private readonly notificationsService: NotificationsService,
   ) { }
 
   // ── Public Endpoints ─────────────────────────────────────────────────────
@@ -944,6 +946,17 @@ export class EventsService {
     );
 
     this.revalidateService.revalidate('events', '/events');
+
+    if (row) {
+      await this.notificationsService.recordEditorialAuditLog({
+        type: 'EVENT_CREATED',
+        category: 'EDITORIAL',
+        message: `Created event: "${row.title}" (${row.type})`,
+        entityId: row.id,
+        entityType: 'EVENT',
+      });
+    }
+
     return row!;
   }
 
@@ -1015,6 +1028,17 @@ export class EventsService {
     );
 
     this.revalidateService.revalidate('events', '/events');
+
+    if (row) {
+      await this.notificationsService.recordEditorialAuditLog({
+        type: 'EVENT_UPDATED',
+        category: 'EDITORIAL',
+        message: `Updated event: "${row.title}"`,
+        entityId: row.id,
+        entityType: 'EVENT',
+      });
+    }
+
     return row!;
   }
 
@@ -1025,6 +1049,15 @@ export class EventsService {
     }
     await this.prisma.execute(`DELETE FROM "event" WHERE id = $1`, [id]);
     this.revalidateService.revalidate('events', '/events');
+
+    await this.notificationsService.recordEditorialAuditLog({
+      type: 'EVENT_DELETED',
+      category: 'EDITORIAL',
+      message: `Deleted event: "${existing.title}"`,
+      entityId: id,
+      entityType: 'EVENT',
+    });
+
     return { success: true, message: 'Event deleted successfully' };
   }
 
@@ -1041,6 +1074,17 @@ export class EventsService {
     );
 
     this.revalidateService.revalidate('events', '/events');
+
+    if (row) {
+      await this.notificationsService.recordEditorialAuditLog({
+        type: 'EVENT_TOGGLE_PUBLISH',
+        category: 'EDITORIAL',
+        message: `${row.isPublished ? 'Published' : 'Unpublished'} event: "${row.title}"`,
+        entityId: row.id,
+        entityType: 'EVENT',
+      });
+    }
+
     return row!;
   }
 

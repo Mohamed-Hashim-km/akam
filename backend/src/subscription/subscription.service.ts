@@ -325,6 +325,7 @@ export class SubscriptionService {
     durationMonths: number = 6,
     isStudent: boolean = false,
     note?: string,
+    adminId?: string,
   ): Promise<SubscriptionRow | null> {
     const cleanIdentifier = emailOrUserId.trim();
     let user = await this.prisma.queryOne<{ id: string; email: string; name: string | null }>(
@@ -439,12 +440,27 @@ export class SubscriptionService {
       } catch (notifErr: any) {
         this.logger.warn(`Failed to dispatch in-app notification to user: ${notifErr.message}`);
       }
+
+      try {
+        await this.notificationsService.recordEditorialAuditLog({
+          userId: adminId ?? null,
+          targetUserId: user.id,
+          type: 'SUBSCRIPTION_GRANTED',
+          category: isStudent ? 'STUDENT_PASS' : 'SUBSCRIPTIONS',
+          message: `Editorial team granted a ${months}-month ${isStudent ? 'Student Pass' : 'Subscription'} to ${user.name || user.email}`,
+          entityId: sub.id,
+          entityType: 'subscription',
+          details: { durationMonths: months, isStudent, note },
+        });
+      } catch (auditErr: any) {
+        this.logger.warn(`Failed to record audit log for grantSubscription: ${auditErr.message}`);
+      }
     }
 
     return sub;
   }
 
-  async cancelSubscription(id: string): Promise<boolean> {
+  async cancelSubscription(id: string, adminId?: string): Promise<boolean> {
     const row = await this.prisma.queryOne<{ userId: string; email: string; name: string | null; isStudent: boolean }>(
       `SELECT s."userId", s."isStudent", u.email, u.name
        FROM subscription s
@@ -464,6 +480,21 @@ export class SubscriptionService {
         await this.notificationsService.notifySubscriptionCancelled(row.userId);
       } catch (notifErr: any) {
         this.logger.warn(`Failed to dispatch subscription cancelled notification: ${notifErr.message}`);
+      }
+
+      try {
+        await this.notificationsService.recordEditorialAuditLog({
+          userId: adminId ?? null,
+          targetUserId: row.userId,
+          type: 'SUBSCRIPTION_CANCELLED',
+          category: row.isStudent ? 'STUDENT_PASS' : 'SUBSCRIPTIONS',
+          message: `Editorial team cancelled ${row.isStudent ? 'Student Pass' : 'subscription'} for ${row.name || row.email}`,
+          entityId: id,
+          entityType: 'subscription',
+          details: { email: row.email, isStudent: row.isStudent },
+        });
+      } catch (auditErr: any) {
+        this.logger.warn(`Failed to record audit log for cancelSubscription: ${auditErr.message}`);
       }
     }
 

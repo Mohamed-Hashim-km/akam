@@ -3,6 +3,7 @@ import { PrismaService } from '../common/prisma/prisma.service.js';
 import { UploadsService } from '../uploads/uploads.service.js';
 import { SubscriptionService } from '../subscription/subscription.service.js';
 import { RevalidateService } from '../common/revalidate/revalidate.service.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 import { CreateEditionDto } from './dto/create-edition.dto.js';
 import { UpdateEditionDto } from './dto/update-edition.dto.js';
 import { randomUUID } from 'crypto';
@@ -19,6 +20,7 @@ export class EditionsService {
     private readonly prisma: PrismaService,
     private readonly uploadsService: UploadsService,
     private readonly revalidateService: RevalidateService,
+    private readonly notificationsService: NotificationsService,
     @Optional() private readonly subscriptionService?: SubscriptionService,
   ) {}
 
@@ -261,6 +263,17 @@ export class EditionsService {
       sortOrder,
     ]);
     this.revalidateService.revalidate('editions', '/emagazine');
+
+    if (result) {
+      await this.notificationsService.recordEditorialAuditLog({
+        type: 'EDITION_CREATED',
+        category: 'APPROVALS',
+        message: `Created magazine issue: "${result.title}"`,
+        entityId: result.id,
+        entityType: 'EDITION',
+      });
+    }
+
     return result;
   }
 
@@ -288,6 +301,17 @@ export class EditionsService {
     `;
     const result = await this.prisma.queryOne<any>(sql, [id, title, pdfUrl, coverImage, isPublished, sortOrder]);
     this.revalidateService.revalidate('editions', '/emagazine');
+
+    if (result) {
+      await this.notificationsService.recordEditorialAuditLog({
+        type: 'EDITION_UPDATED',
+        category: 'EDITORIAL',
+        message: `Updated magazine issue: "${result.title}"`,
+        entityId: result.id,
+        entityType: 'EDITION',
+      });
+    }
+
     return result;
   }
 
@@ -301,6 +325,17 @@ export class EditionsService {
     `;
     const result = await this.prisma.queryOne<any>(sql, [id, !existing.isPublished]);
     this.revalidateService.revalidate('editions', '/emagazine');
+
+    if (result) {
+      await this.notificationsService.recordEditorialAuditLog({
+        type: 'EDITION_TOGGLE_PUBLISH',
+        category: 'APPROVALS',
+        message: `${result.isPublished ? 'Published' : 'Unpublished'} magazine issue: "${result.title}"`,
+        entityId: result.id,
+        entityType: 'EDITION',
+      });
+    }
+
     return result;
   }
 
@@ -314,6 +349,15 @@ export class EditionsService {
     }
     await this.prisma.execute(`DELETE FROM "edition" WHERE "id" = $1`, [id]);
     this.revalidateService.revalidate('editions', '/emagazine');
+
+    await this.notificationsService.recordEditorialAuditLog({
+      type: 'EDITION_DELETED',
+      category: 'EDITORIAL',
+      message: `Deleted magazine issue: "${existing.title}"`,
+      entityId: id,
+      entityType: 'EDITION',
+    });
+
     return { message: 'Edition deleted successfully', id };
   }
 }

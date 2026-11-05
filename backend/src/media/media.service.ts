@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service.js';
 import { RevalidateService } from '../common/revalidate/revalidate.service.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 import { CreateMediaDto } from './dto/create-media.dto.js';
 import { UpdateMediaDto } from './dto/update-media.dto.js';
 import { randomUUID } from 'crypto';
@@ -32,6 +33,7 @@ export class MediaService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly revalidateService: RevalidateService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   private async checkFeaturedLimit(excludeId?: string) {
@@ -189,6 +191,17 @@ export class MediaService {
       isFeatured,
     ]);
     this.revalidateService.revalidate('media', '/media');
+
+    if (result) {
+      await this.notificationsService.recordEditorialAuditLog({
+        type: 'MEDIA_CREATED',
+        category: 'EDITORIAL',
+        message: `Created media video: "${result.title}"`,
+        entityId: result.id,
+        entityType: 'MEDIA',
+      });
+    }
+
     return result;
   }
 
@@ -225,6 +238,17 @@ export class MediaService {
       isFeatured,
     ]);
     this.revalidateService.revalidate('media', '/media');
+
+    if (result) {
+      await this.notificationsService.recordEditorialAuditLog({
+        type: 'MEDIA_UPDATED',
+        category: 'EDITORIAL',
+        message: `Updated media video: "${result.title}"`,
+        entityId: result.id,
+        entityType: 'MEDIA',
+      });
+    }
+
     return result;
   }
 
@@ -239,6 +263,17 @@ export class MediaService {
     `;
     const result = await this.prisma.queryOne<any>(sql, [id, newStatus]);
     this.revalidateService.revalidate('media', '/media');
+
+    if (result) {
+      await this.notificationsService.recordEditorialAuditLog({
+        type: 'MEDIA_TOGGLE_PUBLISH',
+        category: 'EDITORIAL',
+        message: `${result.isPublished ? 'Published' : 'Unpublished'} media video: "${result.title}"`,
+        entityId: result.id,
+        entityType: 'MEDIA',
+      });
+    }
+
     return result;
   }
 
@@ -258,14 +293,34 @@ export class MediaService {
     `;
     const result = await this.prisma.queryOne<any>(sql, [id, newStatus]);
     this.revalidateService.revalidate('media', '/media');
+
+    if (result) {
+      await this.notificationsService.recordEditorialAuditLog({
+        type: 'MEDIA_TOGGLE_FEATURED',
+        category: 'EDITORIAL',
+        message: `${result.isFeatured ? 'Featured' : 'Unfeatured'} media video: "${result.title}"`,
+        entityId: result.id,
+        entityType: 'MEDIA',
+      });
+    }
+
     return result;
   }
 
   async remove(id: string) {
-    await this.findOne(id);
+    const existing = await this.findOne(id);
     const sql = `DELETE FROM "media_video" WHERE "id" = $1`;
     await this.prisma.query(sql, [id]);
     this.revalidateService.revalidate('media', '/media');
+
+    await this.notificationsService.recordEditorialAuditLog({
+      type: 'MEDIA_DELETED',
+      category: 'EDITORIAL',
+      message: `Deleted media video: "${existing.title}"`,
+      entityId: id,
+      entityType: 'MEDIA',
+    });
+
     return { message: 'Media video deleted successfully', id };
   }
 }

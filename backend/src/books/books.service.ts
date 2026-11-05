@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service.js';
 import { UploadsService } from '../uploads/uploads.service.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 import { CreateBookDto } from './dto/create-book.dto.js';
 import { UpdateBookDto } from './dto/update-book.dto.js';
 
@@ -22,6 +23,7 @@ export class BooksService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly uploadsService: UploadsService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async findAllPublished(): Promise<BookReleaseItem[]> {
@@ -106,6 +108,16 @@ export class BooksService {
       ]
     );
 
+    if (row) {
+      await this.notificationsService.recordEditorialAuditLog({
+        type: 'BOOK_CREATED',
+        category: 'EDITORIAL',
+        message: `Created book release: "${row.title}" by ${row.author}`,
+        entityId: row.id,
+        entityType: 'BOOK',
+      });
+    }
+
     return row!;
   }
 
@@ -132,6 +144,16 @@ export class BooksService {
       [title, author, editionTag, description, coverImage, preorderLink, isPublished, id]
     );
 
+    if (row) {
+      await this.notificationsService.recordEditorialAuditLog({
+        type: 'BOOK_UPDATED',
+        category: 'EDITORIAL',
+        message: `Updated book release: "${row.title}"`,
+        entityId: row.id,
+        entityType: 'BOOK',
+      });
+    }
+
     return row!;
   }
 
@@ -147,6 +169,16 @@ export class BooksService {
       [updatedStatus, id]
     );
 
+    if (row) {
+      await this.notificationsService.recordEditorialAuditLog({
+        type: 'BOOK_TOGGLE_PUBLISH',
+        category: 'EDITORIAL',
+        message: `${row.isPublished ? 'Published' : 'Unpublished'} book release: "${row.title}"`,
+        entityId: row.id,
+        entityType: 'BOOK',
+      });
+    }
+
     return row!;
   }
 
@@ -157,6 +189,15 @@ export class BooksService {
     }
 
     await this.prisma.execute(`DELETE FROM "book_release" WHERE id = $1`, [id]);
+
+    await this.notificationsService.recordEditorialAuditLog({
+      type: 'BOOK_DELETED',
+      category: 'EDITORIAL',
+      message: `Deleted book release: "${existing.title}"`,
+      entityId: id,
+      entityType: 'BOOK',
+    });
+
     return { success: true, message: 'Book release deleted successfully' };
   }
 }

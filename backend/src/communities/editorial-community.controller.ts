@@ -12,6 +12,7 @@ import {
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { IsString, IsOptional } from 'class-validator';
 import { PrismaService } from '../common/prisma/prisma.service.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 import { RolesGuard } from '../auth/guards/roles.guard.js';
 import { Roles } from '../auth/decorators/roles.decorator.js';
@@ -27,7 +28,10 @@ class UpdateReportStatusDto {
 @Roles('EDITOR', 'ADMIN', 'MODERATOR')
 @ApiBearerAuth()
 export class EditorialCommunityController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notificationsService: NotificationsService,
+  ) {}
 
   // ─── Community Report Queue ───────────────────────────────────────────────
   @Get('reports')
@@ -103,6 +107,16 @@ export class EditorialCommunityController {
        WHERE id = $3`,
       [dto.status, req.user.id, reportId],
     );
+
+    await this.notificationsService.recordEditorialAuditLog({
+      userId: req.user.id,
+      type: 'COMMUNITY_REPORT_ACTIONED',
+      category: 'MODERATION',
+      message: `Community moderation report marked as "${dto.status}"`,
+      entityId: reportId,
+      entityType: 'COMMUNITY_REPORT',
+    });
+
     return { reportId, status: dto.status };
   }
 
@@ -110,8 +124,8 @@ export class EditorialCommunityController {
   @Patch('posts/:postId/lock')
   @ApiOperation({ summary: '[EDITOR/ADMIN] Toggle thread lock — prevents new comments' })
   async lockPost(@Param('postId') postId: string, @Request() req: any) {
-    const post = await this.prisma.queryOne<{ id: string; isLocked: boolean }>(
-      `SELECT id, "isLocked" FROM community_post WHERE id = $1`,
+    const post = await this.prisma.queryOne<{ id: string; title: string; isLocked: boolean }>(
+      `SELECT id, title, "isLocked" FROM community_post WHERE id = $1`,
       [postId],
     );
     if (!post) throw new NotFoundException('Post not found');
@@ -131,15 +145,25 @@ export class EditorialCommunityController {
         postId,
       ],
     );
+
+    await this.notificationsService.recordEditorialAuditLog({
+      userId: req.user.id,
+      type: 'COMMUNITY_POST_LOCKED',
+      category: 'MODERATION',
+      message: `${newLock ? 'Locked' : 'Unlocked'} community post thread: "${post.title || postId}"`,
+      entityId: postId,
+      entityType: 'COMMUNITY_POST',
+    });
+
     return { postId, isLocked: newLock, lockedBy: newLock ? req.user.id : null };
   }
 
   // ─── Pin / Unpin Post ─────────────────────────────────────────────────────
   @Patch('posts/:postId/pin')
   @ApiOperation({ summary: '[EDITOR/ADMIN] Toggle post pin — pinned posts appear at feed top' })
-  async pinPost(@Param('postId') postId: string) {
-    const post = await this.prisma.queryOne<{ id: string; isPinned: boolean }>(
-      `SELECT id, "isPinned" FROM community_post WHERE id = $1`,
+  async pinPost(@Param('postId') postId: string, @Request() req: any) {
+    const post = await this.prisma.queryOne<{ id: string; title: string; isPinned: boolean }>(
+      `SELECT id, title, "isPinned" FROM community_post WHERE id = $1`,
       [postId],
     );
     if (!post) throw new NotFoundException('Post not found');
@@ -149,15 +173,25 @@ export class EditorialCommunityController {
       `UPDATE community_post SET "isPinned" = $1, "updatedAt" = now() WHERE id = $2`,
       [newPin, postId],
     );
+
+    await this.notificationsService.recordEditorialAuditLog({
+      userId: req?.user?.id,
+      type: 'COMMUNITY_POST_PINNED',
+      category: 'EDITORIAL',
+      message: `${newPin ? 'Pinned' : 'Unpinned'} community post: "${post.title || postId}"`,
+      entityId: postId,
+      entityType: 'COMMUNITY_POST',
+    });
+
     return { postId, isPinned: newPin };
   }
 
   // ─── Remove Post ──────────────────────────────────────────────────────────
   @Patch('posts/:postId/remove')
   @ApiOperation({ summary: "[EDITOR/ADMIN] Remove a post (sets status to 'REMOVED', preserves data)" })
-  async removePost(@Param('postId') postId: string) {
-    const post = await this.prisma.queryOne<{ id: string }>(
-      `SELECT id FROM community_post WHERE id = $1`,
+  async removePost(@Param('postId') postId: string, @Request() req: any) {
+    const post = await this.prisma.queryOne<{ id: string; title: string }>(
+      `SELECT id, title FROM community_post WHERE id = $1`,
       [postId],
     );
     if (!post) throw new NotFoundException('Post not found');
@@ -168,6 +202,16 @@ export class EditorialCommunityController {
        WHERE id = $1`,
       [postId],
     );
+
+    await this.notificationsService.recordEditorialAuditLog({
+      userId: req?.user?.id,
+      type: 'COMMUNITY_POST_REMOVED',
+      category: 'MODERATION',
+      message: `Removed community post: "${post.title || postId}" from feed`,
+      entityId: postId,
+      entityType: 'COMMUNITY_POST',
+    });
+
     return { success: true, postId, status: 'REMOVED' };
   }
 
@@ -193,6 +237,16 @@ export class EditorialCommunityController {
        WHERE id = $2`,
       [req.user.id, commentId],
     );
+
+    await this.notificationsService.recordEditorialAuditLog({
+      userId: req.user.id,
+      type: 'COMMUNITY_COMMENT_REMOVED',
+      category: 'MODERATION',
+      message: `Soft-removed community comment due to moderation policy`,
+      entityId: commentId,
+      entityType: 'COMMUNITY_COMMENT',
+    });
+
     return { success: true, commentId, isRemoved: true };
   }
 }

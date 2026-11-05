@@ -356,6 +356,7 @@ export class SubscriptionController {
   @Roles('EDITOR', 'ADMIN')
   @HttpCode(HttpStatus.OK)
   async grantSubscription(
+    @Request() req: any,
     @Body()
     body: {
       email: string;
@@ -367,12 +368,14 @@ export class SubscriptionController {
     if (!body.email || !body.email.trim()) {
       throw new BadRequestException('User email is required to grant a subscription');
     }
+    const adminId = req.user?.id || req.user?.sub;
     try {
       const sub = await this.subscriptionService.grantSubscription(
         body.email.trim(),
         body.durationMonths || 6,
         body.isStudent === true,
         body.note,
+        adminId,
       );
       return { success: true, subscription: sub };
     } catch (err: any) {
@@ -385,8 +388,9 @@ export class SubscriptionController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('EDITOR', 'ADMIN')
   @HttpCode(HttpStatus.OK)
-  async cancelSubscription(@Param('id') id: string) {
-    await this.subscriptionService.cancelSubscription(id);
+  async cancelSubscription(@Request() req: any, @Param('id') id: string) {
+    const adminId = req.user?.id || req.user?.sub;
+    await this.subscriptionService.cancelSubscription(id, adminId);
     return { success: true, message: 'Subscription cancelled successfully' };
   }
 }
